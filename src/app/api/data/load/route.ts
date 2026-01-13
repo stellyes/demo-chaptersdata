@@ -20,10 +20,10 @@ let s3Client: S3Client | null = null;
 function getS3Client(): S3Client {
   if (!s3Client) {
     s3Client = new S3Client({
-      region: process.env.AWS_REGION || 'us-west-1',
+      region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
       credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+        accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
       },
     });
   }
@@ -36,10 +36,10 @@ let dynamoClient: DynamoDBDocumentClient | null = null;
 function getDynamoClient(): DynamoDBDocumentClient {
   if (!dynamoClient) {
     const client = new DynamoDBClient({
-      region: process.env.AWS_REGION || 'us-west-1',
+      region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
       credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+        accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
       },
     });
     dynamoClient = DynamoDBDocumentClient.from(client);
@@ -47,7 +47,7 @@ function getDynamoClient(): DynamoDBDocumentClient {
   return dynamoClient;
 }
 
-const BUCKET = process.env.S3_BUCKET_NAME || 'retail-data-bcgr';
+const BUCKET = process.env.CHAPTERS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'retail-data-bcgr';
 const INVOICE_LINE_ITEMS_TABLE = 'retail-invoice-line-items';
 
 // In-memory cache for data
