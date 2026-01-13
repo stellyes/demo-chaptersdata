@@ -162,10 +162,10 @@ interface AllDataResponse {
   sales: SalesRecord[];
   brands: BrandRecord[];
   products: ProductRecord[];
-  customers: CustomerRecord[];
+  // Customers excluded from main load due to size (load via /api/data/customers)
   budtenders: BudtenderRecord[];
   mappings: BrandMapping[];
-  invoices: InvoiceLineItem[];
+  // Invoices excluded from main load (load via /api/data/invoices)
   dataHash: string;
   loadedAt: string;
 }
@@ -663,20 +663,8 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
     }
   }
 
-  // Load customer data
-  for (const file of customerFiles) {
-    try {
-      const csvData = await downloadFromS3(file.key);
-      const rawRecords = parseCSV<Record<string, string>>(csvData);
-
-      for (const raw of rawRecords) {
-        const cleaned = cleanCustomerRecord(raw);
-        if (cleaned) allCustomers.push(cleaned);
-      }
-    } catch (error) {
-      console.error(`Error loading ${file.key}:`, error);
-    }
-  }
+  // NOTE: Customer data is loaded separately via /api/data/customers endpoint
+  // to avoid exceeding Lambda 6MB response limit (customer files are 30MB+)
 
   // Load budtender performance data from data/ folder
   try {
@@ -711,22 +699,14 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
     salesMap.set(key, record);
   }
 
-  // Deduplicate customers by ID
-  const customerMap = new Map<string, CustomerRecord>();
-  for (const record of allCustomers) {
-    customerMap.set(record.customer_id, record);
-  }
-
   const dataHash = await computeDataHash();
 
   return {
     sales: Array.from(salesMap.values()),
     brands: allBrands,
     products: allProducts,
-    customers: Array.from(customerMap.values()),
     budtenders: allBudtenders,
     mappings: allMappings,
-    invoices: allInvoices,
     dataHash,
     loadedAt: new Date().toISOString(),
   };

@@ -273,18 +273,17 @@ export const useAppStore = create<AppState>()(
       loadDataFromS3: async () => {
         set({ isLoading: true });
         try {
-          // Load main data (fast - S3 only)
+          // Load main data (fast - S3 only, excludes customers and invoices)
           const response = await fetch('/api/data/load');
           const result = await response.json();
 
           if (result.success && result.data) {
-            const { sales, brands, products, customers, budtenders, mappings, dataHash, loadedAt } = result.data;
+            const { sales, brands, products, budtenders, mappings, dataHash, loadedAt } = result.data;
 
             set((state) => ({
               salesData: sales || [],
               brandData: brands || [],
               productData: products || [],
-              customerData: customers || [],
               budtenderData: budtenders || [],
               brandMappings: mappings || [],
               dataHash,
@@ -293,13 +292,34 @@ export const useAppStore = create<AppState>()(
                 sales: { loaded: (sales?.length || 0) > 0, count: sales?.length || 0, lastUpdated: loadedAt },
                 brands: { loaded: (brands?.length || 0) > 0, count: brands?.length || 0, lastUpdated: loadedAt },
                 products: { loaded: (products?.length || 0) > 0, count: products?.length || 0, lastUpdated: loadedAt },
-                customers: { loaded: (customers?.length || 0) > 0, count: customers?.length || 0, lastUpdated: loadedAt },
                 budtenders: { loaded: (budtenders?.length || 0) > 0, count: budtenders?.length || 0, lastUpdated: loadedAt },
                 mappings: { loaded: (mappings?.length || 0) > 0, count: mappings?.length || 0, lastUpdated: loadedAt },
               },
-              // Keep isLoading true while invoice data loads in background
+              // Keep isLoading true while background data loads
               isLoading: true,
             }));
+
+            // Load customer data separately in background (large dataset ~30MB CSV)
+            fetch('/api/data/customers?pageSize=50000')
+              .then(res => res.json())
+              .then(customerResult => {
+                if (customerResult.success) {
+                  set((state) => ({
+                    customerData: customerResult.data || [],
+                    dataStatus: {
+                      ...state.dataStatus,
+                      customers: {
+                        loaded: (customerResult.data?.length || 0) > 0,
+                        count: customerResult.pagination?.totalCount || customerResult.data?.length || 0,
+                        lastUpdated: new Date().toISOString(),
+                      },
+                    },
+                  }));
+                }
+              })
+              .catch(err => {
+                console.error('Error loading customer data:', err);
+              });
 
             // Load invoice data separately in background (slow - DynamoDB)
             fetch('/api/data/invoices')
