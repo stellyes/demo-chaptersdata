@@ -6,6 +6,17 @@ frontend:
         - npm ci
     build:
       commands:
+        # Create .env.production file with runtime environment variables
+        - echo "CHAPTERS_ACCESS_KEY_ID=$CHAPTERS_ACCESS_KEY_ID" >> .env.production
+        - echo "CHAPTERS_SECRET_ACCESS_KEY=$CHAPTERS_SECRET_ACCESS_KEY" >> .env.production
+        - echo "CHAPTERS_AWS_REGION=$CHAPTERS_AWS_REGION" >> .env.production
+        - echo "CHAPTERS_S3_BUCKET=$CHAPTERS_S3_BUCKET" >> .env.production
+        - echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env.production
+        - echo "AUTH_ADMIN_HASH=$AUTH_ADMIN_HASH" >> .env.production
+        - echo "AUTH_ANALYST_HASH=$AUTH_ANALYST_HASH" >> .env.production
+        - echo "DYNAMODB_QR_TABLE=$DYNAMODB_QR_TABLE" >> .env.production
+        - echo "DYNAMODB_CLICKS_TABLE=$DYNAMODB_CLICKS_TABLE" >> .env.production
+        - echo "QR_REDIRECT_BASE_URL=$QR_REDIRECT_BASE_URL" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
