@@ -3,16 +3,16 @@
 // Loads all data from S3 bucket
 // ============================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   S3Client,
   GetObjectCommand,
   ListObjectsV2Command,
-  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'crypto';
+import { gzipSync } from 'zlib';
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -732,38 +732,59 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
   };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     // Check cache
     const currentHash = await computeDataHash();
+    const acceptEncoding = request.headers.get('accept-encoding') || '';
+    const supportsGzip = acceptEncoding.includes('gzip');
+
+    let responseData: { success: boolean; data: AllDataResponse; cached: boolean };
 
     if (
       dataCache &&
       dataCache.hash === currentHash &&
       Date.now() - dataCache.timestamp < CACHE_TTL
     ) {
-      return NextResponse.json({
+      responseData = {
         success: true,
         data: dataCache.data,
         cached: true,
+      };
+    } else {
+      // Load fresh data
+      const data = await loadAllDataFromS3();
+
+      // Update cache
+      dataCache = {
+        data,
+        hash: currentHash,
+        timestamp: Date.now(),
+      };
+
+      responseData = {
+        success: true,
+        data,
+        cached: false,
+      };
+    }
+
+    // Compress response if client supports gzip (helps with Lambda 6MB limit)
+    if (supportsGzip) {
+      const jsonString = JSON.stringify(responseData);
+      const compressed = gzipSync(jsonString);
+
+      return new Response(compressed, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+          'Cache-Control': 'private, max-age=300',
+        },
       });
     }
 
-    // Load fresh data
-    const data = await loadAllDataFromS3();
-
-    // Update cache
-    dataCache = {
-      data,
-      hash: currentHash,
-      timestamp: Date.now(),
-    };
-
-    return NextResponse.json({
-      success: true,
-      data,
-      cached: false,
-    });
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('Data loading error:', error);
     return NextResponse.json(
