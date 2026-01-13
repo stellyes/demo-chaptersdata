@@ -4,9 +4,10 @@
 // to avoid blocking the main data load
 // ============================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { gzipSync } from 'zlib';
 
 // DynamoDB Client singleton
 let dynamoClient: DynamoDBDocumentClient | null = null;
@@ -117,37 +118,56 @@ async function loadInvoiceData(): Promise<InvoiceLineItem[]> {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const acceptEncoding = request.headers.get('accept-encoding') || '';
+    const supportsGzip = acceptEncoding.includes('gzip');
+
+    let responseData: { success: boolean; data: InvoiceLineItem[]; count: number; cached: boolean };
+
     // Check cache first
     if (invoiceCache && Date.now() - invoiceCache.timestamp < CACHE_TTL) {
       console.log(`Returning cached invoice data: ${invoiceCache.data.length} items`);
-      return NextResponse.json({
+      responseData = {
         success: true,
         data: invoiceCache.data,
         count: invoiceCache.data.length,
         cached: true,
+      };
+    } else {
+      // Load fresh data
+      const data = await loadInvoiceData();
+
+      // Update cache
+      invoiceCache = {
+        data,
+        timestamp: Date.now(),
+      };
+
+      responseData = {
+        success: true,
+        data,
+        count: data.length,
+        cached: false,
+      };
+    }
+
+    // Compress response if client supports gzip (helps with Lambda 6MB limit)
+    if (supportsGzip) {
+      const compressed = gzipSync(JSON.stringify(responseData));
+      return new Response(compressed, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+        },
       });
     }
 
-    // Load fresh data
-    const data = await loadInvoiceData();
-
-    // Update cache
-    invoiceCache = {
-      data,
-      timestamp: Date.now(),
-    };
-
-    return NextResponse.json({
-      success: true,
-      data,
-      count: data.length,
-      cached: false,
-    });
+    return Response.json(responseData);
   } catch (error) {
     console.error('Invoice data loading error:', error);
-    return NextResponse.json(
+    return Response.json(
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load invoice data',
