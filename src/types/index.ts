@@ -204,6 +204,12 @@ export interface BudtenderRecord {
   units_sold: number;
 }
 
+// Budtender store assignments (persisted to S3)
+export interface BudtenderAssignments {
+  assignments: Record<string, StoreId>; // employee_name -> store_id
+  last_updated: string;
+}
+
 // Brand-Product Mapping types
 export interface BrandMapping {
   brand: string;

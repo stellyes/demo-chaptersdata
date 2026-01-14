@@ -105,7 +105,10 @@ interface AppState {
   // Permanent employee assignments (employee name -> store_id)
   permanentEmployees: Record<string, StoreId>;
   setPermanentEmployee: (employeeName: string, storeId: StoreId | null) => void;
+  setPermanentEmployees: (employees: Record<string, StoreId>) => void;
   clearPermanentEmployees: () => void;
+  saveBudtenderAssignmentsToS3: () => Promise<void>;
+  loadBudtenderAssignmentsFromS3: () => Promise<void>;
 
   // Loading states
   isLoading: boolean;
@@ -356,7 +359,7 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
-      setPermanentEmployee: (employeeName, storeId) =>
+      setPermanentEmployee: (employeeName, storeId) => {
         set((state) => {
           const newEmployees = { ...state.permanentEmployees };
           if (storeId === null) {
@@ -365,9 +368,42 @@ export const useAppStore = create<AppState>()(
             newEmployees[employeeName] = storeId;
           }
           return { permanentEmployees: newEmployees };
-        }),
+        });
+        // Auto-save to S3 after state update (debounced in component)
+      },
 
-      clearPermanentEmployees: () => set({ permanentEmployees: {} }),
+      setPermanentEmployees: (employees) => set({ permanentEmployees: employees }),
+
+      clearPermanentEmployees: () => {
+        set({ permanentEmployees: {} });
+        // Save empty state to S3
+        useAppStore.getState().saveBudtenderAssignmentsToS3();
+      },
+
+      saveBudtenderAssignmentsToS3: async () => {
+        const { permanentEmployees } = useAppStore.getState();
+        try {
+          await fetch('/api/data/budtender-assignments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assignments: permanentEmployees }),
+          });
+        } catch (error) {
+          console.error('Error saving budtender assignments to S3:', error);
+        }
+      },
+
+      loadBudtenderAssignmentsFromS3: async () => {
+        try {
+          const response = await fetch('/api/data/budtender-assignments');
+          const result = await response.json();
+          if (result.success && result.data?.assignments) {
+            set({ permanentEmployees: result.data.assignments });
+          }
+        } catch (error) {
+          console.error('Error loading budtender assignments from S3:', error);
+        }
+      },
 
       setIsLoading: (isLoading) => set({ isLoading }),
 
@@ -416,6 +452,9 @@ export const useAppStore = create<AppState>()(
               // Keep isLoading true while background data loads
               isLoading: true,
             }));
+
+            // Load budtender assignments from S3 (overrides localStorage if newer)
+            useAppStore.getState().loadBudtenderAssignmentsFromS3();
 
             // Load customer data separately in background (large dataset ~30MB CSV)
             fetch('/api/data/customers?pageSize=50000')

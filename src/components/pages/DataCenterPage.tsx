@@ -468,6 +468,7 @@ function BudtenderPerformanceTab() {
     permanentEmployees,
     setPermanentEmployee,
     clearPermanentEmployees,
+    saveBudtenderAssignmentsToS3,
     dataStatus,
   } = useAppStore();
   const [filterStore, setFilterStore] = useState<StoreId | 'all'>('all');
@@ -714,6 +715,8 @@ function BudtenderPerformanceTab() {
                               employee.employee_name,
                               value ? (value as StoreId) : null
                             );
+                            // Save to S3 after a short delay to batch rapid changes
+                            setTimeout(() => saveBudtenderAssignmentsToS3(), 500);
                           }}
                           className={`px-2 py-1 border rounded text-sm w-full ${
                             assignedStore
