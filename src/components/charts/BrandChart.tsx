@@ -24,54 +24,63 @@ interface TopBrandsChartProps {
 
 export function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
   const chartData = data.slice(0, limit).map((b) => ({
-    name: b.brand.length > 20 ? b.brand.slice(0, 20) + '...' : b.brand,
+    name: b.brand.length > 15 ? b.brand.slice(0, 15) + '...' : b.brand,
+    fullName: b.brand,
     revenue: b.net_sales,
     margin: b.gross_margin_pct,
   }));
 
+  // Calculate dynamic height based on number of items
+  const chartHeight = Math.max(300, limit * 28);
+
   return (
-    <ResponsiveContainer width="100%" height={400}>
-      <BarChart data={chartData} layout="vertical" margin={{ left: 100 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" horizontal={true} vertical={false} />
-        <XAxis
-          type="number"
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: '#6b6b6b', fontSize: 12 }}
-          tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-        />
-        <YAxis
-          type="category"
-          dataKey="name"
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: '#6b6b6b', fontSize: 11 }}
-          width={100}
-        />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #e0ddd8',
-            borderRadius: '8px',
-          }}
-          formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Revenue']}
-        />
-        <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
-          {chartData.map((entry, index) => (
-            <Cell
-              key={`cell-${index}`}
-              fill={
-                entry.margin >= BRAND_THRESHOLDS.highMargin
-                  ? CHART_COLORS.primary
-                  : entry.margin >= BRAND_THRESHOLDS.lowMargin
-                  ? CHART_COLORS.secondary
-                  : '#8b1414'
-              }
-            />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="w-full" style={{ height: chartHeight }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" horizontal={true} vertical={false} />
+          <XAxis
+            type="number"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#6b6b6b', fontSize: 11 }}
+            tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#6b6b6b', fontSize: 10 }}
+            width={85}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#ffffff',
+              border: '1px solid #e0ddd8',
+              borderRadius: '8px',
+            }}
+            formatter={(value, _name, props) => {
+              const fullName = props.payload?.fullName || '';
+              return [`$${Number(value).toLocaleString()}`, fullName];
+            }}
+          />
+          <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
+            {chartData.map((entry, index) => (
+              <Cell
+                key={`cell-${index}`}
+                fill={
+                  entry.margin >= BRAND_THRESHOLDS.highMargin
+                    ? CHART_COLORS.primary
+                    : entry.margin >= BRAND_THRESHOLDS.lowMargin
+                    ? CHART_COLORS.secondary
+                    : '#8b1414'
+                }
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -100,7 +109,7 @@ export function MarginScatterChart({ data }: MarginScatterProps) {
     const sqrtValue = Math.sqrt(value);
     // Normalize to 0-1 range, then scale to desired size range
     const normalized = (sqrtValue - sqrtMin) / (sqrtMax - sqrtMin || 1);
-    return 80 + normalized * 320; // Range from 80 to 400 pixels
+    return 50 + normalized * 200; // Smaller range for mobile: 50 to 250 pixels
   };
 
   const chartData = filteredData.map((b) => ({
@@ -116,81 +125,85 @@ export function MarginScatterChart({ data }: MarginScatterProps) {
   const yMax = Math.min(100, Math.ceil(maxMargin / 5) * 5 + 5);
 
   return (
-    <ResponsiveContainer width="100%" height={400}>
-      <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" />
-        <XAxis
-          type="number"
-          dataKey="x"
-          name="Net Sales"
-          scale="log"
-          domain={['auto', 'auto']}
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: '#6b6b6b', fontSize: 12 }}
-          tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-        />
-        <YAxis
-          type="number"
-          dataKey="y"
-          name="Margin"
-          domain={[yMin, yMax]}
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: '#6b6b6b', fontSize: 12 }}
-          tickFormatter={(v) => `${v}%`}
-        />
-        <ZAxis type="number" dataKey="z" range={[80, 400]} />
-        <Tooltip
-          content={({ active, payload }) => {
-            if (active && payload && payload.length > 0) {
-              const data = payload[0].payload;
-              return (
-                <div
-                  style={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #e0ddd8',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  }}
-                >
-                  <p style={{ margin: 0, fontWeight: 600, marginBottom: '8px', color: '#1e391f' }}>
-                    {data.name}
-                  </p>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#6b6b6b' }}>
-                    Revenue: <span style={{ fontWeight: 500, color: '#1e391f' }}>${data.x.toLocaleString()}</span>
-                  </p>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#6b6b6b' }}>
-                    Margin: <span style={{ fontWeight: 500, color: '#1e391f' }}>{data.y.toFixed(1)}%</span>
-                  </p>
-                </div>
-              );
-            }
-            return null;
-          }}
-        />
-        <ReferenceLine
-          y={BRAND_THRESHOLDS.targetMargin}
-          stroke={CHART_COLORS.primary}
-          strokeDasharray="4 4"
-          label={{ value: `${BRAND_THRESHOLDS.targetMargin}% Target`, fill: '#6b6b6b', fontSize: 11 }}
-        />
-        <Scatter name="Brands" data={chartData}>
-          {chartData.map((entry, index) => (
-            <Cell
-              key={`cell-${index}`}
-              fill={
-                entry.y >= BRAND_THRESHOLDS.highMargin
-                  ? CHART_COLORS.primary
-                  : entry.y >= BRAND_THRESHOLDS.lowMargin
-                  ? CHART_COLORS.tertiary
-                  : '#8b1414'
+    <div className="w-full h-[350px] md:h-[400px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" />
+          <XAxis
+            type="number"
+            dataKey="x"
+            name="Net Sales"
+            scale="log"
+            domain={['auto', 'auto']}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#6b6b6b', fontSize: 10 }}
+            tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+          />
+          <YAxis
+            type="number"
+            dataKey="y"
+            name="Margin"
+            domain={[yMin, yMax]}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#6b6b6b', fontSize: 10 }}
+            tickFormatter={(v) => `${v}%`}
+            width={35}
+          />
+          <ZAxis type="number" dataKey="z" range={[50, 250]} />
+          <Tooltip
+            content={({ active, payload }) => {
+              if (active && payload && payload.length > 0) {
+                const data = payload[0].payload;
+                return (
+                  <div
+                    style={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e0ddd8',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      maxWidth: '200px',
+                    }}
+                  >
+                    <p style={{ margin: 0, fontWeight: 600, marginBottom: '6px', color: '#1e391f', fontSize: '13px' }}>
+                      {data.name}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>
+                      Revenue: <span style={{ fontWeight: 500, color: '#1e391f' }}>${data.x.toLocaleString()}</span>
+                    </p>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>
+                      Margin: <span style={{ fontWeight: 500, color: '#1e391f' }}>{data.y.toFixed(1)}%</span>
+                    </p>
+                  </div>
+                );
               }
-            />
-          ))}
-        </Scatter>
-      </ScatterChart>
-    </ResponsiveContainer>
+              return null;
+            }}
+          />
+          <ReferenceLine
+            y={BRAND_THRESHOLDS.targetMargin}
+            stroke={CHART_COLORS.primary}
+            strokeDasharray="4 4"
+            label={{ value: `${BRAND_THRESHOLDS.targetMargin}% Target`, fill: '#6b6b6b', fontSize: 10 }}
+          />
+          <Scatter name="Brands" data={chartData}>
+            {chartData.map((entry, index) => (
+              <Cell
+                key={`cell-${index}`}
+                fill={
+                  entry.y >= BRAND_THRESHOLDS.highMargin
+                    ? CHART_COLORS.primary
+                    : entry.y >= BRAND_THRESHOLDS.lowMargin
+                    ? CHART_COLORS.tertiary
+                    : '#8b1414'
+                }
+              />
+            ))}
+          </Scatter>
+        </ScatterChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
