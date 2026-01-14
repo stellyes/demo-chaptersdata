@@ -24,7 +24,8 @@ interface TopBrandsChartProps {
 
 export function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
   const chartData = data.slice(0, limit).map((b) => ({
-    name: b.brand.length > 15 ? b.brand.slice(0, 15) + '...' : b.brand,
+    // Truncate to 12 chars for mobile-friendly display
+    name: b.brand.length > 12 ? b.brand.slice(0, 12) + '…' : b.brand,
     fullName: b.brand,
     revenue: b.net_sales,
     margin: b.gross_margin_pct,
@@ -36,13 +37,13 @@ export function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
   return (
     <div className="w-full" style={{ height: chartHeight }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+        <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 5, top: 5, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" horizontal={true} vertical={false} />
           <XAxis
             type="number"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#6b6b6b', fontSize: 11 }}
+            tick={{ fill: '#6b6b6b', fontSize: 10 }}
             tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
           />
           <YAxis
@@ -50,8 +51,8 @@ export function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
             dataKey="name"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#6b6b6b', fontSize: 10 }}
-            width={85}
+            tick={{ fill: '#6b6b6b', fontSize: 9 }}
+            width={70}
           />
           <Tooltip
             contentStyle={{
