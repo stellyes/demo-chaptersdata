@@ -295,25 +295,25 @@ export function RecommendationsPage() {
       id: 'ai',
       label: 'AI Analysis',
       content: (
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
           {/* Analysis Cards */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
             {analysisCards.map((card) => (
               <Card key={card.type}>
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
-                    <card.icon className="w-6 h-6 text-[var(--accent)]" />
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
+                    <card.icon className="w-5 h-5 md:w-6 md:h-6 text-[var(--accent)]" />
                   </div>
-                  <div className="flex-1">
-                    <h4 className="font-serif text-lg font-medium text-[var(--ink)] mb-1">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-serif text-base md:text-lg font-medium text-[var(--ink)] mb-1">
                       {card.title}
                     </h4>
-                    <p className="text-sm text-[var(--muted)] mb-4">{card.description}</p>
-                    <div className="flex items-center gap-3">
+                    <p className="text-xs md:text-sm text-[var(--muted)] mb-3 md:mb-4">{card.description}</p>
+                    <div className="flex flex-wrap items-center gap-2 md:gap-3">
                       <button
                         onClick={() => runAnalysis(card.type)}
                         disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-sm font-medium disabled:opacity-50"
+                        className="flex items-center gap-2 px-3 md:px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-xs md:text-sm font-medium disabled:opacity-50"
                       >
                         {loading && activeAnalysis === card.type ? (
                           <>
@@ -329,7 +329,7 @@ export function RecommendationsPage() {
                       </button>
                       {analysisResults[card.type] && (
                         <span className="text-xs text-[var(--accent)] font-medium">
-                          ✓ Report generated
+                          ✓ Generated
                         </span>
                       )}
                     </div>
@@ -394,28 +394,28 @@ export function RecommendationsPage() {
           <Card>
             <SectionLabel>Data Summary</SectionLabel>
             <SectionTitle>Analysis Input Data</SectionTitle>
-            <div className="grid grid-cols-4 gap-4">
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Sales Records</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Sales Records</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   {salesData.length.toLocaleString()}
                 </p>
               </div>
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Brand Records</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Brand Records</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   {brandData.length.toLocaleString()}
                 </p>
               </div>
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Total Revenue</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total Revenue</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   ${(salesSummary.totalRevenue / 1000).toFixed(0)}K
                 </p>
               </div>
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Avg Margin</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   {salesSummary.avgMargin.toFixed(1)}%
                 </p>
               </div>
@@ -448,10 +448,10 @@ export function RecommendationsPage() {
             {/* Data Context Selection */}
             <div className="mb-6">
               <SectionLabel>Data Context</SectionLabel>
-              <p className="text-sm text-[var(--muted)] mb-3">
+              <p className="text-xs md:text-sm text-[var(--muted)] mb-3">
                 Select which data sources to include in the query. More data = more context but higher token usage.
               </p>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 md:gap-3">
                 {[
                   { key: 'includeSales', label: 'Sales', count: salesData.length || dataStatus.sales.count },
                   { key: 'includeBrands', label: 'Brands', count: brandData.length || dataStatus.brands.count },
@@ -465,17 +465,17 @@ export function RecommendationsPage() {
                   <button
                     key={item.key}
                     onClick={() => toggleContextOption(item.key as keyof DataContextOptions)}
-                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                    className={`flex items-center justify-between p-2 md:p-3 rounded-lg border transition-colors ${
                       contextOptions[item.key as keyof DataContextOptions]
                         ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--ink)]'
                         : 'bg-[var(--paper)] border-[var(--border)] text-[var(--muted)]'
                     }`}
                   >
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <div className="flex items-center gap-2">
+                    <span className="text-xs md:text-sm font-medium truncate">{item.label}</span>
+                    <div className="flex items-center gap-1 md:gap-2 ml-1">
                       <span className="text-xs">{item.count > 0 ? item.count.toLocaleString() : '0'}</span>
                       {contextOptions[item.key as keyof DataContextOptions] && (
-                        <Check className="w-4 h-4 text-[var(--accent)]" />
+                        <Check className="w-3 h-3 md:w-4 md:h-4 text-[var(--accent)] shrink-0" />
                       )}
                     </div>
                   </button>
@@ -594,28 +594,28 @@ export function RecommendationsPage() {
                 <SectionTitle>Data Sources Summary</SectionTitle>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-4">
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Sales Records</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Sales Records</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   {salesData.length.toLocaleString()}
                 </p>
               </div>
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Brand Records</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Brand Records</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   {brandData.length.toLocaleString()}
                 </p>
               </div>
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Customer Records</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Customer Records</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   {customerData.length.toLocaleString()}
                 </p>
               </div>
-              <div className="p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-sm text-[var(--muted)] mb-1">Research Docs</p>
-                <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Research Docs</p>
+                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
                   {researchData.length.toLocaleString()}
                 </p>
               </div>
@@ -700,30 +700,30 @@ export function RecommendationsPage() {
             <Card>
               <SectionLabel>Report Statistics</SectionLabel>
               <SectionTitle>Analysis Overview</SectionTitle>
-              <div className="grid grid-cols-4 gap-4 mt-4">
-                <div className="p-4 bg-[var(--paper)] rounded-lg text-center">
-                  <p className="text-2xl font-semibold font-serif text-[var(--ink)]">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-4">
+                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+                  <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--ink)]">
                     {aiRecommendations.length}
                   </p>
-                  <p className="text-sm text-[var(--muted)]">Total Reports</p>
+                  <p className="text-xs md:text-sm text-[var(--muted)]">Total Reports</p>
                 </div>
-                <div className="p-4 bg-[var(--paper)] rounded-lg text-center">
-                  <p className="text-2xl font-semibold font-serif text-[var(--ink)]">
+                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+                  <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--ink)]">
                     {aiRecommendations.filter(r => r.type === 'sales').length}
                   </p>
-                  <p className="text-sm text-[var(--muted)]">Sales Reports</p>
+                  <p className="text-xs md:text-sm text-[var(--muted)]">Sales Reports</p>
                 </div>
-                <div className="p-4 bg-[var(--paper)] rounded-lg text-center">
-                  <p className="text-2xl font-semibold font-serif text-[var(--ink)]">
+                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+                  <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--ink)]">
                     {aiRecommendations.filter(r => r.type === 'brands').length}
                   </p>
-                  <p className="text-sm text-[var(--muted)]">Brand Reports</p>
+                  <p className="text-xs md:text-sm text-[var(--muted)]">Brand Reports</p>
                 </div>
-                <div className="p-4 bg-[var(--paper)] rounded-lg text-center">
-                  <p className="text-2xl font-semibold font-serif text-[var(--ink)]">
+                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+                  <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--ink)]">
                     {aiRecommendations.filter(r => r.type === 'insights').length}
                   </p>
-                  <p className="text-sm text-[var(--muted)]">Insights Reports</p>
+                  <p className="text-xs md:text-sm text-[var(--muted)]">Insights Reports</p>
                 </div>
               </div>
             </Card>
