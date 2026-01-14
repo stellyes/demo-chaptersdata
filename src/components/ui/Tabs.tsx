@@ -18,21 +18,23 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
 
   return (
     <div>
-      {/* Tab Headers */}
-      <div className="flex gap-1 border-b border-[var(--border)] mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-all ${
-              activeTab === tab.id
-                ? 'border-[var(--accent)] text-[var(--accent)]'
-                : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Tab Headers - scrollable on mobile */}
+      <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+        <div className="flex gap-1 border-b border-[var(--border)] mb-4 md:mb-6 min-w-max">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 md:px-4 py-2 md:py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'border-[var(--accent)] text-[var(--accent)]'
+                  : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab Content */}

@@ -80,12 +80,40 @@ interface MarginScatterProps {
 }
 
 export function MarginScatterChart({ data }: MarginScatterProps) {
-  const chartData = data.slice(0, 100).map((b) => ({
+  // Prepare data with normalized size values
+  // Filter out: zero/negative sales, 100% margins (malformed data), and empty brand names
+  const filteredData = data
+    .slice(0, 100)
+    .filter((b) => b.net_sales > 0 && b.gross_margin_pct < 100 && b.brand && b.brand.trim() !== '');
+
+  // Calculate min/max for normalization
+  const minSales = Math.min(...filteredData.map((b) => b.net_sales));
+  const maxSales = Math.max(...filteredData.map((b) => b.net_sales));
+  const minMargin = Math.min(...filteredData.map((b) => b.gross_margin_pct));
+  const maxMargin = Math.max(...filteredData.map((b) => b.gross_margin_pct));
+
+  // Normalize size using square root scale for better visual differentiation
+  // This prevents large values from dominating and makes differences more visible
+  const normalizeSize = (value: number) => {
+    const sqrtMin = Math.sqrt(minSales);
+    const sqrtMax = Math.sqrt(maxSales);
+    const sqrtValue = Math.sqrt(value);
+    // Normalize to 0-1 range, then scale to desired size range
+    const normalized = (sqrtValue - sqrtMin) / (sqrtMax - sqrtMin || 1);
+    return 80 + normalized * 320; // Range from 80 to 400 pixels
+  };
+
+  const chartData = filteredData.map((b) => ({
     name: b.brand,
     x: b.net_sales,
     y: b.gross_margin_pct,
-    z: b.net_sales,
+    z: normalizeSize(b.net_sales),
+    originalSales: b.net_sales,
   }));
+
+  // Calculate Y-axis domain with 5% padding below minimum
+  const yMin = Math.max(0, Math.floor(minMargin / 5) * 5 - 5);
+  const yMax = Math.min(100, Math.ceil(maxMargin / 5) * 5 + 5);
 
   return (
     <ResponsiveContainer width="100%" height={400}>
@@ -106,24 +134,40 @@ export function MarginScatterChart({ data }: MarginScatterProps) {
           type="number"
           dataKey="y"
           name="Margin"
-          domain={[0, 100]}
+          domain={[yMin, yMax]}
           axisLine={false}
           tickLine={false}
           tick={{ fill: '#6b6b6b', fontSize: 12 }}
           tickFormatter={(v) => `${v}%`}
         />
-        <ZAxis type="number" dataKey="z" range={[50, 400]} />
+        <ZAxis type="number" dataKey="z" range={[80, 400]} />
         <Tooltip
-          contentStyle={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #e0ddd8',
-            borderRadius: '8px',
-          }}
-          formatter={(value, name) => {
-            const numValue = Number(value);
-            if (name === 'Net Sales') return [`$${numValue.toLocaleString()}`, name];
-            if (name === 'Margin') return [`${numValue.toFixed(1)}%`, name];
-            return [value, name];
+          content={({ active, payload }) => {
+            if (active && payload && payload.length > 0) {
+              const data = payload[0].payload;
+              return (
+                <div
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e0ddd8',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  <p style={{ margin: 0, fontWeight: 600, marginBottom: '8px', color: '#1e391f' }}>
+                    {data.name}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#6b6b6b' }}>
+                    Revenue: <span style={{ fontWeight: 500, color: '#1e391f' }}>${data.x.toLocaleString()}</span>
+                  </p>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#6b6b6b' }}>
+                    Margin: <span style={{ fontWeight: 500, color: '#1e391f' }}>{data.y.toFixed(1)}%</span>
+                  </p>
+                </div>
+              );
+            }
+            return null;
           }}
         />
         <ReferenceLine

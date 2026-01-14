@@ -118,12 +118,12 @@ export interface InvoiceLineItem {
 // Research document types
 export interface ResearchDocument {
   id: string;
-  filename: string;
-  s3_key: string;
+  date: string;
   category: string;
-  source_url?: string;
-  uploaded_at: string;
-  analysis?: DocumentAnalysis;
+  summary: string;
+  key_findings: string[];
+  relevance: string;
+  source?: string;
 }
 
 export interface DocumentAnalysis {
@@ -146,21 +146,20 @@ export interface KeyFinding {
 export interface SEOSummary {
   site: string;
   score: number;
-  top_priorities: string[];
-  quick_wins: string[];
-  analyzed_at: string;
+  priorities: string[];
+  quickWins: string[];
+  lastUpdated: string;
 }
 
 // QR Code types
 export interface QRCode {
-  short_code: string;
-  original_url: string;
+  shortCode: string;
+  originalUrl: string;
   name: string;
   description?: string;
-  created_at: string;
-  total_clicks: number;
+  createdAt: string;
+  totalClicks: number;
   active: boolean;
-  deleted: boolean;
 }
 
 export interface QRClick {

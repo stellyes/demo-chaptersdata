@@ -3,6 +3,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import {
   analyzeSalesTrends,
   analyzeBrandPerformance,
@@ -10,6 +11,78 @@ import {
   analyzeCustomerData,
   generateBusinessInsights,
 } from '@/lib/services/claude';
+
+// S3 Client singleton
+let s3Client: S3Client | null = null;
+
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
+      credentials: {
+        accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
+      },
+    });
+  }
+  return s3Client;
+}
+
+const BUCKET = process.env.CHAPTERS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'retail-data-bcgr';
+
+// Save report to S3
+async function saveReportToS3(report: {
+  id: string;
+  type: string;
+  date: string;
+  analysis: string;
+  summary?: string;
+}): Promise<boolean> {
+  try {
+    const client = getS3Client();
+    const key = `ai-reports/${report.id}.json`;
+
+    const reportData = {
+      report_id: report.id,
+      model_type: report.type,
+      timestamp: report.date,
+      date: report.date,
+      answer: report.analysis,
+      question: report.summary || `${report.type} analysis`,
+      model_name: 'claude',
+    };
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: JSON.stringify(reportData, null, 2),
+        ContentType: 'application/json',
+      })
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error saving report to S3:', error);
+    return false;
+  }
+}
+
+// Generate analysis title based on type
+function getAnalysisTitle(type: string): string {
+  switch (type) {
+    case 'sales':
+      return 'Sales Trends Analysis';
+    case 'brands':
+      return 'Brand Performance Analysis';
+    case 'categories':
+      return 'Category Analysis';
+    case 'insights':
+      return 'Business Intelligence';
+    default:
+      return `${type} Analysis`;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,9 +120,32 @@ export async function POST(request: NextRequest) {
         );
     }
 
+    // Generate report metadata
+    const reportId = `report-${type}-${Date.now()}`;
+    const reportDate = new Date().toISOString();
+    const reportSummary = getAnalysisTitle(type);
+
+    // Save to S3 (don't block response on this)
+    saveReportToS3({
+      id: reportId,
+      type,
+      date: reportDate,
+      analysis,
+      summary: reportSummary,
+    });
+
     return NextResponse.json({
       success: true,
-      data: { analysis },
+      data: {
+        analysis,
+        report: {
+          id: reportId,
+          type,
+          date: reportDate,
+          analysis,
+          summary: reportSummary,
+        },
+      },
     });
   } catch (error) {
     console.error('AI analysis error:', error);

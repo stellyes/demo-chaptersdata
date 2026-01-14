@@ -67,7 +67,7 @@ export function cleanSalesData(rawData: Record<string, string>[]): SalesRecord[]
         gross_receipts: parseNumber(row.gross_receipts || row['Gross Receipts'] || '0'),
         cogs_with_excise: parseNumber(row.cogs_with_excise || row['COGS (with excise)'] || '0'),
         gross_income: parseNumber(row.gross_income || row['Gross Income'] || '0'),
-        gross_margin_pct: parseNumber(row.gross_margin || row['Gross Margin %'] || '0'),
+        gross_margin_pct: parseNumber(row.gross_margin_ || row.gross_margin || row['Gross Margin %'] || '0'),
         discount_pct: parseNumber(row.discount || row['Discount %'] || '0'),
         cost_pct: parseNumber(row.cost || row['Cost %'] || '0'),
         avg_basket_size: parseNumber(row.avg_basket_size || row['Avg Basket Size'] || '0'),
@@ -103,7 +103,7 @@ export function cleanBrandData(
       const record: BrandRecord = {
         brand,
         pct_of_total_net_sales: parseNumber(row.of_total_net_sales || row['% of Total Net Sales'] || '0'),
-        gross_margin_pct: parseNumber(row.gross_margin || row['Gross Margin %'] || '0'),
+        gross_margin_pct: parseNumber(row.gross_margin_ || row.gross_margin || row['Gross Margin %'] || '0'),
         avg_cost_wo_excise: parseNumber(row.avg_cost_wo_excise || row['Avg Cost (w/o excise)'] || '0'),
         net_sales: parseNumber(row.net_sales || row['Net Sales'] || '0'),
         store: row.store || row.Store || '',
@@ -132,7 +132,7 @@ export function cleanProductData(
       const record: ProductRecord = {
         product_type: row.product_type || row['Product Type'] || '',
         pct_of_total_net_sales: parseNumber(row.of_total_net_sales || row['% of Total Net Sales'] || '0'),
-        gross_margin_pct: parseNumber(row.gross_margin || row['Gross Margin %'] || '0'),
+        gross_margin_pct: parseNumber(row.gross_margin_ || row.gross_margin || row['Gross Margin %'] || '0'),
         avg_cost_wo_excise: parseNumber(row.avg_cost_wo_excise || row['Avg Cost (w/o excise)'] || '0'),
         net_sales: parseNumber(row.net_sales || row['Net Sales'] || '0'),
         store: row.store || row.Store || '',

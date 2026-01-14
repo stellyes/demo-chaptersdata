@@ -15,7 +15,19 @@ import {
   BudtenderRecord,
   BrandMapping,
   InvoiceLineItem,
+  ResearchDocument,
+  SEOSummary,
+  QRCode,
 } from '@/types';
+
+// AI Recommendation type (kept here since it's store-specific)
+export interface AIRecommendation {
+  id: string;
+  type: string;
+  date: string;
+  analysis: string;
+  summary?: string;
+}
 
 // Navigation pages
 export type PageType =
@@ -73,6 +85,23 @@ interface AppState {
   invoiceData: InvoiceLineItem[];
   setInvoiceData: (data: InvoiceLineItem[]) => void;
 
+  // Research data
+  researchData: ResearchDocument[];
+  setResearchData: (data: ResearchDocument[]) => void;
+
+  // SEO data
+  seoData: SEOSummary[];
+  setSeoData: (data: SEOSummary[]) => void;
+
+  // QR Codes data
+  qrCodesData: QRCode[];
+  setQrCodesData: (data: QRCode[]) => void;
+
+  // AI Recommendations data
+  aiRecommendations: AIRecommendation[];
+  setAiRecommendations: (data: AIRecommendation[]) => void;
+  addAiRecommendation: (recommendation: AIRecommendation) => void;
+
   // Permanent employee assignments (employee name -> store_id)
   permanentEmployees: Record<string, StoreId>;
   setPermanentEmployee: (employeeName: string, storeId: StoreId | null) => void;
@@ -91,6 +120,10 @@ interface AppState {
     budtenders: { loaded: boolean; count: number; lastUpdated?: string };
     mappings: { loaded: boolean; count: number; lastUpdated?: string };
     invoices: { loaded: boolean; count: number; lastUpdated?: string };
+    research: { loaded: boolean; count: number; lastUpdated?: string };
+    seo: { loaded: boolean; count: number; lastUpdated?: string };
+    qrCodes: { loaded: boolean; count: number; lastUpdated?: string };
+    aiRecommendations: { loaded: boolean; count: number; lastUpdated?: string };
   };
   updateDataStatus: (
     type: keyof AppState['dataStatus'],
@@ -100,6 +133,11 @@ interface AppState {
   // Dark mode
   darkMode: boolean;
   toggleDarkMode: () => void;
+
+  // Mobile sidebar
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  toggleSidebar: () => void;
 
   // Reset all state
   reset: () => void;
@@ -122,6 +160,10 @@ const initialState = {
   budtenderData: [] as BudtenderRecord[],
   brandMappings: [] as BrandMapping[],
   invoiceData: [] as InvoiceLineItem[],
+  researchData: [] as ResearchDocument[],
+  seoData: [] as SEOSummary[],
+  qrCodesData: [] as QRCode[],
+  aiRecommendations: [] as AIRecommendation[],
   permanentEmployees: {} as Record<string, StoreId>,
   isLoading: false,
   dataStatus: {
@@ -132,8 +174,13 @@ const initialState = {
     budtenders: { loaded: false, count: 0 },
     mappings: { loaded: false, count: 0 },
     invoices: { loaded: false, count: 0 },
+    research: { loaded: false, count: 0 },
+    seo: { loaded: false, count: 0 },
+    qrCodes: { loaded: false, count: 0 },
+    aiRecommendations: { loaded: false, count: 0 },
   },
   darkMode: false,
+  sidebarOpen: false,
   dataHash: null as string | null,
 };
 
@@ -241,6 +288,74 @@ export const useAppStore = create<AppState>()(
           },
         })),
 
+      setResearchData: (researchData) =>
+        set((state) => ({
+          researchData,
+          dataStatus: {
+            ...state.dataStatus,
+            research: {
+              loaded: true,
+              count: researchData.length,
+              lastUpdated: new Date().toISOString(),
+            },
+          },
+        })),
+
+      setSeoData: (seoData) =>
+        set((state) => ({
+          seoData,
+          dataStatus: {
+            ...state.dataStatus,
+            seo: {
+              loaded: true,
+              count: seoData.length,
+              lastUpdated: new Date().toISOString(),
+            },
+          },
+        })),
+
+      setQrCodesData: (qrCodesData) =>
+        set((state) => ({
+          qrCodesData,
+          dataStatus: {
+            ...state.dataStatus,
+            qrCodes: {
+              loaded: true,
+              count: qrCodesData.length,
+              lastUpdated: new Date().toISOString(),
+            },
+          },
+        })),
+
+      setAiRecommendations: (aiRecommendations) =>
+        set((state) => ({
+          aiRecommendations,
+          dataStatus: {
+            ...state.dataStatus,
+            aiRecommendations: {
+              loaded: true,
+              count: aiRecommendations.length,
+              lastUpdated: new Date().toISOString(),
+            },
+          },
+        })),
+
+      addAiRecommendation: (recommendation) =>
+        set((state) => {
+          const newRecommendations = [recommendation, ...state.aiRecommendations];
+          return {
+            aiRecommendations: newRecommendations,
+            dataStatus: {
+              ...state.dataStatus,
+              aiRecommendations: {
+                loaded: true,
+                count: newRecommendations.length,
+                lastUpdated: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
       setPermanentEmployee: (employeeName, storeId) =>
         set((state) => {
           const newEmployees = { ...state.permanentEmployees };
@@ -265,6 +380,9 @@ export const useAppStore = create<AppState>()(
         })),
 
       toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
+
+      setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
       reset: () => set(initialState),
 
@@ -336,6 +454,47 @@ export const useAppStore = create<AppState>()(
                         lastUpdated: new Date().toISOString(),
                       },
                     },
+                  }));
+                }
+              })
+              .catch(err => {
+                console.error('Error loading invoice data:', err);
+              });
+
+            // Load research, SEO, QR codes, and AI recommendations in background
+            fetch('/api/data/research')
+              .then(res => res.json())
+              .then(researchResult => {
+                if (researchResult.success && researchResult.data) {
+                  const { research, seo, qrCodes, aiRecommendations } = researchResult.data;
+                  set((state) => ({
+                    researchData: research || [],
+                    seoData: seo || [],
+                    qrCodesData: qrCodes || [],
+                    aiRecommendations: aiRecommendations || [],
+                    dataStatus: {
+                      ...state.dataStatus,
+                      research: {
+                        loaded: true,
+                        count: research?.length || 0,
+                        lastUpdated: new Date().toISOString(),
+                      },
+                      seo: {
+                        loaded: true,
+                        count: seo?.length || 0,
+                        lastUpdated: new Date().toISOString(),
+                      },
+                      qrCodes: {
+                        loaded: true,
+                        count: qrCodes?.length || 0,
+                        lastUpdated: new Date().toISOString(),
+                      },
+                      aiRecommendations: {
+                        loaded: true,
+                        count: aiRecommendations?.length || 0,
+                        lastUpdated: new Date().toISOString(),
+                      },
+                    },
                     // Now all data is loaded, hide the toast
                     isLoading: false,
                   }));
@@ -345,7 +504,7 @@ export const useAppStore = create<AppState>()(
                 }
               })
               .catch(err => {
-                console.error('Error loading invoice data:', err);
+                console.error('Error loading research data:', err);
                 set({ isLoading: false });
               });
           } else {

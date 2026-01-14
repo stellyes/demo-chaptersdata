@@ -13,6 +13,7 @@ import { CategoryPieChart, SegmentPieChart } from '@/components/charts/PieChart'
 import { useFilteredSalesData, useFilteredBrandData, useFilteredProductData, useAppStore } from '@/store/app-store';
 import { format } from 'date-fns';
 import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Percent, Calendar, User, Search, BarChart3, AlertCircle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { calculateCustomerSummary } from '@/lib/services/data-processor';
 
 // ============================================
@@ -107,7 +108,7 @@ function SalesTrendsTab() {
         )}
       </Card>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <SectionLabel>Customer Traffic</SectionLabel>
           <SectionTitle>Daily Customer Count</SectionTitle>
@@ -205,7 +206,7 @@ function BrandPerformanceTab() {
           <p className="text-sm text-[var(--muted)] mb-4">
             These brands have margins below 40% with significant sales volume. Consider price adjustments or vendor negotiations.
           </p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {lowMarginBrands.slice(0, 10).map((brand, i) => (
               <div key={i} className="flex items-center justify-between p-3 bg-[var(--warning)]/5 rounded">
                 <span className="font-medium">{brand.brand}</span>
@@ -227,27 +228,98 @@ function BrandPerformanceTab() {
 // ============================================
 function ProductCategoriesTab() {
   const productData = useFilteredProductData();
+  const brandData = useFilteredBrandData();
+  const { brandMappings } = useAppStore();
 
-  const productCategoryData = useMemo(() => {
-    return productData
-      .sort((a, b) => b.net_sales - a.net_sales)
-      .slice(0, 10)
-      .map((p) => ({
-        name: p.product_type,
-        value: p.net_sales,
-      }));
+  // Create a lookup map from brand name to product type
+  const brandToProductType = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const mapping of brandMappings) {
+      // Normalize brand name for matching (uppercase)
+      map[mapping.brand.toUpperCase()] = mapping.product_type;
+    }
+    return map;
+  }, [brandMappings]);
+
+  // Calculate margin data from brand data using the brand-to-product-type mapping
+  // This gives us accurate margin % per product category
+  const marginByProductType = useMemo(() => {
+    const categoryMargins: Record<string, { sales: number; marginWeightedSum: number }> = {};
+
+    for (const brand of brandData) {
+      // Look up the product type for this brand
+      const productType = brandToProductType[brand.brand.toUpperCase()];
+      if (productType && brand.gross_margin_pct > 0) {
+        if (!categoryMargins[productType]) {
+          categoryMargins[productType] = { sales: 0, marginWeightedSum: 0 };
+        }
+        categoryMargins[productType].sales += brand.net_sales;
+        categoryMargins[productType].marginWeightedSum += brand.gross_margin_pct * brand.net_sales;
+      }
+    }
+
+    // Calculate weighted average margin per product type
+    const result: Record<string, number> = {};
+    for (const [productType, data] of Object.entries(categoryMargins)) {
+      result[productType] = data.sales > 0 ? data.marginWeightedSum / data.sales : 0;
+    }
+    return result;
+  }, [brandData, brandToProductType]);
+
+  // Check if we have margin data available (from brand mappings)
+  const hasMarginData = useMemo(() => {
+    return Object.keys(marginByProductType).length > 0;
+  }, [marginByProductType]);
+
+  // Calculate total sales for percentage calculations
+  const totalSales = useMemo(() => {
+    return productData.reduce((sum, p) => sum + p.net_sales, 0);
   }, [productData]);
 
+  // Aggregate sales by product type (category) - combines across stores
+  // Uses margin data from brand mappings when available
+  const aggregatedCategoryData = useMemo(() => {
+    const categoryTotals: Record<string, { sales: number }> = {};
+
+    for (const product of productData) {
+      if (product.product_type) {
+        const category = product.product_type.trim().toUpperCase();
+        if (!categoryTotals[category]) {
+          categoryTotals[category] = { sales: 0 };
+        }
+        categoryTotals[category].sales += product.net_sales;
+      }
+    }
+
+    return Object.entries(categoryTotals)
+      .map(([name, data]) => ({
+        name,
+        value: data.sales,
+        // Get margin from brand data mapping, default to 0 if not available
+        margin: marginByProductType[name] || 0,
+        // Calculate percentage of total sales
+        pctOfSales: totalSales > 0 ? (data.sales / totalSales) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [productData, totalSales, marginByProductType]);
+
+  // Data for pie chart - all categories
+  const productCategoryData = useMemo(() => {
+    return aggregatedCategoryData.map(({ name, value }) => ({ name, value }));
+  }, [aggregatedCategoryData]);
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+    <div className="space-y-4 md:space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <SectionLabel>Category Mix</SectionLabel>
           <SectionTitle>Revenue by Product Type</SectionTitle>
           {productCategoryData.length > 0 ? (
-            <CategoryPieChart data={productCategoryData} />
+            <div className="h-[400px]">
+              <CategoryPieChart data={productCategoryData} />
+            </div>
           ) : (
-            <div className="h-[300px] flex items-center justify-center text-[var(--muted)]">
+            <div className="h-[400px] flex items-center justify-center text-[var(--muted)]">
               No product data available.
             </div>
           )}
@@ -256,45 +328,52 @@ function ProductCategoriesTab() {
         <Card>
           <SectionLabel>Category Details</SectionLabel>
           <SectionTitle>Product Performance</SectionTitle>
-          {productData.length > 0 ? (
-            <div className="space-y-3">
-              {productData.slice(0, 8).map((p, i) => (
+          {aggregatedCategoryData.length > 0 ? (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {aggregatedCategoryData.map((cat, i) => (
                 <div
                   key={i}
                   className="flex items-center justify-between p-3 bg-[var(--paper)] rounded"
                 >
-                  <span className="font-medium text-[var(--ink)]">{p.product_type}</span>
+                  <div>
+                    <span className="font-medium text-[var(--ink)]">{cat.name}</span>
+                    <p className="text-xs text-[var(--muted)]">
+                      {cat.pctOfSales.toFixed(1)}% of sales
+                    </p>
+                  </div>
                   <div className="text-right">
                     <p className="font-semibold text-[var(--ink)]">
-                      ${p.net_sales.toLocaleString()}
+                      ${cat.value.toLocaleString()}
                     </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {p.gross_margin_pct.toFixed(1)}% margin
-                    </p>
+                    {hasMarginData && (
+                      <p className="text-xs text-[var(--muted)]">
+                        {cat.margin.toFixed(1)}% margin
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="h-[300px] flex items-center justify-center text-[var(--muted)]">
+            <div className="h-[400px] flex items-center justify-center text-[var(--muted)]">
               No product data available.
             </div>
           )}
         </Card>
       </div>
 
-      {/* Full Product Table */}
-      {productData.length > 0 && (
+      {/* Full Product Table - shows aggregated categories */}
+      {aggregatedCategoryData.length > 0 && (
         <Card>
           <SectionLabel>All Categories</SectionLabel>
           <SectionTitle>Complete Product Performance</SectionTitle>
           <DataTable
-            data={productData}
+            data={aggregatedCategoryData}
             columns={[
-              { key: 'product_type', label: 'Product Type', sortable: true },
-              { key: 'pct_of_total_net_sales', label: '% of Sales', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
-              { key: 'net_sales', label: 'Net Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
-              { key: 'gross_margin_pct', label: 'Margin %', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
+              { key: 'name', label: 'Product Type', sortable: true },
+              { key: 'pctOfSales', label: '% of Sales', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
+              { key: 'value', label: 'Net Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
+              ...(hasMarginData ? [{ key: 'margin' as const, label: 'Margin %', sortable: true, align: 'right' as const, render: (v: unknown) => `${Number(v).toFixed(1)}%` }] : []),
             ]}
             pageSize={15}
             exportable
@@ -311,6 +390,7 @@ function ProductCategoriesTab() {
 // ============================================
 function DailyBreakdownTab() {
   const salesData = useFilteredSalesData();
+  const [storeFilter, setStoreFilter] = useState<'all' | 'grass_roots' | 'barbary_coast'>('all');
 
   // Group by day of week
   const dayOfWeekData = useMemo(() => {
@@ -335,41 +415,171 @@ function DailyBreakdownTab() {
     }));
   }, [salesData]);
 
-  return (
-    <div className="space-y-6">
-      <Card>
-        <SectionLabel>Weekly Patterns</SectionLabel>
-        <SectionTitle>Average Sales by Day of Week</SectionTitle>
-        <div className="grid grid-cols-7 gap-4">
-          {dayOfWeekData.map((d, i) => (
-            <div key={i} className="text-center p-4 bg-[var(--paper)] rounded">
-              <p className="text-sm text-[var(--muted)] mb-2">{d.day.slice(0, 3)}</p>
-              <p className="text-lg font-semibold font-serif">${(d.avgSales / 1000).toFixed(1)}k</p>
-              <p className="text-xs text-[var(--muted)]">avg/day</p>
-            </div>
-          ))}
-        </div>
-      </Card>
+  // Bar chart data for day of week
+  const barChartData = useMemo(() => {
+    return dayOfWeekData.map((d) => ({
+      name: d.day.slice(0, 3),
+      value: d.avgSales,
+    }));
+  }, [dayOfWeekData]);
 
-      <Card>
-        <SectionLabel>Day-by-Day</SectionLabel>
-        <SectionTitle>All Daily Records</SectionTitle>
-        <DataTable
-          data={salesData}
-          columns={[
-            { key: 'date', label: 'Date', sortable: true },
-            { key: 'store', label: 'Store', sortable: true },
-            { key: 'net_sales', label: 'Net Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
-            { key: 'tickets_count', label: 'Transactions', sortable: true, align: 'right' },
-            { key: 'customers_count', label: 'Customers', sortable: true, align: 'right' },
-            { key: 'avg_order_value', label: 'AOV', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(0)}` },
-            { key: 'gross_margin_pct', label: 'Margin %', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
-          ]}
-          pageSize={20}
-          exportable
-          exportFilename="daily_sales"
-        />
-      </Card>
+  // Filter data by store for the table
+  const filteredTableData = useMemo(() => {
+    if (storeFilter === 'all') return salesData;
+    return salesData.filter((record) => record.store_id === storeFilter);
+  }, [salesData, storeFilter]);
+
+  // Format table data with readable dates and calculate proper margin
+  const formattedTableData = useMemo(() => {
+    return filteredTableData.map((record) => {
+      // The backend normalizes margin values:
+      // - Decimals 0-1 are multiplied by 100 (e.g., 0.64 -> 64%)
+      // - Values 1-100 are kept as-is
+      // - Values > 100 are set to 0 (invalid)
+      let margin = record.gross_margin_pct;
+
+      // If margin is 0, the backend couldn't parse it or it was invalid
+      // Try calculating from gross_income / net_sales
+      if (margin <= 0 && record.net_sales > 0 && record.gross_income > 0) {
+        // gross_income is profit, margin = (profit / net_sales) * 100
+        const calculatedMargin = (record.gross_income / record.net_sales) * 100;
+        // Only use if it's a valid percentage
+        if (calculatedMargin > 0 && calculatedMargin <= 100) {
+          margin = calculatedMargin;
+        }
+      }
+
+      // If margin is still a decimal (0-1), convert to percentage
+      // This handles cases where backend normalization didn't run
+      if (margin > 0 && margin <= 1) {
+        margin = margin * 100;
+      }
+
+      return {
+        ...record,
+        formatted_date: format(new Date(record.date), 'MMM d, yyyy'),
+        calculated_margin: margin,
+      };
+    });
+  }, [filteredTableData]);
+
+  // Check if we should show store column (when "all" is selected and both stores have data)
+  const showStoreColumn = useMemo(() => {
+    if (storeFilter !== 'all') return false;
+    const stores = new Set(salesData.map((r) => r.store_id));
+    return stores.size > 1;
+  }, [salesData, storeFilter]);
+
+  // Build columns dynamically
+  const tableColumns = useMemo(() => {
+    const cols: Array<{
+      key: keyof typeof formattedTableData[0];
+      label: string;
+      sortable?: boolean;
+      align?: 'left' | 'right' | 'center';
+      render?: (value: unknown, row: typeof formattedTableData[0]) => React.ReactNode;
+    }> = [
+      { key: 'formatted_date', label: 'Date', sortable: true },
+    ];
+
+    if (showStoreColumn) {
+      cols.push({ key: 'store', label: 'Store', sortable: true });
+    }
+
+    cols.push(
+      { key: 'net_sales', label: 'Net Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
+      { key: 'tickets_count', label: 'Transactions', sortable: true, align: 'right' },
+      { key: 'customers_count', label: 'Customers', sortable: true, align: 'right' },
+      { key: 'avg_order_value', label: 'AOV', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(0)}` },
+      { key: 'calculated_margin', label: 'Margin %', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
+    );
+
+    return cols;
+  }, [showStoreColumn]);
+
+  return (
+    <div className="space-y-4 md:space-y-6">
+      {/* Side by side layout: Weekly Patterns (left) and Day-by-Day (right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch">
+        {/* Weekly Patterns - Left Side */}
+        <Card className="flex flex-col">
+          <SectionLabel>Weekly Patterns</SectionLabel>
+          <SectionTitle>Average Sales by Day of Week</SectionTitle>
+
+          {/* Bar Chart - grows to fill space */}
+          <div className="flex-1 min-h-[200px] mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={barChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#6b6b6b', fontSize: 11 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#6b6b6b', fontSize: 11 }}
+                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                  width={45}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e0ddd8',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                  }}
+                  formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Avg Sales']}
+                />
+                <Bar dataKey="value" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Day cards - compact grid at bottom */}
+          <div className="grid grid-cols-7 gap-2 mt-auto">
+            {dayOfWeekData.map((d, i) => (
+              <div key={i} className="text-center p-2 bg-[var(--paper)] rounded">
+                <p className="text-xs text-[var(--muted)] mb-1">{d.day.slice(0, 3)}</p>
+                <p className="text-sm font-semibold font-serif">${(d.avgSales / 1000).toFixed(1)}k</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Day-by-Day - Right Side */}
+        <Card className="flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <SectionLabel>Day-by-Day</SectionLabel>
+              <SectionTitle>Daily Sales Records</SectionTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-[var(--muted)]">Store:</label>
+              <select
+                value={storeFilter}
+                onChange={(e) => setStoreFilter(e.target.value as 'all' | 'grass_roots' | 'barbary_coast')}
+                className="px-3 py-2 border border-[var(--border)] rounded text-sm"
+              >
+                <option value="all">All Stores</option>
+                <option value="grass_roots">Grass Roots</option>
+                <option value="barbary_coast">Barbary Coast</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex-1">
+            <DataTable
+              data={formattedTableData}
+              columns={tableColumns}
+              pageSize={10}
+              exportable
+              exportFilename="daily_sales"
+            />
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -579,7 +789,7 @@ function CustomerAnalyticsTab() {
           </div>
 
           {/* Segment Distribution */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <SectionLabel>Value Segments</SectionLabel>
               <SectionTitle>Customer LTV Distribution</SectionTitle>
@@ -595,7 +805,7 @@ function CustomerAnalyticsTab() {
       )}
 
       {activeSubTab === 'segments' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           <Card>
             <SectionLabel>By Lifetime Value</SectionLabel>
             <SectionTitle>Customer Value Segments</SectionTitle>
@@ -635,10 +845,13 @@ function CustomerAnalyticsTab() {
 
       {activeSubTab === 'ltv' && (
         <Card>
-          <SectionLabel>Top Customers</SectionLabel>
-          <SectionTitle>Highest Lifetime Value</SectionTitle>
+          <SectionLabel>All Customers by Value</SectionLabel>
+          <SectionTitle>Lifetime Value Rankings</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Showing all {customerData.length.toLocaleString()} customers sorted by lifetime value. Use pagination to browse.
+          </p>
           <DataTable
-            data={[...customerData].sort((a, b) => b.lifetime_net_sales - a.lifetime_net_sales).slice(0, 50)}
+            data={[...customerData].sort((a, b) => b.lifetime_net_sales - a.lifetime_net_sales)}
             columns={[
               { key: 'name', label: 'Name', sortable: true },
               { key: 'lifetime_net_sales', label: 'Lifetime Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
@@ -647,9 +860,9 @@ function CustomerAnalyticsTab() {
               { key: 'customer_segment', label: 'Segment' },
               { key: 'recency_segment', label: 'Recency' },
             ]}
-            pageSize={20}
+            pageSize={25}
             exportable
-            exportFilename="top_customers"
+            exportFilename="all_customers_by_ltv"
           />
         </Card>
       )}
@@ -657,20 +870,23 @@ function CustomerAnalyticsTab() {
       {activeSubTab === 'recency' && (
         <Card>
           <SectionLabel>At-Risk Customers</SectionLabel>
-          <SectionTitle>Cold & Lost Customers (High Value)</SectionTitle>
+          <SectionTitle>Cold & Lost Customers (All Values)</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Showing all Cold and Lost customers sorted by lifetime value. These customers haven't visited recently.
+          </p>
           <DataTable
             data={customerData
-              .filter((c) => (c.recency_segment === 'Cold' || c.recency_segment === 'Lost') && c.lifetime_net_sales > 500)
-              .sort((a, b) => b.lifetime_net_sales - a.lifetime_net_sales)
-              .slice(0, 50)}
+              .filter((c) => c.recency_segment === 'Cold' || c.recency_segment === 'Lost')
+              .sort((a, b) => b.lifetime_net_sales - a.lifetime_net_sales)}
             columns={[
               { key: 'name', label: 'Name', sortable: true },
               { key: 'last_visit_date', label: 'Last Visit', sortable: true },
               { key: 'lifetime_net_sales', label: 'Lifetime Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
               { key: 'lifetime_visits', label: 'Visits', sortable: true, align: 'right' },
+              { key: 'customer_segment', label: 'Value Segment' },
               { key: 'recency_segment', label: 'Status' },
             ]}
-            pageSize={20}
+            pageSize={25}
             exportable
             exportFilename="at_risk_customers"
           />

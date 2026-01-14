@@ -231,6 +231,36 @@ function parseNumber(value: string | number | undefined): number {
   return isNaN(num) ? 0 : num;
 }
 
+// Normalize margin values to be in percentage form
+// Most retail data has margins in the 20-70% range
+// Treez CSV exports margin as decimal (0.55 = 55%), so we convert
+function normalizeMarginValue(value: number): number {
+  // Negative margins indicate data issues - return 0
+  if (value < 0) {
+    return 0;
+  }
+
+  // If value is clearly a decimal representation of percentage (between 0 and 1)
+  // Convert to percentage (e.g., 0.55 -> 55%)
+  if (value > 0 && value <= 1) {
+    return value * 100;
+  }
+
+  // Values between 1 and 100 are likely already in percentage form
+  // Return as-is
+  if (value > 1 && value <= 100) {
+    return value;
+  }
+
+  // Values above 100% are invalid - likely parsing error or wrong column
+  // Return 0 to indicate invalid data
+  if (value > 100) {
+    return 0;
+  }
+
+  return value;
+}
+
 // Store name to ID mapping
 const STORE_NAME_TO_ID: Record<string, string> = {
   'Grass Roots': 'grass_roots',
@@ -342,9 +372,9 @@ function cleanSalesRecord(raw: Record<string, string>, storeId: string): SalesRe
     gross_receipts: parseNumber(raw.gross_receipts || raw['Gross Receipts']),
     cogs_with_excise: parseNumber(raw.cogs_with_excise || raw['COGS (with excise)']),
     gross_income: parseNumber(raw.gross_income || raw['Gross Income']),
-    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
-    discount_pct: parseNumber(raw.discount_ || raw.discount || raw['Discount %']),
-    cost_pct: parseNumber(raw.cost_ || raw.cost || raw['Cost %']),
+    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %'])),
+    discount_pct: normalizeMarginValue(parseNumber(raw.discount_ || raw.discount || raw['Discount %'])),
+    cost_pct: normalizeMarginValue(parseNumber(raw.cost_ || raw.cost || raw['Cost %'])),
     avg_basket_size: parseNumber(raw.avg_basket_size || raw['Avg Basket Size']),
     avg_order_value: parseNumber(raw.avg_order_value || raw['Avg Order Value']),
     avg_order_profit: parseNumber(raw.avg_order_profit || raw['Avg Order Profit']),
@@ -363,11 +393,51 @@ function cleanBrandRecord(
   // Filter samples and zero sales
   if (brand.includes('[DS]') || brand.includes('[SS]') || netSales <= 0) return null;
 
+  // Parse percentage of total sales - try multiple column name variations
+  const pctOfTotal = parseNumber(
+    raw._of_total_net_sales ||
+    raw.of_total_net_sales ||
+    raw.pct_of_total_net_sales ||
+    raw['% of Total Net Sales'] ||
+    raw['Pct of Total Net Sales'] ||
+    0
+  );
+
+  // Parse margin - try multiple column name variations
+  // Treez exports may use various column names for margin data
+  const rawMargin = parseNumber(
+    raw.gross_margin_ ||
+    raw.gross_margin ||
+    raw.avg_gross_margin_ ||
+    raw.avg_gross_margin ||
+    raw.avg_gm_ ||
+    raw.avg_gm ||
+    raw.margin_ ||
+    raw.margin ||
+    raw.gm_ ||
+    raw.gm ||
+    raw['Gross Margin %'] ||
+    raw['Gross Margin'] ||
+    raw['Avg Gross Margin %'] ||
+    raw['Avg Gross Margin'] ||
+    raw['Avg. Gross Margin %'] ||
+    raw['Avg. GM %'] ||
+    raw['Avg GM %'] ||
+    raw['Avg GM'] ||
+    raw['AVG. GM'] ||
+    raw['Margin %'] ||
+    raw['Margin'] ||
+    raw['GM%'] ||
+    raw['GM'] ||
+    0
+  );
+  const grossMarginPct = normalizeMarginValue(rawMargin);
+
   return {
     brand,
-    pct_of_total_net_sales: parseNumber(raw._of_total_net_sales || raw.of_total_net_sales || raw['% of Total Net Sales']),
-    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
-    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)']),
+    pct_of_total_net_sales: pctOfTotal,
+    gross_margin_pct: grossMarginPct,
+    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)'] || raw.avg_cost || raw['Avg Cost'] || 0),
     net_sales: netSales,
     store: raw.store || raw['Store'] || '',
     store_id: storeId,
@@ -381,11 +451,51 @@ function cleanProductRecord(raw: Record<string, string>, storeId: string): Produ
   const netSales = parseNumber(raw.net_sales || raw['Net Sales']);
   if (netSales <= 0) return null;
 
+  // Parse percentage of total sales - try multiple column name variations
+  // After header normalization: "% of Total Net Sales" -> "_of_total_net_sales"
+  const pctOfTotal = parseNumber(
+    raw._of_total_net_sales ||
+    raw.of_total_net_sales ||
+    raw.pct_of_total_net_sales ||
+    raw['% of Total Net Sales'] ||
+    raw['Pct of Total Net Sales'] ||
+    0
+  );
+
+  // Parse margin - try multiple column name variations
+  // After header normalization: "Gross Margin %" -> "gross_margin_"
+  // Treez exports may use various column names for margin data
+  const rawMargin = parseNumber(
+    raw.gross_margin_ ||
+    raw.gross_margin ||
+    raw.avg_gross_margin_ ||
+    raw.avg_gross_margin ||
+    raw.avg_gm_ ||
+    raw.avg_gm ||
+    raw.margin_ ||
+    raw.margin ||
+    raw.gm_ ||
+    raw.gm ||
+    raw['Gross Margin %'] ||
+    raw['Gross Margin'] ||
+    raw['Avg Gross Margin %'] ||
+    raw['Avg Gross Margin'] ||
+    raw['Avg GM %'] ||
+    raw['Avg GM'] ||
+    raw['AVG. GM'] ||
+    raw['Margin %'] ||
+    raw['Margin'] ||
+    raw['GM%'] ||
+    raw['GM'] ||
+    0
+  );
+  const grossMarginPct = normalizeMarginValue(rawMargin);
+
   return {
-    product_type: raw.product_type || raw['Product Type'] || '',
-    pct_of_total_net_sales: parseNumber(raw._of_total_net_sales || raw.of_total_net_sales || raw['% of Total Net Sales']),
-    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
-    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)']),
+    product_type: raw.product_type || raw['Product Type'] || raw.category || raw['Category'] || '',
+    pct_of_total_net_sales: pctOfTotal,
+    gross_margin_pct: grossMarginPct,
+    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)'] || raw.avg_cost || raw['Avg Cost'] || 0),
     net_sales: netSales,
     store: raw.store || raw['Store'] || '',
     store_id: storeId,
@@ -475,7 +585,7 @@ function cleanBudtenderRecord(raw: Record<string, string>): BudtenderRecord | nu
     tickets_count: parseNumber(raw.tickets_count || raw['Tickets Count'] || raw.tickets || raw['Tickets']),
     customers_count: parseNumber(raw.customers_count || raw['Customers Count'] || raw.customers || raw['Customers']),
     net_sales: parseNumber(raw.net_sales || raw['Net Sales']),
-    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
+    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %'])),
     avg_order_value: parseNumber(raw.avg_order_value || raw['Avg Order Value'] || raw.aov || raw['AOV']),
     units_sold: parseNumber(raw.units_sold || raw['Units Sold'] || raw.units || raw['Units']),
   };
@@ -654,6 +764,18 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
       const rawRecords = parseCSV<Record<string, string>>(csvData);
       const storeId = extractStoreFromPath(file.key);
 
+      // Log first record headers for debugging
+      if (rawRecords.length > 0 && productFiles.indexOf(file) === 0) {
+        const headers = Object.keys(rawRecords[0]);
+        console.log(`Product CSV headers from ${file.key}:`, headers);
+        console.log(`First raw product record:`, rawRecords[0]);
+        // Check which margin-related columns exist
+        const marginColumns = headers.filter(h =>
+          h.includes('margin') || h.includes('gm') || h.includes('Margin') || h.includes('GM')
+        );
+        console.log(`Margin-related columns found:`, marginColumns.length > 0 ? marginColumns : 'NONE FOUND');
+      }
+
       for (const raw of rawRecords) {
         const cleaned = cleanProductRecord(raw, storeId);
         if (cleaned) allProducts.push(cleaned);
@@ -662,6 +784,11 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
       console.error(`Error loading ${file.key}:`, error);
     }
   }
+
+  // Log product data summary for debugging
+  const productsWithMargin = allProducts.filter(p => p.gross_margin_pct > 0).length;
+  const productsWithPct = allProducts.filter(p => p.pct_of_total_net_sales > 0).length;
+  console.log(`Product data loaded: ${allProducts.length} total, ${productsWithMargin} with margin > 0, ${productsWithPct} with pct > 0`);
 
   // NOTE: Customer data is loaded separately via /api/data/customers endpoint
   // to avoid exceeding Lambda 6MB response limit (customer files are 30MB+)

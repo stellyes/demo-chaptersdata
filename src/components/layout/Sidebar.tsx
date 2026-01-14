@@ -18,10 +18,12 @@ import {
   RefreshCw,
   Cloud,
   Loader2,
+  X,
 } from 'lucide-react';
 import { useAppStore, PageType } from '@/store/app-store';
 import { STORES } from '@/lib/config';
 import { StoreId } from '@/types';
+import { useEffect } from 'react';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -60,6 +62,8 @@ export function Sidebar() {
     loadDataFromS3,
     isLoading,
     dataStatus,
+    sidebarOpen,
+    setSidebarOpen,
   } = useAppStore();
 
   const handleLogout = () => {
@@ -71,6 +75,23 @@ export function Sidebar() {
     loadDataFromS3();
   };
 
+  const handleNavClick = (page: PageType) => {
+    setCurrentPage(page);
+    // Close sidebar on mobile after navigation
+    setSidebarOpen(false);
+  };
+
+  // Close sidebar when pressing Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sidebarOpen, setSidebarOpen]);
+
   // Main navigation - matches Streamlit app structure
   // Research, SEO, Invoices, and QR are sub-tabs within Data Center
   const navItems: { icon: React.ElementType; label: string; page: PageType }[] = [
@@ -81,7 +102,30 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="w-64 bg-[var(--paper)] border-r border-[var(--border)] p-6 flex flex-col h-screen sticky top-0">
+    <>
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <div
+        className={`
+          fixed lg:sticky top-0 left-0 z-50
+          w-72 lg:w-64 bg-[var(--paper)] border-r border-[var(--border)] p-6 flex flex-col h-screen
+          transform transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
+        {/* Mobile close button */}
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="absolute top-4 right-4 p-2 rounded-full hover:bg-[var(--accent)]/10 lg:hidden"
+        >
+          <X className="w-5 h-5 text-[var(--muted)]" />
+        </button>
       {/* Logo */}
       <div className="flex items-center gap-3 mb-6 shrink-0">
         <div className="w-10 h-10 rounded bg-[var(--accent)] flex items-center justify-center">
@@ -125,7 +169,7 @@ export function Sidebar() {
             label={item.label}
             page={item.page}
             active={currentPage === item.page}
-            onClick={() => setCurrentPage(item.page)}
+            onClick={() => handleNavClick(item.page)}
           />
         ))}
       </nav>
@@ -230,6 +274,7 @@ export function Sidebar() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

@@ -35,6 +35,10 @@ interface LoadingToastProps {
     budtenders: { loaded: boolean; count: number };
     mappings: { loaded: boolean; count: number };
     invoices: { loaded: boolean; count: number };
+    research: { loaded: boolean; count: number };
+    seo: { loaded: boolean; count: number };
+    qrCodes: { loaded: boolean; count: number };
+    aiRecommendations: { loaded: boolean; count: number };
   };
 }
 
@@ -134,8 +138,11 @@ export function LoadingToast({ isVisible, dataStatus }: LoadingToastProps) {
               <DataStatusItem label="Products" status={dataStatus.products} />
               <DataStatusItem label="Customers" status={dataStatus.customers} />
               <DataStatusItem label="Budtenders" status={dataStatus.budtenders} />
-              <DataStatusItem label="Mappings" status={dataStatus.mappings} />
               <DataStatusItem label="Invoices" status={dataStatus.invoices} />
+              <DataStatusItem label="Research" status={dataStatus.research} />
+              <DataStatusItem label="SEO Data" status={dataStatus.seo} />
+              <DataStatusItem label="QR Codes" status={dataStatus.qrCodes} />
+              <DataStatusItem label="AI Reports" status={dataStatus.aiRecommendations} />
             </div>
           )}
 

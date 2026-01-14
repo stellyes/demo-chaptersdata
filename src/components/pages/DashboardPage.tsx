@@ -114,7 +114,7 @@ export function DashboardPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
         <MetricCard
           title="Total Net Sales"
           value={formatCurrency(summary.totalRevenue)}
@@ -150,15 +150,15 @@ export function DashboardPage() {
       </div>
 
       {/* Sales Chart Row */}
-      <div className="grid grid-cols-[2fr_1fr] gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
         {/* Sales Trend Chart */}
         <Card>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-2">
             <div>
               <SectionLabel>Daily Performance</SectionLabel>
               <SectionTitle>Sales Trend</SectionTitle>
             </div>
-            <div className="flex items-center gap-6 text-sm">
+            <div className="hidden sm:flex items-center gap-4 md:gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-sm bg-[#1e391f]"></div>
                 <span className="text-[var(--muted)]">Grass Roots</span>
@@ -193,15 +193,15 @@ export function DashboardPage() {
       </div>
 
       {/* Transaction Chart Row */}
-      <div className="grid grid-cols-[2fr_1fr] gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
         {/* Transaction Count Chart */}
         <Card>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-2">
             <div>
               <SectionLabel>Daily Performance</SectionLabel>
               <SectionTitle>Transaction Count</SectionTitle>
             </div>
-            <div className="flex items-center gap-6 text-sm">
+            <div className="hidden sm:flex items-center gap-4 md:gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-sm bg-[#1e391f]"></div>
                 <span className="text-[var(--muted)]">Grass Roots</span>
@@ -236,26 +236,26 @@ export function DashboardPage() {
       </div>
 
       {/* Store Comparison */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <SectionLabel>Store Performance</SectionLabel>
           <SectionTitle>Grass Roots SF</SectionTitle>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Revenue</p>
-              <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+          <div className="grid grid-cols-3 gap-2 md:gap-4">
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Revenue</p>
+              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
                 {formatCurrency(summary.byStore.grass_roots.revenue)}
               </p>
             </div>
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Transactions</p>
-              <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Transactions</p>
+              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
                 {summary.byStore.grass_roots.transactions.toLocaleString()}
               </p>
             </div>
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Avg Margin</p>
-              <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
+              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
                 {summary.byStore.grass_roots.margin.toFixed(1)}%
               </p>
             </div>
@@ -265,22 +265,22 @@ export function DashboardPage() {
         <Card>
           <SectionLabel>Store Performance</SectionLabel>
           <SectionTitle>Barbary Coast SF</SectionTitle>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Revenue</p>
-              <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+          <div className="grid grid-cols-3 gap-2 md:gap-4">
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Revenue</p>
+              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
                 {formatCurrency(summary.byStore.barbary_coast.revenue)}
               </p>
             </div>
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Transactions</p>
-              <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Transactions</p>
+              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
                 {summary.byStore.barbary_coast.transactions.toLocaleString()}
               </p>
             </div>
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Avg Margin</p>
-              <p className="text-xl font-semibold text-[var(--ink)] font-serif">
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
+              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
                 {summary.byStore.barbary_coast.margin.toFixed(1)}%
               </p>
             </div>

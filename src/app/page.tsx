@@ -8,9 +8,10 @@ import { RecommendationsPage } from '@/components/pages/RecommendationsPage';
 import { DataCenterPage } from '@/components/pages/DataCenterPage';
 import { LoginPage } from '@/components/pages/LoginPage';
 import { LoadingToast } from '@/components/ui/LoadingToast';
+import { Menu, Activity } from 'lucide-react';
 
 export default function App() {
-  const { user, currentPage, isLoading, dataStatus } = useAppStore();
+  const { user, currentPage, isLoading, dataStatus, toggleSidebar } = useAppStore();
 
   // Show loading toast when main data is loading OR when invoices are still loading
   const isDataLoading = isLoading || (dataStatus.sales.loaded && !dataStatus.invoices.loaded);
@@ -47,8 +48,30 @@ export default function App() {
       <Sidebar />
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        {renderPage()}
+      <main className="flex-1 overflow-y-auto">
+        {/* Mobile Header */}
+        <header className="lg:hidden sticky top-0 z-30 bg-[var(--paper)] border-b border-[var(--border)] px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={toggleSidebar}
+            className="p-2 rounded-lg hover:bg-[var(--accent)]/10 transition-colors"
+            aria-label="Toggle sidebar"
+          >
+            <Menu className="w-6 h-6 text-[var(--ink)]" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded bg-[var(--accent)] flex items-center justify-center">
+              <Activity className="w-5 h-5 text-[var(--paper)]" />
+            </div>
+            <h1 className="font-serif text-lg font-semibold text-[var(--ink)] tracking-tight">
+              Chapters
+            </h1>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <div className="p-4 md:p-6 lg:p-8">
+          {renderPage()}
+        </div>
       </main>
 
       {/* Loading Toast - mirrors Streamlit loading screen */}
