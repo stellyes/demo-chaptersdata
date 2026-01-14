@@ -498,16 +498,16 @@ function DailyBreakdownTab() {
   }, [showStoreColumn]);
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 md:h-[calc(100vh-220px)] md:flex md:flex-col">
       {/* Side by side layout: Weekly Patterns (left) and Day-by-Day (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch md:flex-1 md:min-h-0">
         {/* Weekly Patterns - Left Side */}
-        <Card className="flex flex-col">
+        <Card className="flex flex-col md:min-h-0 md:overflow-hidden">
           <SectionLabel>Weekly Patterns</SectionLabel>
           <SectionTitle>Average Sales by Day of Week</SectionTitle>
 
           {/* Bar Chart - grows to fill space */}
-          <div className="flex-1 min-h-[200px] mb-4">
+          <div className="flex-1 min-h-[200px] md:min-h-0 mb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" vertical={false} />
@@ -550,7 +550,7 @@ function DailyBreakdownTab() {
         </Card>
 
         {/* Day-by-Day - Right Side */}
-        <Card className="flex flex-col">
+        <Card className="flex flex-col md:min-h-0 md:overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div>
               <SectionLabel>Day-by-Day</SectionLabel>
@@ -569,7 +569,7 @@ function DailyBreakdownTab() {
               </select>
             </div>
           </div>
-          <div className="flex-1">
+          <div className="flex-1 md:min-h-0 md:overflow-auto">
             <DataTable
               data={formattedTableData}
               columns={tableColumns}
