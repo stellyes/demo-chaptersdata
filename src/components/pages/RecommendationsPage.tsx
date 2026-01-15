@@ -6,12 +6,21 @@ import { Card } from '@/components/ui/Card';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
-import { useFilteredSalesData, useFilteredBrandData, useAppStore } from '@/store/app-store';
+import { useFilteredSalesData, useNormalizedBrandDataCompat, useAppStore } from '@/store/app-store';
 import { calculateSalesSummary, calculateBrandSummary } from '@/lib/services/data-processor';
 import { Sparkles, TrendingUp, ShoppingBag, Users, RefreshCw, Loader2, FileText, Calendar, ChevronDown, MessageSquare, Check, Database } from 'lucide-react';
 import { format } from 'date-fns';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+// Custom components for ReactMarkdown to handle table overflow on mobile
+const markdownComponents: Components = {
+  table: ({ children, ...props }) => (
+    <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+      <table {...props} className="min-w-full">{children}</table>
+    </div>
+  ),
+};
 
 type AnalysisType = 'sales' | 'brands' | 'categories' | 'insights';
 
@@ -19,6 +28,7 @@ type AnalysisType = 'sales' | 'brands' | 'categories' | 'insights';
 interface DataContextOptions {
   includeSales: boolean;
   includeBrands: boolean;
+  includeBrandMappings: boolean;
   includeProducts: boolean;
   includeCustomers: boolean;
   includeInvoices: boolean;
@@ -67,7 +77,7 @@ function AnimatedCollapse({ isOpen, children }: { isOpen: boolean; children: Rea
 
 export function RecommendationsPage() {
   const salesData = useFilteredSalesData();
-  const brandData = useFilteredBrandData();
+  const brandData = useNormalizedBrandDataCompat(); // Use normalized brand data with aliases consolidated
   const {
     aiRecommendations,
     addAiRecommendation,
@@ -99,6 +109,7 @@ export function RecommendationsPage() {
   const [contextOptions, setContextOptions] = useState<DataContextOptions>({
     includeSales: true,
     includeBrands: true,
+    includeBrandMappings: true, // Include brand mappings by default for proper normalization context
     includeProducts: true,
     includeCustomers: false,
     includeInvoices: false,
@@ -108,7 +119,31 @@ export function RecommendationsPage() {
   });
 
   const salesSummary = useMemo(() => calculateSalesSummary(salesData), [salesData]);
-  const brandSummary = useMemo(() => calculateBrandSummary(brandData, brandMappings), [brandData, brandMappings]);
+  // brandData is already normalized via useNormalizedBrandDataCompat, so we just pass it directly
+  const brandSummary = useMemo(() => calculateBrandSummary(brandData), [brandData]);
+
+  // Prepare brand mappings summary for AI context
+  const brandMappingsSummary = useMemo(() => {
+    const mappingCount = Object.keys(brandMappings || {}).length;
+    if (mappingCount === 0) return null;
+
+    // Get top canonical brands with their alias counts
+    const topBrands = Object.entries(brandMappings || {})
+      .slice(0, 20)
+      .map(([brand, entry]) => ({
+        canonicalBrand: brand,
+        aliasCount: Object.keys(entry.aliases || {}).length,
+        productTypes: [...new Set(Object.values(entry.aliases || {}))],
+      }));
+
+    return {
+      totalCanonicalBrands: mappingCount,
+      totalAliases: Object.values(brandMappings || {}).reduce(
+        (sum, entry) => sum + Object.keys(entry.aliases || {}).length, 0
+      ),
+      topBrands,
+    };
+  }, [brandMappings]);
 
   const runAnalysis = async (type: AnalysisType) => {
     setLoading(true);
@@ -116,6 +151,14 @@ export function RecommendationsPage() {
 
     try {
       let data: Record<string, unknown> = {};
+
+      // Include brand mappings context for all analysis types
+      // This helps AI understand brand relationships and provide better recommendations
+      const brandMappingsContext = brandMappingsSummary ? {
+        note: 'Brand data has been normalized using brand mappings. Multiple brand name variations have been consolidated under canonical names.',
+        totalCanonicalBrands: brandMappingsSummary.totalCanonicalBrands,
+        totalAliases: brandMappingsSummary.totalAliases,
+      } : null;
 
       switch (type) {
         case 'sales':
@@ -129,6 +172,7 @@ export function RecommendationsPage() {
               revenue: stats.revenue,
               margin: stats.margin,
             })),
+            brandMappingsContext,
           };
           break;
         case 'brands':
@@ -148,6 +192,7 @@ export function RecommendationsPage() {
               pctOfTotal: b.pct_of_total_net_sales,
             })),
             brandByCategory,
+            brandMappingsContext,
           };
           break;
         case 'categories':
@@ -158,6 +203,7 @@ export function RecommendationsPage() {
               brandCount: brands.length,
             })),
             brandSummary: brandSummary.topBrands.slice(0, 30),
+            brandMappingsContext,
           };
           break;
         case 'insights':
@@ -167,6 +213,7 @@ export function RecommendationsPage() {
               topBrands: brandSummary.topBrands.slice(0, 10).map((b) => b.brand),
               lowMarginBrands: brandSummary.lowMarginBrands.slice(0, 5).map((b) => b.brand),
             },
+            brandMappingsContext,
           };
           break;
       }
@@ -222,6 +269,7 @@ export function RecommendationsPage() {
           data: {
             sales: contextOptions.includeSales ? salesData : [],
             brands: contextOptions.includeBrands ? brandData : [],
+            brandMappings: contextOptions.includeBrandMappings ? brandMappingsSummary : null,
             products: contextOptions.includeProducts ? productData : [],
             customers: contextOptions.includeCustomers ? customerData : [],
             invoices: contextOptions.includeInvoices ? invoiceData : [],
@@ -393,7 +441,7 @@ export function RecommendationsPage() {
 
               {latestResult && (
                 <div className="prose prose-sm max-w-none text-[var(--ink)]">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{latestResult.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{latestResult.content}</ReactMarkdown>
                 </div>
               )}
             </Card>
@@ -464,6 +512,7 @@ export function RecommendationsPage() {
                 {[
                   { key: 'includeSales', label: 'Sales', count: salesData.length || dataStatus.sales.count },
                   { key: 'includeBrands', label: 'Brands', count: brandData.length || dataStatus.brands.count },
+                  { key: 'includeBrandMappings', label: 'Brand Map', count: brandMappingsSummary?.totalCanonicalBrands || dataStatus.mappings.count },
                   { key: 'includeProducts', label: 'Products', count: productData.length || dataStatus.products.count },
                   { key: 'includeCustomers', label: 'Customers', count: customerData.length || dataStatus.customers.count },
                   { key: 'includeInvoices', label: 'Invoices', count: invoiceData.length || dataStatus.invoices.count },
@@ -589,7 +638,7 @@ export function RecommendationsPage() {
                 </button>
               </div>
               <div className="prose prose-sm max-w-none text-[var(--ink)]">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{customQueryResult}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{customQueryResult}</ReactMarkdown>
               </div>
             </Card>
           )}
@@ -693,7 +742,7 @@ export function RecommendationsPage() {
                               </div>
                             )}
                             <div className="prose prose-sm max-w-none text-[var(--ink)] prose-headings:text-[var(--ink)] prose-headings:font-serif prose-headings:font-semibold prose-h1:text-2xl prose-h1:mt-6 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-5 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-4 prose-h3:mb-2 prose-h4:text-base prose-h4:font-semibold prose-p:text-sm prose-p:leading-relaxed prose-ul:text-sm prose-ol:text-sm prose-li:my-1 prose-strong:text-[var(--ink)] prose-code:bg-[var(--paper)] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-pre:bg-[var(--paper)] prose-pre:text-xs prose-pre:overflow-x-auto">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.analysis}</ReactMarkdown>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{report.analysis}</ReactMarkdown>
                             </div>
                           </div>
                         </AnimatedCollapse>

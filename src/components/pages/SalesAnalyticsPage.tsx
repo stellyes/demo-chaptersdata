@@ -10,7 +10,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { SalesChart } from '@/components/charts/SalesChart';
 import { TopBrandsChart, MarginScatterChart } from '@/components/charts/BrandChart';
 import { CategoryPieChart, SegmentPieChart } from '@/components/charts/PieChart';
-import { useFilteredSalesData, useFilteredBrandData, useFilteredProductData, useAppStore } from '@/store/app-store';
+import { useFilteredSalesData, useFilteredProductData, useAppStore, useNormalizedBrandDataCompat } from '@/store/app-store';
 import { format } from 'date-fns';
 import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Percent, Calendar, User, Search, BarChart3, AlertCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -141,12 +141,26 @@ function SalesTrendsTab() {
 // BRAND PERFORMANCE TAB
 // ============================================
 function BrandPerformanceTab() {
-  const brandData = useFilteredBrandData();
+  // Use normalized brand data - consolidates aliases under canonical brand names
+  const brandData = useNormalizedBrandDataCompat();
   const [topBrandsLimit, setTopBrandsLimit] = useState(20);
 
   // Calculate low margin brands (< 40% margin with > $1000 sales)
   const lowMarginBrands = useMemo(() => {
     return brandData.filter((b) => b.gross_margin_pct < 40 && b.net_sales > 1000);
+  }, [brandData]);
+
+  // Calculate high-margin growth opportunities (>= 55% margin with low sales volume)
+  // These are brands with great margins but low visibility - push these!
+  const highMarginGrowthBrands = useMemo(() => {
+    // Get median sales to define "low sales"
+    const sortedSales = [...brandData].sort((a, b) => a.net_sales - b.net_sales);
+    const medianSales = sortedSales[Math.floor(sortedSales.length / 2)]?.net_sales || 5000;
+    const lowSalesThreshold = Math.min(medianSales * 0.5, 5000); // Below median or $5k, whichever is lower
+
+    return brandData
+      .filter((b) => b.gross_margin_pct >= 55 && b.net_sales > 100 && b.net_sales < lowSalesThreshold)
+      .sort((a, b) => b.gross_margin_pct - a.gross_margin_pct);
   }, [brandData]);
 
   return (
@@ -219,6 +233,28 @@ function BrandPerformanceTab() {
           </div>
         </Card>
       )}
+
+      {/* High-Margin Growth Opportunities */}
+      {highMarginGrowthBrands.length > 0 && (
+        <Card className="border-[var(--success)] border-2">
+          <SectionLabel className="text-[var(--success)]">Growth Opportunity</SectionLabel>
+          <SectionTitle>Untapped High-Margin Brands</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            These brands have excellent margins (55%+) but low sales volume. Promote these through staff recommendations or featured displays.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {highMarginGrowthBrands.slice(0, 10).map((brand, i) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-[var(--success)]/5 rounded">
+                <span className="font-medium">{brand.brand}</span>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-[var(--success)]">{brand.gross_margin_pct.toFixed(1)}% margin</p>
+                  <p className="text-xs text-[var(--muted)]">${brand.net_sales.toLocaleString()} sales</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -228,15 +264,27 @@ function BrandPerformanceTab() {
 // ============================================
 function ProductCategoriesTab() {
   const productData = useFilteredProductData();
-  const brandData = useFilteredBrandData();
+  // Use normalized brand data for margin calculations
+  const brandData = useNormalizedBrandDataCompat();
   const { brandMappings } = useAppStore();
 
-  // Create a lookup map from brand name to product type
+  // Create a lookup map from brand name (alias) to product type
+  // Uses v2 brand mappings structure: { "Canonical Brand": { aliases: { "ALIAS": "PRODUCT_TYPE" } } }
   const brandToProductType = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const mapping of brandMappings) {
-      // Normalize brand name for matching (uppercase)
-      map[mapping.brand.toUpperCase()] = mapping.product_type;
+    const safeMappings = brandMappings || {};
+    for (const [canonicalBrand, entry] of Object.entries(safeMappings)) {
+      if (entry?.aliases) {
+        for (const [alias, productType] of Object.entries(entry.aliases)) {
+          // Map both the alias and canonical brand to product type
+          map[alias.toUpperCase()] = productType;
+        }
+        // Also map the canonical brand name itself (use first alias's product type)
+        const firstProductType = Object.values(entry.aliases)[0];
+        if (firstProductType) {
+          map[canonicalBrand.toUpperCase()] = firstProductType;
+        }
+      }
     }
     return map;
   }, [brandMappings]);
@@ -429,38 +477,12 @@ function DailyBreakdownTab() {
     return salesData.filter((record) => record.store_id === storeFilter);
   }, [salesData, storeFilter]);
 
-  // Format table data with readable dates and calculate proper margin
+  // Format table data with readable dates
   const formattedTableData = useMemo(() => {
-    return filteredTableData.map((record) => {
-      // The backend normalizes margin values:
-      // - Decimals 0-1 are multiplied by 100 (e.g., 0.64 -> 64%)
-      // - Values 1-100 are kept as-is
-      // - Values > 100 are set to 0 (invalid)
-      let margin = record.gross_margin_pct;
-
-      // If margin is 0, the backend couldn't parse it or it was invalid
-      // Try calculating from gross_income / net_sales
-      if (margin <= 0 && record.net_sales > 0 && record.gross_income > 0) {
-        // gross_income is profit, margin = (profit / net_sales) * 100
-        const calculatedMargin = (record.gross_income / record.net_sales) * 100;
-        // Only use if it's a valid percentage
-        if (calculatedMargin > 0 && calculatedMargin <= 100) {
-          margin = calculatedMargin;
-        }
-      }
-
-      // If margin is still a decimal (0-1), convert to percentage
-      // This handles cases where backend normalization didn't run
-      if (margin > 0 && margin <= 1) {
-        margin = margin * 100;
-      }
-
-      return {
-        ...record,
-        formatted_date: format(new Date(record.date), 'MMM d, yyyy'),
-        calculated_margin: margin,
-      };
-    });
+    return filteredTableData.map((record) => ({
+      ...record,
+      formatted_date: format(new Date(record.date), 'MMM d, yyyy'),
+    }));
   }, [filteredTableData]);
 
   // Check if we should show store column (when "all" is selected and both stores have data)
@@ -491,7 +513,6 @@ function DailyBreakdownTab() {
       { key: 'tickets_count', label: 'Transactions', sortable: true, align: 'right' },
       { key: 'customers_count', label: 'Customers', sortable: true, align: 'right' },
       { key: 'avg_order_value', label: 'AOV', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(0)}` },
-      { key: 'calculated_margin', label: 'Margin %', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
     );
 
     return cols;
@@ -589,7 +610,8 @@ function DailyBreakdownTab() {
 // ============================================
 function RawDataTab() {
   const salesData = useFilteredSalesData();
-  const brandData = useFilteredBrandData();
+  // Use normalized brand data - shows canonical brand names with aggregated metrics
+  const brandData = useNormalizedBrandDataCompat();
   const productData = useFilteredProductData();
   const [activeSubTab, setActiveSubTab] = useState<'sales' | 'brands' | 'products'>('sales');
 
@@ -628,7 +650,6 @@ function RawDataTab() {
               { key: 'net_sales', label: 'Net Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
               { key: 'tickets_count', label: 'Transactions', sortable: true, align: 'right' },
               { key: 'customers_count', label: 'Customers', sortable: true, align: 'right' },
-              { key: 'gross_margin_pct', label: 'Margin %', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
             ]}
             pageSize={20}
             exportable
@@ -719,7 +740,7 @@ function CustomerAnalyticsTab() {
   return (
     <div className="space-y-6">
       {/* Sub-tabs */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap justify-center md:justify-start">
         {[
           { key: 'overview', label: 'Overview', icon: BarChart3 },
           { key: 'segments', label: 'Segments', icon: Users },
@@ -730,14 +751,15 @@ function CustomerAnalyticsTab() {
           <button
             key={tab.key}
             onClick={() => setActiveSubTab(tab.key as typeof activeSubTab)}
-            className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded text-sm font-medium transition-colors ${
               activeSubTab === tab.key
                 ? 'bg-[var(--ink)] text-[var(--paper)]'
                 : 'bg-[var(--paper)] text-[var(--ink)] border border-[var(--border)]'
             }`}
           >
             <tab.icon className="w-4 h-4" />
-            {tab.label}
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
           </button>
         ))}
       </div>
@@ -745,42 +767,42 @@ function CustomerAnalyticsTab() {
       {activeSubTab === 'overview' && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <Users className="w-5 h-5 text-[var(--accent)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Total Customers</p>
-                  <p className="text-xl font-semibold font-serif">{customerSummary.totalCustomers.toLocaleString()}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <Users className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Total Customers</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">{customerSummary.totalCustomers.toLocaleString()}</p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <DollarSign className="w-5 h-5 text-[var(--accent)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Avg Lifetime Value</p>
-                  <p className="text-xl font-semibold font-serif">${customerSummary.avgLifetimeValue.toFixed(0)}</p>
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <DollarSign className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Avg Lifetime Value</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">${customerSummary.avgLifetimeValue.toFixed(0)}</p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <TrendingUp className="w-5 h-5 text-[var(--success)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">VIP + Whale</p>
-                  <p className="text-xl font-semibold font-serif">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <TrendingUp className="w-5 h-5 text-[var(--success)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">VIP + Whale</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">
                     {customerSummary.segmentBreakdown['VIP'] + customerSummary.segmentBreakdown['Whale']}
                   </p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <TrendingDown className="w-5 h-5 text-[var(--warning)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">At Risk (Cold/Lost)</p>
-                  <p className="text-xl font-semibold font-serif">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <TrendingDown className="w-5 h-5 text-[var(--warning)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">At Risk</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">
                     {customerSummary.recencyBreakdown['Cold'] + customerSummary.recencyBreakdown['Lost']}
                   </p>
                 </div>
@@ -1038,11 +1060,11 @@ function BudtenderAnalyticsTab() {
   const hasPermanentButNoMatch = permanentEmployeeCount > 0 && filteredBudtenders.length === 0 && !showAllEmployees;
 
   return (
-    <div className="space-y-6">
-      {/* Filter Controls */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      {/* Filter Controls - stacked on mobile, side-by-side on desktop */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
         {/* Sub-tabs */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 justify-center md:justify-start">
           {[
             { key: 'overview', label: 'Overview' },
             { key: 'rankings', label: 'Rankings' },
@@ -1051,7 +1073,7 @@ function BudtenderAnalyticsTab() {
             <button
               key={tab.key}
               onClick={() => setActiveSubTab(tab.key as typeof activeSubTab)}
-              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              className={`px-3 md:px-4 py-2 rounded text-sm font-medium transition-colors ${
                 activeSubTab === tab.key
                   ? 'bg-[var(--ink)] text-[var(--paper)]'
                   : 'bg-[var(--paper)] text-[var(--ink)] border border-[var(--border)]'
@@ -1062,8 +1084,8 @@ function BudtenderAnalyticsTab() {
         ))}
         </div>
 
-        {/* Permanent Employee Toggle */}
-        <div className="flex items-center gap-4">
+        {/* Employee count status - centered on mobile */}
+        <div className="text-center md:hidden">
           {permanentEmployeeCount > 0 && (
             <span className="text-sm text-[var(--muted)]">
               Showing {showAllEmployees ? 'all employees' : `${permanentEmployeeCount} permanent employees`}
@@ -1074,6 +1096,21 @@ function BudtenderAnalyticsTab() {
               No permanent employees assigned
             </span>
           )}
+        </div>
+
+        {/* Permanent Employee Toggle */}
+        <div className="flex items-center justify-center md:justify-end gap-4">
+          {/* Desktop-only status text */}
+          <span className="hidden md:inline text-sm text-[var(--muted)]">
+            {permanentEmployeeCount > 0
+              ? (showAllEmployees ? 'Showing all employees' : `Showing ${permanentEmployeeCount} permanent employees`)
+              : ''}
+          </span>
+          {permanentEmployeeCount === 0 && (
+            <span className="hidden md:inline text-sm text-[var(--warning)]">
+              No permanent employees assigned
+            </span>
+          )}
           <label className="flex items-center gap-2 px-3 py-2 border border-[var(--border)] rounded text-sm cursor-pointer">
             <input
               type="checkbox"
@@ -1081,7 +1118,8 @@ function BudtenderAnalyticsTab() {
               onChange={(e) => setShowAllEmployees(e.target.checked)}
               className="rounded"
             />
-            <span>Show all employees</span>
+            <span className="hidden sm:inline">Show all employees</span>
+            <span className="sm:hidden">Show all</span>
           </label>
         </div>
       </div>
@@ -1101,44 +1139,44 @@ function BudtenderAnalyticsTab() {
       {activeSubTab === 'overview' && (
         <>
           {/* KPI Summary */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <User className="w-5 h-5 text-[var(--accent)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Total Budtenders</p>
-                  <p className="text-xl font-semibold font-serif">{budtenderSummary.length}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <User className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Total Budtenders</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">{budtenderSummary.length}</p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <DollarSign className="w-5 h-5 text-[var(--accent)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Total Sales</p>
-                  <p className="text-xl font-semibold font-serif">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <DollarSign className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Total Sales</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">
                     ${budtenderSummary.reduce((sum, b) => sum + b.totalSales, 0).toLocaleString()}
                   </p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <ShoppingCart className="w-5 h-5 text-[var(--accent)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Total Transactions</p>
-                  <p className="text-xl font-semibold font-serif">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <ShoppingCart className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Transactions</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">
                     {budtenderSummary.reduce((sum, b) => sum + b.totalTickets, 0).toLocaleString()}
                   </p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <Percent className="w-5 h-5 text-[var(--accent)]" />
-                <div>
-                  <p className="text-xs text-[var(--muted)]">Avg Margin</p>
-                  <p className="text-xl font-semibold font-serif">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <Percent className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Avg Margin</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">
                     {budtenderSummary.length > 0
                       ? (budtenderSummary.reduce((sum, b) => sum + b.avgMargin, 0) / budtenderSummary.length).toFixed(1)
                       : 0}%
@@ -1148,8 +1186,8 @@ function BudtenderAnalyticsTab() {
             </Card>
           </div>
 
-          {/* Top Performers */}
-          <div className="grid grid-cols-3 gap-6">
+          {/* Top Performers - stack vertically on mobile */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
             <Card>
               <SectionLabel>Revenue Leaders</SectionLabel>
               <SectionTitle>Top by Sales</SectionTitle>

@@ -20,8 +20,8 @@ export function getS3Client(): S3Client {
     s3Client = new S3Client({
       region: AWS_CONFIG.region,
       credentials: {
-        accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
       },
     });
   }
@@ -220,6 +220,22 @@ export async function loadResearchSummary(): Promise<string | null> {
 export async function loadSEOSummary(site: string): Promise<string | null> {
   try {
     return await downloadFromS3(`${S3_PATHS.seoAnalysis}/${site}/summary/latest.json`);
+  } catch {
+    return null;
+  }
+}
+
+// Upload brand mappings (v2 structure)
+export async function uploadBrandMappings(mappingsJson: string): Promise<string> {
+  const key = `${S3_PATHS.config}/brand_product_mapping.json`;
+  await uploadToS3(key, mappingsJson, 'application/json');
+  return key;
+}
+
+// Download brand mappings
+export async function downloadBrandMappings(): Promise<string | null> {
+  try {
+    return await downloadFromS3(`${S3_PATHS.config}/brand_product_mapping.json`);
   } catch {
     return null;
   }

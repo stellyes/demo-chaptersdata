@@ -35,7 +35,6 @@ import {
   Save,
   CheckCircle,
   TrendingUp,
-  MousePointerClick,
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 
@@ -286,9 +285,9 @@ function InvoiceDataTab() {
       </Card>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <FileText className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Invoices</p>
@@ -296,8 +295,8 @@ function InvoiceDataTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <TrendingUp className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Cost</p>
@@ -307,8 +306,8 @@ function InvoiceDataTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <Database className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Line Items</p>
@@ -318,8 +317,8 @@ function InvoiceDataTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Needs Review</p>
@@ -468,7 +467,6 @@ function BudtenderPerformanceTab() {
     permanentEmployees,
     setPermanentEmployee,
     clearPermanentEmployees,
-    saveBudtenderAssignmentsToS3,
     dataStatus,
   } = useAppStore();
   const [filterStore, setFilterStore] = useState<StoreId | 'all'>('all');
@@ -550,9 +548,9 @@ function BudtenderPerformanceTab() {
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <Users className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Budtenders</p>
@@ -560,8 +558,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <CheckCircle className="w-5 h-5 text-[var(--success)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Permanent Employees</p>
@@ -569,8 +567,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Unassigned</p>
@@ -578,8 +576,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <Database className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Performance Records</p>
@@ -715,8 +713,6 @@ function BudtenderPerformanceTab() {
                               employee.employee_name,
                               value ? (value as StoreId) : null
                             );
-                            // Save to S3 after a short delay to batch rapid changes
-                            setTimeout(() => saveBudtenderAssignmentsToS3(), 500);
                           }}
                           className={`px-2 py-1 border rounded text-sm w-full ${
                             assignedStore
@@ -911,109 +907,230 @@ function DefineContextTab() {
 // BRAND MAPPING TAB
 // ============================================
 function BrandMappingTab() {
-  const [mappings, setMappings] = useState<Record<string, string>>({});
-  const [newProduct, setNewProduct] = useState('');
-  const [newBrand, setNewBrand] = useState('');
+  const { brandMappings, setBrandMappings } = useAppStore();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
-  const handleAddMapping = () => {
-    if (newProduct && newBrand) {
-      setMappings({ ...mappings, [newProduct]: newBrand });
-      setNewProduct('');
-      setNewBrand('');
+  // Safely handle null/undefined brandMappings
+  const safeMappings = brandMappings || {};
+
+  // Calculate stats
+  const brandCount = Object.keys(safeMappings).length;
+  const aliasCount = Object.values(safeMappings).reduce(
+    (acc, entry) => acc + (entry?.aliases ? Object.keys(entry.aliases).length : 0),
+    0
+  );
+
+  // Filter brands based on search
+  const filteredBrands = useMemo(() => {
+    if (!searchTerm) return Object.entries(safeMappings);
+
+    const term = searchTerm.toLowerCase();
+    return Object.entries(safeMappings).filter(([brandName, entry]) => {
+      // Match on brand name
+      if (brandName.toLowerCase().includes(term)) return true;
+      // Match on any alias
+      return entry?.aliases && Object.keys(entry.aliases).some(alias =>
+        alias.toLowerCase().includes(term)
+      );
+    });
+  }, [safeMappings, searchTerm]);
+
+  const toggleExpand = (brandName: string) => {
+    const newExpanded = new Set(expandedBrands);
+    if (newExpanded.has(brandName)) {
+      newExpanded.delete(brandName);
+    } else {
+      newExpanded.add(brandName);
+    }
+    setExpandedBrands(newExpanded);
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // Upload to S3
+      const response = await fetch('/api/data/brand-mappings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Update local store
+        setBrandMappings(data);
+        setUploadSuccess(`Successfully uploaded ${result.count} brand mappings`);
+      } else {
+        setUploadError(result.error || 'Failed to upload mappings');
+      }
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Failed to parse JSON file');
+    } finally {
+      setUploading(false);
+      // Reset the input
+      event.target.value = '';
     }
   };
 
   return (
     <div className="space-y-6">
       <Card>
-        <SectionLabel>Product → Brand Mapping</SectionLabel>
-        <SectionTitle>Configure Brand Normalization</SectionTitle>
+        <SectionLabel>Brand Normalization</SectionLabel>
+        <SectionTitle>Brand → Alias Mappings</SectionTitle>
         <p className="text-sm text-[var(--muted)] mb-6">
-          Map product names to their normalized brand names for consistent brand analytics.
-          This helps consolidate variations like "Stiiizy", "STIIIZY", and "STIIZY" into one brand.
+          View the canonical brand names and their associated aliases. Each alias maps to a product type.
+          This consolidates variations like &quot;STIIIZY&quot;, &quot;Stiiizy&quot;, and &quot;STIIZY&quot; into one brand.
         </p>
 
-        {/* Quick Add */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex-1">
-            <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-              Product Name
+        {/* Upload Section */}
+        <div className="mb-6 p-4 border border-dashed border-[var(--border)] rounded-lg bg-[var(--paper)]">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-[var(--ink)]">Upload Brand Mappings</h4>
+              <p className="text-xs text-[var(--muted)] mt-1">
+                Upload a JSON file with v2 format: {`{ "Brand Name": { "aliases": { "ALIAS": "PRODUCT_TYPE" } } }`}
+              </p>
+            </div>
+            <label className={`flex items-center gap-2 px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded cursor-pointer ${uploading ? 'opacity-50' : 'hover:opacity-90'}`}>
+              {uploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Upload JSON
+                </>
+              )}
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleFileUpload}
+                disabled={uploading}
+                className="hidden"
+              />
             </label>
-            <input
-              type="text"
-              value={newProduct}
-              onChange={(e) => setNewProduct(e.target.value)}
-              placeholder="e.g., STIIIZY Pod"
-              className="w-full px-3 py-2 border border-[var(--border)] rounded text-sm"
-            />
           </div>
-          <div className="flex-1">
-            <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-              Normalized Brand
-            </label>
-            <input
-              type="text"
-              value={newBrand}
-              onChange={(e) => setNewBrand(e.target.value)}
-              placeholder="e.g., Stiiizy"
-              className="w-full px-3 py-2 border border-[var(--border)] rounded text-sm"
-            />
+          {uploadError && (
+            <div className="mt-3 p-2 bg-[var(--error)]/10 border border-[var(--error)]/30 rounded text-sm text-[var(--error)] flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {uploadError}
+            </div>
+          )}
+          {uploadSuccess && (
+            <div className="mt-3 p-2 bg-[var(--success)]/10 border border-[var(--success)]/30 rounded text-sm text-[var(--success)] flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" />
+              {uploadSuccess}
+            </div>
+          )}
+        </div>
+
+        {/* Stats */}
+        <div className="flex gap-6 mb-6">
+          <div className="bg-[var(--paper)] border border-[var(--border)] rounded px-4 py-3">
+            <div className="text-2xl font-bold">{brandCount}</div>
+            <div className="text-xs text-[var(--muted)]">Canonical Brands</div>
           </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleAddMapping}
-              className="px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded font-medium"
-            >
-              Add Mapping
-            </button>
+          <div className="bg-[var(--paper)] border border-[var(--border)] rounded px-4 py-3">
+            <div className="text-2xl font-bold">{aliasCount}</div>
+            <div className="text-xs text-[var(--muted)]">Total Aliases</div>
           </div>
         </div>
 
-        {/* Current Mappings */}
-        {Object.keys(mappings).length > 0 && (
-          <div className="border border-[var(--border)] rounded">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[var(--border)] bg-[var(--paper)]">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-[var(--muted)] uppercase">
-                    Product Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-[var(--muted)] uppercase">
-                    Mapped Brand
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-[var(--muted)] uppercase">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(mappings).map(([product, brand]) => (
-                  <tr key={product} className="border-b border-[var(--border)]">
-                    <td className="px-4 py-3 text-sm">{product}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{brand}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => {
-                          const newMappings = { ...mappings };
-                          delete newMappings[product];
-                          setMappings(newMappings);
-                        }}
-                        className="text-[var(--error)] text-sm"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Search */}
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[var(--muted)]" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search brands or aliases..."
+              className="w-full pl-10 pr-4 py-2 border border-[var(--border)] rounded text-sm"
+            />
           </div>
-        )}
+        </div>
 
-        {Object.keys(mappings).length === 0 && (
+        {/* Brand List */}
+        {filteredBrands.length > 0 ? (
+          <div className="border border-[var(--border)] rounded divide-y divide-[var(--border)] max-h-[600px] overflow-y-auto">
+            {filteredBrands.map(([brandName, entry]) => {
+              const isExpanded = expandedBrands.has(brandName);
+              const aliasEntries = Object.entries(entry.aliases);
+              const productTypes = [...new Set(Object.values(entry.aliases))];
+
+              return (
+                <div key={brandName} className="bg-[var(--paper)]">
+                  <button
+                    onClick={() => toggleExpand(brandName)}
+                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-[var(--hover)] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium">{brandName}</span>
+                      <span className="text-xs text-[var(--muted)] bg-[var(--hover)] px-2 py-0.5 rounded">
+                        {aliasEntries.length} alias{aliasEntries.length !== 1 ? 'es' : ''}
+                      </span>
+                      {productTypes.map(type => (
+                        <span key={type} className="text-xs text-[var(--accent)] bg-[var(--accent)]/10 px-2 py-0.5 rounded">
+                          {type}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-[var(--muted)]">
+                      {isExpanded ? '−' : '+'}
+                    </span>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-3">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-[var(--muted)] uppercase">
+                            <th className="pb-2 font-medium">Alias</th>
+                            <th className="pb-2 font-medium">Product Type</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aliasEntries.map(([alias, productType]) => (
+                            <tr key={alias} className="border-t border-[var(--border)]">
+                              <td className="py-2 font-mono text-xs">{alias}</td>
+                              <td className="py-2">
+                                <span className="text-xs bg-[var(--hover)] px-2 py-0.5 rounded">
+                                  {productType}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
           <div className="text-center py-8 border border-dashed border-[var(--border)] rounded">
             <Tag className="w-12 h-12 mx-auto mb-4 text-[var(--muted)] opacity-50" />
-            <p className="text-[var(--muted)]">No brand mappings configured yet.</p>
+            <p className="text-[var(--muted)]">
+              {searchTerm ? 'No brands match your search.' : 'No brand mappings loaded yet.'}
+            </p>
           </div>
         )}
       </Card>
@@ -1025,129 +1142,25 @@ function BrandMappingTab() {
 // INDUSTRY RESEARCH TAB
 // ============================================
 function IndustryResearchTab() {
-  const { researchData, dataStatus } = useAppStore();
+  const [documents, setDocuments] = useState<
+    { id: string; filename: string; category: string; uploadedAt: string }[]
+  >([]);
   const [category, setCategory] = useState(RESEARCH_CATEGORIES[0]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filterCategory, setFilterCategory] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Group documents by category for stats
-  const categoryStats = useMemo(() => {
-    const stats: Record<string, number> = {};
-    for (const doc of researchData) {
-      stats[doc.category] = (stats[doc.category] || 0) + 1;
-    }
-    return stats;
-  }, [researchData]);
-
-  // Filter and sort documents
-  const filteredDocuments = useMemo(() => {
-    let filtered = researchData;
-
-    if (filterCategory) {
-      filtered = filtered.filter(doc => doc.category === filterCategory);
-    }
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(doc =>
-        doc.summary.toLowerCase().includes(query) ||
-        doc.category.toLowerCase().includes(query) ||
-        doc.key_findings?.some(kf => kf.toLowerCase().includes(query))
-      );
-    }
-
-    return filtered;
-  }, [researchData, filterCategory, searchQuery]);
 
   const handleUpload = async (file: File) => {
-    // This would typically call the /api/ai/research endpoint
-    // For now, just show a message
-    alert('Document uploaded! AI analysis will process and store results in S3.');
-  };
-
-  const getRelevanceColor = (relevance: string) => {
-    if (relevance === 'high') return 'bg-[var(--success)]/15 text-[var(--success)]';
-    if (relevance === 'medium') return 'bg-[var(--warning)]/15 text-[var(--warning)]';
-    return 'bg-[var(--muted)]/15 text-[var(--muted)]';
+    setDocuments((prev) => [
+      {
+        id: `doc_${Date.now()}`,
+        filename: file.name,
+        category,
+        uploadedAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
   };
 
   return (
     <div className="space-y-6">
-      {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-[var(--accent)]" />
-            <div>
-              <p className="text-xs text-[var(--muted)]">Total Documents</p>
-              <p className="text-xl font-semibold font-serif">{researchData.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <Tag className="w-5 h-5 text-[var(--accent)]" />
-            <div>
-              <p className="text-xs text-[var(--muted)]">Categories</p>
-              <p className="text-xl font-semibold font-serif">{Object.keys(categoryStats).length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <TrendingUp className="w-5 h-5 text-[var(--success)]" />
-            <div>
-              <p className="text-xs text-[var(--muted)]">High Relevance</p>
-              <p className="text-xl font-semibold font-serif">
-                {researchData.filter(d => d.relevance === 'high').length}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            {dataStatus.research.loaded ? (
-              <CheckCircle className="w-5 h-5 text-[var(--success)]" />
-            ) : (
-              <Loader2 className="w-5 h-5 text-[var(--accent)] animate-spin" />
-            )}
-            <div>
-              <p className="text-xs text-[var(--muted)]">Status</p>
-              <p className="text-sm font-medium">
-                {dataStatus.research.loaded ? 'Loaded from S3' : 'Loading...'}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Category Breakdown */}
-      {Object.keys(categoryStats).length > 0 && (
-        <Card>
-          <SectionLabel>Category Breakdown</SectionLabel>
-          <SectionTitle>Documents by Category</SectionTitle>
-          <div className="flex flex-wrap gap-2 mt-4">
-            {Object.entries(categoryStats)
-              .sort((a, b) => b[1] - a[1])
-              .map(([cat, count]) => (
-                <button
-                  key={cat}
-                  onClick={() => setFilterCategory(filterCategory === cat ? '' : cat)}
-                  className={`px-3 py-2 rounded border text-sm transition-all ${
-                    filterCategory === cat
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                      : 'border-[var(--border)] hover:border-[var(--accent)]/50'
-                  }`}
-                >
-                  {cat} <span className="font-semibold">({count})</span>
-                </button>
-              ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Upload New Document */}
       <Card>
         <SectionLabel>Manual Research</SectionLabel>
         <SectionTitle>Upload Industry Documents</SectionTitle>
@@ -1177,139 +1190,31 @@ function IndustryResearchTab() {
         />
       </Card>
 
-      {/* AI-Generated Summaries */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <SectionLabel>AI-Generated Summaries</SectionLabel>
-            <SectionTitle>Research Findings from S3</SectionTitle>
-          </div>
-          {/* Search */}
-          <div className="relative w-64">
-            <Search className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search summaries..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 border border-[var(--border)] rounded text-sm"
-            />
-          </div>
-        </div>
-
-        {!dataStatus.research.loaded && researchData.length === 0 ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-[var(--muted)]">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Loading research documents from S3...</span>
-          </div>
-        ) : filteredDocuments.length === 0 ? (
-          <div className="text-center py-12 border border-dashed border-[var(--border)] rounded">
-            <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--muted)] opacity-50" />
-            <p className="text-[var(--muted)]">
-              {searchQuery || filterCategory
-                ? 'No documents match your search criteria.'
-                : 'No research documents found in S3.'}
-            </p>
-            <p className="text-xs text-[var(--muted)] mt-2">
-              Upload documents or check S3 bucket: research-findings/, research-documents/
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredDocuments.map((doc) => {
-              const isExpanded = expandedId === doc.id;
-              return (
-                <div
-                  key={doc.id}
-                  className="border border-[var(--border)] rounded-lg overflow-hidden"
-                >
-                  {/* Header */}
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : doc.id)}
-                    className="w-full flex items-start gap-4 p-4 bg-[var(--paper)] hover:bg-[var(--cream)] transition-colors text-left"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5 text-[var(--accent)]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] text-xs rounded">
-                          {doc.category}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs ${getRelevanceColor(doc.relevance)}`}>
-                          {doc.relevance} relevance
-                        </span>
-                        {doc.key_findings && doc.key_findings.length > 0 && (
-                          <span className="text-xs text-[var(--muted)]">
-                            {doc.key_findings.length} findings
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-[var(--ink)] line-clamp-2">{doc.summary}</p>
-                      <p className="text-xs text-[var(--muted)] mt-1">
-                        {new Date(doc.date).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </p>
-                    </div>
-                    <div className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
-                      <AlertCircle className="w-5 h-5 text-[var(--muted)]" />
-                    </div>
-                  </button>
-
-                  {/* Expanded Content */}
-                  {isExpanded && (
-                    <div className="p-4 border-t border-[var(--border)] bg-white">
-                      {/* Full Summary */}
-                      <div className="mb-4">
-                        <p className="text-xs font-medium text-[var(--muted)] mb-2">FULL SUMMARY</p>
-                        <p className="text-sm text-[var(--ink)]">{doc.summary}</p>
-                      </div>
-
-                      {/* Key Findings */}
-                      {doc.key_findings && doc.key_findings.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-[var(--muted)] mb-2">KEY FINDINGS</p>
-                          <ul className="space-y-2">
-                            {doc.key_findings.map((finding, idx) => (
-                              <li key={idx} className="flex items-start gap-2 text-sm">
-                                <CheckCircle className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
-                                <span className="text-[var(--ink)]">{finding}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Source URL if available */}
-                      {doc.source && (
-                        <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                          <a
-                            href={doc.source}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-[var(--accent)] hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                            View Source
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  )}
+      {documents.length > 0 && (
+        <Card>
+          <SectionLabel>Research Library</SectionLabel>
+          <SectionTitle>Uploaded Documents</SectionTitle>
+          <div className="space-y-2">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="flex items-center justify-between p-3 bg-[var(--paper)] rounded"
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-[var(--accent)]" />
+                  <div>
+                    <p className="text-sm font-medium">{doc.filename}</p>
+                    <p className="text-xs text-[var(--muted)]">{doc.category}</p>
+                  </div>
                 </div>
-              );
-            })}
-
-            {/* Show count */}
-            <p className="text-center text-sm text-[var(--muted)] pt-2">
-              Showing {filteredDocuments.length} of {researchData.length} documents
-            </p>
+                <span className="text-xs text-[var(--muted)]">
+                  {new Date(doc.uploadedAt).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1318,25 +1223,30 @@ function IndustryResearchTab() {
 // SEO ANALYSIS TAB
 // ============================================
 function SEOAnalysisTab() {
-  const { seoData: storeSeoData, dataStatus } = useAppStore();
   const [selectedSite, setSelectedSite] = useState(SEO_SITES[0].id);
-  const [expandedPriorities, setExpandedPriorities] = useState(false);
-  const [expandedQuickWins, setExpandedQuickWins] = useState(false);
+  const [seoData, setSeoData] = useState<{
+    score: number;
+    priorities: string[];
+    quickWins: string[];
+  } | null>(null);
 
-  // Map site IDs to display names for matching
-  const siteNameMap: Record<string, string> = {
-    'barbarycoastsf': 'Barbary Coast',
-    'grassrootssf': 'Grass Roots',
-  };
-
-  // Find SEO data for the selected site from the store
-  const seoData = useMemo(() => {
-    if (!storeSeoData || storeSeoData.length === 0) return null;
-    const displayName = siteNameMap[selectedSite];
-    return storeSeoData.find(s => s.site === displayName) || null;
-  }, [storeSeoData, selectedSite]);
-
-  const loading = !dataStatus.seo.loaded;
+  useEffect(() => {
+    // Mock SEO data - in production loads from S3
+    setSeoData({
+      score: 72,
+      priorities: [
+        'Improve page load speed on mobile devices',
+        'Add more internal links between product pages',
+        'Optimize meta descriptions for key landing pages',
+        'Fix broken links in footer navigation',
+      ],
+      quickWins: [
+        'Add alt text to product images',
+        'Create XML sitemap',
+        'Add structured data for products',
+      ],
+    });
+  }, [selectedSite]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-[var(--success)]';
@@ -1344,299 +1254,80 @@ function SEOAnalysisTab() {
     return 'text-[var(--error)]';
   };
 
-  const getScoreBgColor = (score: number) => {
-    if (score >= 80) return 'bg-[var(--success)]/10';
-    if (score >= 60) return 'bg-[var(--warning)]/10';
-    return 'bg-[var(--error)]/10';
-  };
-
   return (
     <div className="space-y-6">
-      {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <Globe className="w-5 h-5 text-[var(--accent)]" />
-            <div>
-              <p className="text-xs text-[var(--muted)]">Sites Analyzed</p>
-              <p className="text-xl font-semibold font-serif">{storeSeoData.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <TrendingUp className="w-5 h-5 text-[var(--accent)]" />
-            <div>
-              <p className="text-xs text-[var(--muted)]">Avg Score</p>
-              <p className="text-xl font-semibold font-serif">
-                {storeSeoData.length > 0
-                  ? Math.round(storeSeoData.reduce((sum, s) => sum + s.score, 0) / storeSeoData.length)
-                  : '-'}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
-            <div>
-              <p className="text-xs text-[var(--muted)]">Total Priorities</p>
-              <p className="text-xl font-semibold font-serif">
-                {storeSeoData.reduce((sum, s) => sum + s.priorities.length, 0)}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            {dataStatus.seo.loaded ? (
-              <CheckCircle className="w-5 h-5 text-[var(--success)]" />
-            ) : (
-              <Loader2 className="w-5 h-5 text-[var(--accent)] animate-spin" />
-            )}
-            <div>
-              <p className="text-xs text-[var(--muted)]">Status</p>
-              <p className="text-sm font-medium">
-                {dataStatus.seo.loaded ? 'Loaded from S3' : 'Loading...'}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
       {/* Site Selector */}
       <Card>
         <SectionLabel>Website</SectionLabel>
-        <SectionTitle>Select Site to View Analysis</SectionTitle>
-        <div className="flex gap-4 mt-4">
-          {SEO_SITES.map((site) => {
-            const siteData = storeSeoData.find(s => s.site === siteNameMap[site.id]);
-            return (
-              <button
-                key={site.id}
-                onClick={() => setSelectedSite(site.id)}
-                className={`flex items-center gap-3 px-4 py-3 rounded border transition-all flex-1 ${
-                  selectedSite === site.id
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/5'
-                    : 'border-[var(--border)] hover:border-[var(--accent)]/50'
+        <SectionTitle>Select Site to Analyze</SectionTitle>
+        <div className="flex gap-4">
+          {SEO_SITES.map((site) => (
+            <button
+              key={site.id}
+              onClick={() => setSelectedSite(site.id)}
+              className={`flex items-center gap-3 px-4 py-3 rounded border transition-all ${
+                selectedSite === site.id
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                  : 'border-[var(--border)] hover:border-[var(--accent)]/50'
+              }`}
+            >
+              <Globe
+                className={`w-5 h-5 ${
+                  selectedSite === site.id ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
                 }`}
-              >
-                <Globe
-                  className={`w-5 h-5 ${
-                    selectedSite === site.id ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
-                  }`}
-                />
-                <div className="text-left flex-1">
-                  <p className="font-medium text-[var(--ink)]">{site.name}</p>
-                  <p className="text-xs text-[var(--muted)]">{site.url}</p>
-                </div>
-                {siteData && (
-                  <div className={`px-2 py-1 rounded text-sm font-semibold ${getScoreBgColor(siteData.score)} ${getScoreColor(siteData.score)}`}>
-                    {siteData.score}/100
-                  </div>
-                )}
-                {!siteData && dataStatus.seo.loaded && (
-                  <span className="text-xs text-[var(--muted)]">No data</span>
-                )}
-              </button>
-            );
-          })}
+              />
+              <div className="text-left">
+                <p className="font-medium text-[var(--ink)]">{site.name}</p>
+                <p className="text-xs text-[var(--muted)]">{site.url}</p>
+              </div>
+              <ExternalLink className="w-4 h-4 text-[var(--muted)] ml-2" />
+            </button>
+          ))}
         </div>
       </Card>
 
-      {/* Loading State */}
-      {loading && (
-        <Card>
-          <div className="flex items-center justify-center gap-2 py-12 text-[var(--muted)]">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Loading SEO analysis from S3...</span>
-          </div>
-        </Card>
-      )}
-
-      {/* No Data State */}
-      {!loading && !seoData && (
-        <Card>
-          <div className="text-center py-12">
-            <Globe className="w-12 h-12 mx-auto text-[var(--muted)] mb-4 opacity-50" />
-            <SectionTitle>No SEO Data Available</SectionTitle>
-            <p className="text-[var(--muted)] mt-2">
-              No SEO analysis has been uploaded for {siteNameMap[selectedSite]} yet.
-            </p>
-            <p className="text-xs text-[var(--muted)] mt-2">
-              Upload SEO analysis JSON files to <code className="bg-[var(--paper)] px-1 rounded">seo-analysis/{selectedSite}.com/</code> in S3.
-            </p>
-          </div>
-        </Card>
-      )}
-
       {/* Score Card */}
-      {!loading && seoData && (
-        <>
-          <div className="grid grid-cols-3 gap-6">
-            <Card>
-              <SectionLabel>Overall Score</SectionLabel>
-              <div className="flex items-end gap-2 mt-4">
-                <span className={`text-5xl font-serif font-bold ${getScoreColor(seoData.score)}`}>
-                  {seoData.score}
-                </span>
-                <span className="text-2xl text-[var(--muted)] mb-1">/100</span>
-              </div>
-              <p className="text-sm text-[var(--muted)] mt-2">
-                Last analyzed: {new Date(seoData.lastUpdated).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </p>
-            </Card>
-
-            <Card>
-              <SectionLabel>Priorities</SectionLabel>
-              <SectionTitle>{seoData.priorities.length} Action Items</SectionTitle>
-              <div className="space-y-3 mt-2">
-                {seoData.priorities.slice(0, expandedPriorities ? undefined : 3).map((priority, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <AlertCircle className="w-4 h-4 text-[var(--warning)] mt-0.5 shrink-0" />
-                    <span className="text-sm text-[var(--ink)]">{priority}</span>
-                  </div>
-                ))}
-              </div>
-              {seoData.priorities.length > 3 && (
-                <button
-                  onClick={() => setExpandedPriorities(!expandedPriorities)}
-                  className="text-sm text-[var(--accent)] mt-3 hover:underline"
-                >
-                  {expandedPriorities ? 'Show less' : `Show all ${seoData.priorities.length} priorities`}
-                </button>
-              )}
-            </Card>
-
-            <Card>
-              <SectionLabel>Quick Wins</SectionLabel>
-              <SectionTitle>{seoData.quickWins.length} Easy Fixes</SectionTitle>
-              <div className="space-y-3 mt-2">
-                {seoData.quickWins.slice(0, expandedQuickWins ? undefined : 3).map((win, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <CheckCircle className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
-                    <span className="text-sm text-[var(--ink)]">{win}</span>
-                  </div>
-                ))}
-              </div>
-              {seoData.quickWins.length > 3 && (
-                <button
-                  onClick={() => setExpandedQuickWins(!expandedQuickWins)}
-                  className="text-sm text-[var(--accent)] mt-3 hover:underline"
-                >
-                  {expandedQuickWins ? 'Show less' : `Show all ${seoData.quickWins.length} quick wins`}
-                </button>
-              )}
-            </Card>
-          </div>
-
-          {/* All Priorities Detail */}
+      {seoData && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           <Card>
-            <SectionLabel>Full Analysis</SectionLabel>
-            <SectionTitle>All SEO Priorities for {siteNameMap[selectedSite]}</SectionTitle>
-            <div className="mt-4 space-y-3">
-              {seoData.priorities.map((priority, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-4 p-3 bg-[var(--paper)] rounded-lg"
-                >
-                  <div className="w-8 h-8 rounded-full bg-[var(--warning)]/15 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-semibold text-[var(--warning)]">{i + 1}</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-[var(--ink)]">{priority}</p>
-                  </div>
+            <SectionLabel>Overall Score</SectionLabel>
+            <div className="flex items-end gap-2 mt-4">
+              <span className={`text-5xl font-serif font-bold ${getScoreColor(seoData.score)}`}>
+                {seoData.score}
+              </span>
+              <span className="text-2xl text-[var(--muted)] mb-1">/100</span>
+            </div>
+            <p className="text-sm text-[var(--muted)] mt-2">
+              Last analyzed: {new Date().toLocaleDateString()}
+            </p>
+          </Card>
+
+          <Card>
+            <SectionLabel>Top Priorities</SectionLabel>
+            <SectionTitle>Action Items</SectionTitle>
+            <div className="space-y-3">
+              {seoData.priorities.slice(0, 3).map((priority, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <AlertCircle className="w-4 h-4 text-[var(--warning)] mt-0.5 shrink-0" />
+                  <span className="text-sm text-[var(--ink)]">{priority}</span>
                 </div>
               ))}
-              {seoData.priorities.length === 0 && (
-                <p className="text-sm text-[var(--muted)] text-center py-4">No priorities identified</p>
-              )}
             </div>
           </Card>
 
-          {/* All Quick Wins Detail */}
           <Card>
-            <SectionLabel>Implementation Checklist</SectionLabel>
-            <SectionTitle>Quick Wins for {siteNameMap[selectedSite]}</SectionTitle>
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <SectionLabel>Quick Wins</SectionLabel>
+            <SectionTitle>Easy Fixes</SectionTitle>
+            <div className="space-y-3">
               {seoData.quickWins.map((win, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-3 p-3 bg-[var(--paper)] rounded-lg"
-                >
-                  <CheckCircle className="w-5 h-5 text-[var(--success)] mt-0.5 shrink-0" />
-                  <p className="text-sm text-[var(--ink)]">{win}</p>
+                <div key={i} className="flex items-start gap-3">
+                  <CheckCircle className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
+                  <span className="text-sm text-[var(--ink)]">{win}</span>
                 </div>
               ))}
-              {seoData.quickWins.length === 0 && (
-                <p className="text-sm text-[var(--muted)] text-center py-4 col-span-2">No quick wins identified</p>
-              )}
             </div>
           </Card>
-
-          {/* Site Comparison */}
-          {storeSeoData.length > 1 && (
-            <Card>
-              <SectionLabel>Comparison</SectionLabel>
-              <SectionTitle>All Sites Overview</SectionTitle>
-              <div className="mt-4 space-y-4">
-                {storeSeoData.map((site) => (
-                  <div
-                    key={site.site}
-                    className={`p-4 rounded-lg border ${
-                      site.site === siteNameMap[selectedSite]
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/5'
-                        : 'border-[var(--border)]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <Globe className="w-5 h-5 text-[var(--accent)]" />
-                        <span className="font-medium">{site.site}</span>
-                      </div>
-                      <div className={`text-2xl font-serif font-bold ${getScoreColor(site.score)}`}>
-                        {site.score}/100
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <span className="text-[var(--muted)]">Priorities:</span>{' '}
-                        <span className="font-medium">{site.priorities.length}</span>
-                      </div>
-                      <div>
-                        <span className="text-[var(--muted)]">Quick Wins:</span>{' '}
-                        <span className="font-medium">{site.quickWins.length}</span>
-                      </div>
-                      <div>
-                        <span className="text-[var(--muted)]">Updated:</span>{' '}
-                        <span className="font-medium">
-                          {new Date(site.lastUpdated).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Score bar */}
-                    <div className="mt-3 h-2 bg-[var(--border)] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          site.score >= 80
-                            ? 'bg-[var(--success)]'
-                            : site.score >= 60
-                            ? 'bg-[var(--warning)]'
-                            : 'bg-[var(--error)]'
-                        }`}
-                        style={{ width: `${site.score}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -1645,10 +1336,24 @@ function SEOAnalysisTab() {
 // ============================================
 // QR PORTAL TAB
 // ============================================
+interface QRCodeRecord {
+  [key: string]: string | number | boolean | undefined;
+  shortCode: string;
+  name: string;
+  originalUrl: string;
+  totalClicks: number;
+  createdAt: string;
+  active: boolean;
+  description?: string;
+}
+
 function QRPortalTab() {
-  const { qrCodesData, dataStatus, isLoading } = useAppStore();
+  // Load QR codes from app store
+  const { qrCodesData } = useAppStore();
+
+  // Convert store data to local format and merge with any newly created codes
+  const [localQrCodes, setLocalQrCodes] = useState<QRCodeRecord[]>([]);
   const [qrImage, setQrImage] = useState<string>('');
-  const [selectedQR, setSelectedQR] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     url: '',
@@ -1656,21 +1361,25 @@ function QRPortalTab() {
     bgColor: '#ffffff',
   });
 
-  const loading = isLoading || !dataStatus.qrCodes.loaded;
+  // Merge store data with locally created QR codes
+  const qrCodes = useMemo(() => {
+    // Convert store data to QRCodeRecord format
+    const storeQrCodes: QRCodeRecord[] = (qrCodesData || []).map((qr) => ({
+      shortCode: qr.shortCode,
+      name: qr.name,
+      originalUrl: qr.originalUrl,
+      totalClicks: qr.totalClicks,
+      createdAt: qr.createdAt,
+      active: qr.active,
+      description: qr.description,
+    }));
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    const totalCodes = qrCodesData.length;
-    const totalScans = qrCodesData.reduce((sum, qr) => sum + (qr.totalClicks || 0), 0);
-    const activeCodes = qrCodesData.filter((qr) => qr.active).length;
-    const avgScansPerCode = totalCodes > 0 ? Math.round(totalScans / totalCodes) : 0;
-    return { totalCodes, totalScans, activeCodes, avgScansPerCode };
-  }, [qrCodesData]);
+    // Merge with local codes (local codes first, then store codes not in local)
+    const localShortCodes = new Set(localQrCodes.map((qr) => qr.shortCode));
+    const uniqueStoreCodes = storeQrCodes.filter((qr) => !localShortCodes.has(qr.shortCode));
 
-  // Sort QR codes by clicks (most popular first)
-  const sortedQRCodes = useMemo(() => {
-    return [...qrCodesData].sort((a, b) => (b.totalClicks || 0) - (a.totalClicks || 0));
-  }, [qrCodesData]);
+    return [...localQrCodes, ...uniqueStoreCodes];
+  }, [qrCodesData, localQrCodes]);
 
   const generateQRCode = async () => {
     if (!formData.name || !formData.url) return;
@@ -1686,24 +1395,18 @@ function QRPortalTab() {
       });
 
       setQrImage(qrDataUrl);
-      setFormData({ ...formData, name: '', url: '' });
-    } catch (error) {
-      console.error('Failed to generate QR code:', error);
-    }
-  };
 
-  const generateQRForExisting = async (qr: { shortCode: string; originalUrl: string }) => {
-    try {
-      const qrDataUrl = await QRCodeLib.toDataURL(qr.originalUrl, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: formData.color,
-          light: formData.bgColor,
-        },
-      });
-      setQrImage(qrDataUrl);
-      setSelectedQR(qr.shortCode);
+      const newQR: QRCodeRecord = {
+        shortCode: `qr_${Date.now().toString(36)}`,
+        name: formData.name,
+        originalUrl: formData.url,
+        totalClicks: 0,
+        createdAt: new Date().toISOString(),
+        active: true,
+      };
+
+      setLocalQrCodes((prev) => [newQR, ...prev]);
+      setFormData({ ...formData, name: '', url: '' });
     } catch (error) {
       console.error('Failed to generate QR code:', error);
     }
@@ -1712,78 +1415,14 @@ function QRPortalTab() {
   const downloadQR = () => {
     if (!qrImage) return;
     const link = document.createElement('a');
-    const selectedName = selectedQR
-      ? qrCodesData.find(qr => qr.shortCode === selectedQR)?.name || 'code'
-      : formData.name || 'code';
-    link.download = `qr-${selectedName}.png`;
+    link.download = `qr-${formData.name || 'code'}.png`;
     link.href = qrImage;
     link.click();
   };
 
   return (
     <div className="space-y-6">
-      {/* Loading State */}
-      {loading && (
-        <Card>
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-            <span className="ml-3 text-[var(--muted)]">Loading QR code data from DynamoDB...</span>
-          </div>
-        </Card>
-      )}
-
-      {/* Summary Stats */}
-      {!loading && (
-        <div className="grid grid-cols-4 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[var(--accent)]/10">
-                <QrCode className="w-5 h-5 text-[var(--accent)]" />
-              </div>
-              <div>
-                <p className="text-sm text-[var(--muted)]">Total QR Codes</p>
-                <p className="text-2xl font-semibold font-serif">{stats.totalCodes}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[var(--success)]/10">
-                <MousePointerClick className="w-5 h-5 text-[var(--success)]" />
-              </div>
-              <div>
-                <p className="text-sm text-[var(--muted)]">Total Scans</p>
-                <p className="text-2xl font-semibold font-serif">{stats.totalScans.toLocaleString()}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[var(--warning)]/10">
-                <CheckCircle className="w-5 h-5 text-[var(--warning)]" />
-              </div>
-              <div>
-                <p className="text-sm text-[var(--muted)]">Active Codes</p>
-                <p className="text-2xl font-semibold font-serif">{stats.activeCodes}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[var(--ink)]/10">
-                <TrendingUp className="w-5 h-5 text-[var(--ink)]" />
-              </div>
-              <div>
-                <p className="text-sm text-[var(--muted)]">Avg Scans/Code</p>
-                <p className="text-2xl font-semibold font-serif">{stats.avgScansPerCode}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Generator and Preview */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <SectionLabel>QR Code Generator</SectionLabel>
           <SectionTitle>Create New QR Code</SectionTitle>
@@ -1872,91 +1511,75 @@ function QRPortalTab() {
               <div className="text-center text-[var(--muted)]">
                 <QrCode className="w-16 h-16 mx-auto mb-4 opacity-30" />
                 <p>Enter URL and click generate to create QR code</p>
-                <p className="text-xs mt-2">Or click on a QR code below to regenerate it</p>
               </div>
             )}
           </div>
         </Card>
       </div>
 
-      {/* QR Code Library from Database */}
-      {!loading && qrCodesData.length > 0 && (
+      {/* QR Code Stats */}
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
+        <Card className="p-3 md:p-4">
+          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
+          <p className="text-lg md:text-2xl font-semibold font-serif">{qrCodes.length}</p>
+        </Card>
+        <Card className="p-3 md:p-4">
+          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total Scans</p>
+          <p className="text-lg md:text-2xl font-semibold font-serif">
+            {qrCodes.reduce((sum, qr) => sum + qr.totalClicks, 0)}
+          </p>
+        </Card>
+        <Card className="p-3 md:p-4">
+          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Active Codes</p>
+          <p className="text-lg md:text-2xl font-semibold font-serif">
+            {qrCodes.filter((qr) => qr.active).length}
+          </p>
+        </Card>
+      </div>
+
+      {/* QR Code List */}
+      {qrCodes.length > 0 && (
         <Card>
           <SectionLabel>QR Code Library</SectionLabel>
-          <SectionTitle>All Tracked QR Codes ({qrCodesData.length})</SectionTitle>
-
-          <div className="space-y-3 mt-4">
-            {sortedQRCodes.map((qr) => (
-              <div
-                key={qr.shortCode}
-                className={`p-4 border rounded-lg transition-all cursor-pointer ${
-                  selectedQR === qr.shortCode
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/5'
-                    : 'border-[var(--border)] hover:border-[var(--accent)]/50'
-                }`}
-                onClick={() => generateQRForExisting(qr)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 rounded bg-[var(--background)]">
-                      <QrCode className="w-6 h-6 text-[var(--accent)]" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-[var(--ink)]">{qr.name}</h4>
-                      <p className="text-xs text-[var(--muted)] flex items-center gap-1 mt-1">
-                        <Link className="w-3 h-3" />
-                        <span className="truncate max-w-[300px]">{qr.originalUrl}</span>
-                      </p>
-                      {qr.description && (
-                        <p className="text-xs text-[var(--muted)] mt-1">{qr.description}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-sm text-[var(--muted)]">Scans</p>
-                      <p className="text-xl font-semibold font-serif text-[var(--ink)]">
-                        {(qr.totalClicks || 0).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-[var(--muted)]">Created</p>
-                      <p className="text-sm text-[var(--ink)]">
-                        {new Date(qr.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div>
-                      <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          qr.active
-                            ? 'bg-[var(--success)]/15 text-[var(--success)]'
-                            : 'bg-[var(--muted)]/15 text-[var(--muted)]'
-                        }`}
-                      >
-                        {qr.active ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-[var(--muted)]" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Empty State */}
-      {!loading && qrCodesData.length === 0 && (
-        <Card>
-          <div className="text-center py-12">
-            <QrCode className="w-12 h-12 mx-auto text-[var(--muted)] mb-4" />
-            <SectionTitle>No QR Codes Found</SectionTitle>
-            <p className="text-[var(--muted)] mt-2">
-              No QR codes have been created yet. Use the generator above to create your first QR code,
-              <br />
-              or check that your DynamoDB tables are properly configured.
-            </p>
-          </div>
+          <SectionTitle>All QR Codes</SectionTitle>
+          <DataTable
+            data={qrCodes}
+            columns={[
+              { key: 'name', label: 'Name', sortable: true },
+              {
+                key: 'originalUrl',
+                label: 'URL',
+                render: (v) => (
+                  <span className="text-xs text-[var(--muted)] truncate max-w-[200px] block">
+                    {String(v)}
+                  </span>
+                ),
+              },
+              { key: 'totalClicks', label: 'Scans', sortable: true, align: 'right' },
+              {
+                key: 'createdAt',
+                label: 'Created',
+                sortable: true,
+                render: (v) => new Date(String(v)).toLocaleDateString(),
+              },
+              {
+                key: 'active',
+                label: 'Status',
+                render: (v) => (
+                  <span
+                    className={`px-2 py-1 rounded text-xs ${
+                      v
+                        ? 'bg-[var(--success)]/15 text-[var(--success)]'
+                        : 'bg-[var(--muted)]/15 text-[var(--muted)]'
+                    }`}
+                  >
+                    {v ? 'Active' : 'Inactive'}
+                  </span>
+                ),
+              },
+            ]}
+            pageSize={10}
+          />
         </Card>
       )}
     </div>

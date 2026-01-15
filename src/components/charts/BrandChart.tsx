@@ -154,9 +154,25 @@ export function MarginScatterChart({ data }: MarginScatterProps) {
           />
           <ZAxis type="number" dataKey="z" range={[50, 250]} />
           <Tooltip
-            content={({ active, payload }) => {
-              if (active && payload && payload.length > 0) {
+            cursor={{ strokeDasharray: '3 3' }}
+            position={{ x: 0, y: 0 }}
+            offset={15}
+            allowEscapeViewBox={{ x: true, y: true }}
+            isAnimationActive={false}
+            content={(props) => {
+              const { active, payload, coordinate, viewBox } = props as unknown as {
+                active?: boolean;
+                payload?: Array<{ payload: { name: string; x: number; y: number } }>;
+                coordinate?: { x: number; y: number };
+                viewBox?: { width?: number };
+              };
+              if (active && payload && payload.length > 0 && coordinate) {
                 const data = payload[0].payload;
+                const tooltipWidth = 200;
+                // Check if tooltip would overflow right edge - if so, display to the left
+                const chartWidth = viewBox?.width || 400;
+                const showOnLeft = coordinate.x > chartWidth - tooltipWidth - 30;
+
                 return (
                   <div
                     style={{
@@ -165,7 +181,12 @@ export function MarginScatterChart({ data }: MarginScatterProps) {
                       borderRadius: '8px',
                       padding: '10px',
                       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                      maxWidth: '200px',
+                      maxWidth: `${tooltipWidth}px`,
+                      position: 'absolute',
+                      left: showOnLeft ? coordinate.x - tooltipWidth - 15 : coordinate.x + 15,
+                      top: coordinate.y - 50,
+                      pointerEvents: 'none',
+                      zIndex: 1000,
                     }}
                   >
                     <p style={{ margin: 0, fontWeight: 600, marginBottom: '6px', color: '#1e391f', fontSize: '13px' }}>

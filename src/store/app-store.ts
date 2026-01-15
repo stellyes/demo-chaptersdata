@@ -4,7 +4,10 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
+
+// Debounce timer for S3 saves
+let saveToS3Timer: ReturnType<typeof setTimeout> | null = null;
 import {
   User,
   StoreId,
@@ -13,12 +16,17 @@ import {
   ProductRecord,
   CustomerRecord,
   BudtenderRecord,
-  BrandMapping,
+  BrandMappingData,
   InvoiceLineItem,
   ResearchDocument,
   SEOSummary,
   QRCode,
 } from '@/types';
+import {
+  normalizeBrandData,
+  toCompatibleBrandRecords,
+  NormalizedBrandRecord,
+} from '@/lib/services/data-processor';
 
 // AI Recommendation type (kept here since it's store-specific)
 export interface AIRecommendation {
@@ -77,9 +85,9 @@ interface AppState {
   budtenderData: BudtenderRecord[];
   setBudtenderData: (data: BudtenderRecord[]) => void;
 
-  // Brand mappings
-  brandMappings: BrandMapping[];
-  setBrandMappings: (data: BrandMapping[]) => void;
+  // Brand mappings (v2 structure: canonical brand -> aliases -> product_type)
+  brandMappings: BrandMappingData;
+  setBrandMappings: (data: BrandMappingData) => void;
 
   // Invoice data
   invoiceData: InvoiceLineItem[];
@@ -161,7 +169,7 @@ const initialState = {
   productData: [] as ProductRecord[],
   customerData: [] as CustomerRecord[],
   budtenderData: [] as BudtenderRecord[],
-  brandMappings: [] as BrandMapping[],
+  brandMappings: {} as BrandMappingData,
   invoiceData: [] as InvoiceLineItem[],
   researchData: [] as ResearchDocument[],
   seoData: [] as SEOSummary[],
@@ -272,7 +280,7 @@ export const useAppStore = create<AppState>()(
             ...state.dataStatus,
             mappings: {
               loaded: true,
-              count: brandMappings.length,
+              count: Object.keys(brandMappings || {}).length,
               lastUpdated: new Date().toISOString(),
             },
           },
@@ -369,10 +377,21 @@ export const useAppStore = create<AppState>()(
           }
           return { permanentEmployees: newEmployees };
         });
-        // Auto-save to S3 after state update (debounced in component)
+        // Debounced auto-save to S3 (1 second delay to batch rapid changes)
+        if (saveToS3Timer) {
+          clearTimeout(saveToS3Timer);
+        }
+        saveToS3Timer = setTimeout(() => {
+          useAppStore.getState().saveBudtenderAssignmentsToS3();
+          saveToS3Timer = null;
+        }, 1000);
       },
 
-      setPermanentEmployees: (employees) => set({ permanentEmployees: employees }),
+      setPermanentEmployees: (employees) => {
+        set({ permanentEmployees: employees });
+        // Save to S3 immediately when batch setting employees
+        useAppStore.getState().saveBudtenderAssignmentsToS3();
+      },
 
       clearPermanentEmployees: () => {
         set({ permanentEmployees: {} });
@@ -432,14 +451,16 @@ export const useAppStore = create<AppState>()(
           const result = await response.json();
 
           if (result.success && result.data) {
-            const { sales, brands, products, budtenders, mappings, dataHash, loadedAt } = result.data;
+            const { sales, brands, products, budtenders, brandMappings, dataHash, loadedAt } = result.data;
+
+            const mappingsCount = brandMappings ? Object.keys(brandMappings).length : 0;
 
             set((state) => ({
               salesData: sales || [],
               brandData: brands || [],
               productData: products || [],
               budtenderData: budtenders || [],
-              brandMappings: mappings || [],
+              brandMappings: brandMappings || {},
               dataHash,
               dataStatus: {
                 ...state.dataStatus,
@@ -447,7 +468,7 @@ export const useAppStore = create<AppState>()(
                 brands: { loaded: (brands?.length || 0) > 0, count: brands?.length || 0, lastUpdated: loadedAt },
                 products: { loaded: (products?.length || 0) > 0, count: products?.length || 0, lastUpdated: loadedAt },
                 budtenders: { loaded: (budtenders?.length || 0) > 0, count: budtenders?.length || 0, lastUpdated: loadedAt },
-                mappings: { loaded: (mappings?.length || 0) > 0, count: mappings?.length || 0, lastUpdated: loadedAt },
+                mappings: { loaded: mappingsCount > 0, count: mappingsCount, lastUpdated: loadedAt },
               },
               // Keep isLoading true while background data loads
               isLoading: true,
@@ -602,6 +623,30 @@ export const useFilteredBrandData = () => {
     }
     return true;
   });
+};
+
+// Get normalized brand data (consolidated by canonical brand name)
+export const useNormalizedBrandData = (): NormalizedBrandRecord[] => {
+  const { brandData, brandMappings, selectedStore } = useAppStore();
+
+  return useMemo(() => {
+    // First filter by store
+    const filtered = brandData.filter((record) => {
+      if (selectedStore !== 'combined' && record.store_id !== selectedStore) {
+        return false;
+      }
+      return true;
+    });
+
+    // Then normalize using brand mappings
+    return normalizeBrandData(filtered, brandMappings);
+  }, [brandData, brandMappings, selectedStore]);
+};
+
+// Get normalized brand data as BrandRecord[] for backward compatibility
+export const useNormalizedBrandDataCompat = (): BrandRecord[] => {
+  const normalized = useNormalizedBrandData();
+  return useMemo(() => toCompatibleBrandRecords(normalized), [normalized]);
 };
 
 export const useFilteredProductData = () => {

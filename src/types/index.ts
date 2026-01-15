@@ -210,7 +210,7 @@ export interface BudtenderAssignments {
   last_updated: string;
 }
 
-// Brand-Product Mapping types
+// Brand-Product Mapping types (legacy v1)
 export interface BrandMapping {
   brand: string;
   product_type: string;
@@ -221,6 +221,20 @@ export interface BrandMapping {
 export interface BrandMappingsData {
   mappings: BrandMapping[];
   last_updated: string;
+}
+
+// Brand-Product Mapping types (v2 structure)
+// Maps canonical brand name -> aliases -> product types
+export interface BrandAliases {
+  [aliasName: string]: string; // alias -> product_type
+}
+
+export interface BrandEntry {
+  aliases: BrandAliases;
+}
+
+export interface BrandMappingData {
+  [canonicalBrand: string]: BrandEntry;
 }
 
 // Upload metadata

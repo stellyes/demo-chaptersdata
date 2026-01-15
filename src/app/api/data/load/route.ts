@@ -136,11 +136,17 @@ interface BudtenderRecord {
   units_sold: number;
 }
 
-interface BrandMapping {
-  brand: string;
-  product_type: string;
-  category?: string;
-  vendor?: string;
+// Brand mapping v2 structure types
+interface BrandAliases {
+  [aliasName: string]: string; // alias -> product_type
+}
+
+interface BrandEntry {
+  aliases: BrandAliases;
+}
+
+interface BrandMappingData {
+  [canonicalBrand: string]: BrandEntry;
 }
 
 interface InvoiceLineItem {
@@ -164,7 +170,7 @@ interface AllDataResponse {
   products: ProductRecord[];
   // Customers excluded from main load due to size (load via /api/data/customers)
   budtenders: BudtenderRecord[];
-  mappings: BrandMapping[];
+  brandMappings: BrandMappingData;
   // Invoices excluded from main load (load via /api/data/invoices)
   dataHash: string;
   loadedAt: string;
@@ -183,6 +189,7 @@ function parseCSV<T>(csvString: string): T[] {
       .replace(/[()%]/g, '')
       .replace(/_+/g, '_')
       .replace(/^"|"$/g, '')
+      .replace(/^_|_$/g, '')  // Remove leading/trailing underscores
   );
 
   const results: T[] = [];
@@ -372,9 +379,9 @@ function cleanSalesRecord(raw: Record<string, string>, storeId: string): SalesRe
     gross_receipts: parseNumber(raw.gross_receipts || raw['Gross Receipts']),
     cogs_with_excise: parseNumber(raw.cogs_with_excise || raw['COGS (with excise)']),
     gross_income: parseNumber(raw.gross_income || raw['Gross Income']),
-    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %'])),
-    discount_pct: normalizeMarginValue(parseNumber(raw.discount_ || raw.discount || raw['Discount %'])),
-    cost_pct: normalizeMarginValue(parseNumber(raw.cost_ || raw.cost || raw['Cost %'])),
+    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin || raw.gross_margin_ || raw['Gross Margin %'])),
+    discount_pct: normalizeMarginValue(parseNumber(raw.discount || raw.discount_ || raw['Discount %'])),
+    cost_pct: normalizeMarginValue(parseNumber(raw.cost || raw.cost_ || raw['Cost %'])),
     avg_basket_size: parseNumber(raw.avg_basket_size || raw['Avg Basket Size']),
     avg_order_value: parseNumber(raw.avg_order_value || raw['Avg Order Value']),
     avg_order_profit: parseNumber(raw.avg_order_profit || raw['Avg Order Profit']),
@@ -394,9 +401,10 @@ function cleanBrandRecord(
   if (brand.includes('[DS]') || brand.includes('[SS]') || netSales <= 0) return null;
 
   // Parse percentage of total sales - try multiple column name variations
+  // After header normalization: "% of Total Net Sales" -> "of_total_net_sales" (leading underscore removed)
   const pctOfTotal = parseNumber(
-    raw._of_total_net_sales ||
     raw.of_total_net_sales ||
+    raw._of_total_net_sales ||
     raw.pct_of_total_net_sales ||
     raw['% of Total Net Sales'] ||
     raw['Pct of Total Net Sales'] ||
@@ -404,18 +412,19 @@ function cleanBrandRecord(
   );
 
   // Parse margin - try multiple column name variations
+  // After header normalization: "Gross Margin %" -> "gross_margin" (trailing underscore removed)
   // Treez exports may use various column names for margin data
   const rawMargin = parseNumber(
-    raw.gross_margin_ ||
     raw.gross_margin ||
-    raw.avg_gross_margin_ ||
+    raw.gross_margin_ ||
     raw.avg_gross_margin ||
-    raw.avg_gm_ ||
+    raw.avg_gross_margin_ ||
     raw.avg_gm ||
-    raw.margin_ ||
+    raw.avg_gm_ ||
     raw.margin ||
-    raw.gm_ ||
+    raw.margin_ ||
     raw.gm ||
+    raw.gm_ ||
     raw['Gross Margin %'] ||
     raw['Gross Margin'] ||
     raw['Avg Gross Margin %'] ||
@@ -452,10 +461,10 @@ function cleanProductRecord(raw: Record<string, string>, storeId: string): Produ
   if (netSales <= 0) return null;
 
   // Parse percentage of total sales - try multiple column name variations
-  // After header normalization: "% of Total Net Sales" -> "_of_total_net_sales"
+  // After header normalization: "% of Total Net Sales" -> "of_total_net_sales" (leading underscore removed)
   const pctOfTotal = parseNumber(
-    raw._of_total_net_sales ||
     raw.of_total_net_sales ||
+    raw._of_total_net_sales ||
     raw.pct_of_total_net_sales ||
     raw['% of Total Net Sales'] ||
     raw['Pct of Total Net Sales'] ||
@@ -463,19 +472,19 @@ function cleanProductRecord(raw: Record<string, string>, storeId: string): Produ
   );
 
   // Parse margin - try multiple column name variations
-  // After header normalization: "Gross Margin %" -> "gross_margin_"
+  // After header normalization: "Gross Margin %" -> "gross_margin" (trailing underscore removed)
   // Treez exports may use various column names for margin data
   const rawMargin = parseNumber(
-    raw.gross_margin_ ||
     raw.gross_margin ||
-    raw.avg_gross_margin_ ||
+    raw.gross_margin_ ||
     raw.avg_gross_margin ||
-    raw.avg_gm_ ||
+    raw.avg_gross_margin_ ||
     raw.avg_gm ||
-    raw.margin_ ||
+    raw.avg_gm_ ||
     raw.margin ||
-    raw.gm_ ||
+    raw.margin_ ||
     raw.gm ||
+    raw.gm_ ||
     raw['Gross Margin %'] ||
     raw['Gross Margin'] ||
     raw['Avg Gross Margin %'] ||
@@ -585,36 +594,32 @@ function cleanBudtenderRecord(raw: Record<string, string>): BudtenderRecord | nu
     tickets_count: parseNumber(raw.tickets_count || raw['Tickets Count'] || raw.tickets || raw['Tickets']),
     customers_count: parseNumber(raw.customers_count || raw['Customers Count'] || raw.customers || raw['Customers']),
     net_sales: parseNumber(raw.net_sales || raw['Net Sales']),
-    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %'])),
+    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin || raw.gross_margin_ || raw['Gross Margin %'])),
     avg_order_value: parseNumber(raw.avg_order_value || raw['Avg Order Value'] || raw.aov || raw['AOV']),
     units_sold: parseNumber(raw.units_sold || raw['Units Sold'] || raw.units || raw['Units']),
   };
 }
 
-// Load brand mappings from JSON
-async function loadBrandMappings(): Promise<BrandMapping[]> {
+// Load brand mappings from JSON (v2 structure)
+async function loadBrandMappings(): Promise<BrandMappingData> {
   try {
     const jsonData = await downloadFromS3('config/brand_product_mapping.json');
     const data = JSON.parse(jsonData);
 
-    // Handle different possible JSON structures
-    if (Array.isArray(data)) {
-      return data;
-    } else if (data.mappings && Array.isArray(data.mappings)) {
-      return data.mappings;
-    } else if (typeof data === 'object') {
-      // If it's a key-value object, convert to array
-      return Object.entries(data).map(([brand, info]) => ({
-        brand,
-        product_type: typeof info === 'string' ? info : (info as Record<string, string>).product_type || '',
-        category: typeof info === 'object' ? (info as Record<string, string>).category : undefined,
-        vendor: typeof info === 'object' ? (info as Record<string, string>).vendor : undefined,
-      }));
+    // Validate v2 structure: { "Brand Name": { "aliases": { "ALIAS": "PRODUCT_TYPE" } } }
+    if (typeof data === 'object' && !Array.isArray(data)) {
+      const firstValue = Object.values(data)[0] as { aliases?: Record<string, string> } | undefined;
+      if (firstValue && typeof firstValue === 'object' && 'aliases' in firstValue) {
+        console.log(`[loadBrandMappings] Loaded ${Object.keys(data).length} canonical brands`);
+        return data as BrandMappingData;
+      }
     }
-    return [];
+
+    console.warn('[loadBrandMappings] Brand mappings file not in expected v2 format');
+    return {};
   } catch (error) {
     console.error('Error loading brand mappings:', error);
-    return [];
+    return {};
   }
 }
 
@@ -731,6 +736,23 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
       const rawRecords = parseCSV<Record<string, string>>(csvData);
       const storeId = extractStoreFromPath(file.key);
 
+      // Log first record headers for debugging
+      if (rawRecords.length > 0 && salesFiles.indexOf(file) === 0) {
+        const headers = Object.keys(rawRecords[0]);
+        console.log(`Sales CSV headers from ${file.key}:`, headers);
+        console.log(`First raw sales record:`, rawRecords[0]);
+        // Check which margin-related columns exist
+        const marginColumns = headers.filter(h =>
+          h.includes('margin') || h.includes('gm') || h.includes('Margin') || h.includes('GM')
+        );
+        console.log(`Sales margin-related columns found:`, marginColumns.length > 0 ? marginColumns : 'NONE FOUND');
+        // Log the actual gross_margin value and how it's being parsed
+        const rawMarginValue = rawRecords[0].gross_margin;
+        const parsedMarginValue = parseNumber(rawMarginValue);
+        const normalizedMarginValue = normalizeMarginValue(parsedMarginValue);
+        console.log(`First record gross_margin: raw="${rawMarginValue}", parsed=${parsedMarginValue}, normalized=${normalizedMarginValue}`);
+      }
+
       for (const raw of rawRecords) {
         const cleaned = cleanSalesRecord(raw, storeId);
         if (cleaned) allSales.push(cleaned);
@@ -739,6 +761,10 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
       console.error(`Error loading ${file.key}:`, error);
     }
   }
+
+  // Log sales data summary for debugging
+  const salesWithMargin = allSales.filter(s => s.gross_margin_pct > 0).length;
+  console.log(`Sales data loaded: ${allSales.length} total, ${salesWithMargin} with margin > 0`);
 
   // Load brand data
   for (const file of brandFiles) {
@@ -833,7 +859,7 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
     brands: allBrands,
     products: allProducts,
     budtenders: allBudtenders,
-    mappings: allMappings,
+    brandMappings: allMappings,
     dataHash,
     loadedAt: new Date().toISOString(),
   };

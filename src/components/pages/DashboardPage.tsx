@@ -9,14 +9,15 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { SalesChart, TransactionChart } from '@/components/charts/SalesChart';
 import { CategoryPieChart } from '@/components/charts/PieChart';
-import { useAppStore, useFilteredSalesData, useFilteredBrandData, useFilteredProductData } from '@/store/app-store';
+import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat } from '@/store/app-store';
 import { calculateSalesSummary } from '@/lib/services/data-processor';
 import { format } from 'date-fns';
 
 export function DashboardPage() {
   const { dataStatus } = useAppStore();
   const salesData = useFilteredSalesData();
-  const brandData = useFilteredBrandData();
+  // Use normalized brand data - consolidates aliases under canonical brand names
+  const brandData = useNormalizedBrandDataCompat();
   const productData = useFilteredProductData();
 
   const summary = useMemo(() => calculateSalesSummary(salesData), [salesData]);

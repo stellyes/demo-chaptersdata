@@ -12,12 +12,196 @@ import {
   StoreId,
   CustomerSegment,
   RecencySegment,
+  BrandMappingData,
 } from '@/types';
 import {
   STORE_NAME_TO_ID,
   CUSTOMER_SEGMENTS,
   RECENCY_SEGMENTS,
 } from '@/lib/config';
+
+// ============================================
+// BRAND NORMALIZATION UTILITIES
+// ============================================
+
+// Build a reverse lookup map: alias (uppercase) -> canonical brand name
+export function buildAliasLookup(mappings: BrandMappingData): Map<string, string> {
+  const lookup = new Map<string, string>();
+
+  for (const [canonicalBrand, entry] of Object.entries(mappings)) {
+    // Also add the canonical brand name itself as an alias
+    // This ensures brands matching the canonical name exactly are also normalized
+    lookup.set(canonicalBrand.toUpperCase(), canonicalBrand);
+
+    for (const alias of Object.keys(entry.aliases)) {
+      // Store uppercase for case-insensitive matching
+      lookup.set(alias.toUpperCase(), canonicalBrand);
+    }
+  }
+
+  return lookup;
+}
+
+// Get canonical brand name for a given alias
+export function getCanonicalBrand(
+  brandName: string,
+  aliasLookup: Map<string, string>
+): string {
+  // Try exact match first (uppercase)
+  const exactMatch = aliasLookup.get(brandName.toUpperCase());
+  if (exactMatch) return exactMatch;
+
+  // Try trimmed version
+  const trimmed = brandName.trim().toUpperCase();
+  const trimmedMatch = aliasLookup.get(trimmed);
+  if (trimmedMatch) return trimmedMatch;
+
+  // Return original if no match found
+  return brandName;
+}
+
+// Normalized brand record with aggregated data
+export interface NormalizedBrandRecord {
+  canonicalBrand: string;
+  originalBrands: string[]; // All original brand names that were consolidated
+  net_sales: number;
+  gross_margin_pct: number; // Weighted average by net_sales
+  pct_of_total_net_sales: number;
+  avg_cost_wo_excise: number; // Weighted average by net_sales
+  store_id: StoreId;
+  store: string;
+  productTypes: string[]; // All product types this brand appears in
+}
+
+// Normalize brand data by consolidating aliases under canonical names
+export function normalizeBrandData(
+  brandData: BrandRecord[],
+  mappings: BrandMappingData
+): NormalizedBrandRecord[] {
+  const mappingCount = mappings ? Object.keys(mappings).length : 0;
+
+  if (!mappings || mappingCount === 0) {
+    // No mappings - return data as-is, converted to NormalizedBrandRecord format
+    console.warn('[normalizeBrandData] No brand mappings loaded - skipping normalization');
+    return brandData.map(b => ({
+      canonicalBrand: b.brand,
+      originalBrands: [b.brand],
+      net_sales: b.net_sales,
+      gross_margin_pct: b.gross_margin_pct,
+      pct_of_total_net_sales: b.pct_of_total_net_sales,
+      avg_cost_wo_excise: b.avg_cost_wo_excise,
+      store_id: b.store_id,
+      store: b.store,
+      productTypes: [],
+    }));
+  }
+
+  console.log(`[normalizeBrandData] Normalizing ${brandData.length} brands using ${mappingCount} canonical mappings`);
+
+  const aliasLookup = buildAliasLookup(mappings);
+
+  // Group brand records by canonical name
+  const groupedBrands = new Map<string, {
+    records: BrandRecord[];
+    productTypes: Set<string>;
+  }>();
+
+  for (const record of brandData) {
+    const canonicalName = getCanonicalBrand(record.brand, aliasLookup);
+
+    if (!groupedBrands.has(canonicalName)) {
+      groupedBrands.set(canonicalName, {
+        records: [],
+        productTypes: new Set(),
+      });
+    }
+
+    const group = groupedBrands.get(canonicalName)!;
+    group.records.push(record);
+
+    // Try to find the product type for this brand from mappings
+    const brandUpper = record.brand.toUpperCase();
+    for (const [, entry] of Object.entries(mappings)) {
+      const productType = entry.aliases[brandUpper] || entry.aliases[record.brand];
+      if (productType) {
+        group.productTypes.add(productType);
+        break;
+      }
+    }
+  }
+
+  // Aggregate each group into a single normalized record
+  const normalizedRecords: NormalizedBrandRecord[] = [];
+
+  for (const [canonicalBrand, group] of groupedBrands) {
+    const { records, productTypes } = group;
+
+    // Sum net sales
+    const totalNetSales = records.reduce((sum, r) => sum + r.net_sales, 0);
+
+    // Weighted average for margin (weighted by net_sales)
+    const weightedMargin = totalNetSales > 0
+      ? records.reduce((sum, r) => sum + (r.gross_margin_pct * r.net_sales), 0) / totalNetSales
+      : 0;
+
+    // Weighted average for cost (weighted by net_sales)
+    const weightedCost = totalNetSales > 0
+      ? records.reduce((sum, r) => sum + (r.avg_cost_wo_excise * r.net_sales), 0) / totalNetSales
+      : 0;
+
+    // Sum percentage of total (will recalculate later)
+    const totalPct = records.reduce((sum, r) => sum + r.pct_of_total_net_sales, 0);
+
+    // Use first record's store info (they should all be same after filtering)
+    const firstRecord = records[0];
+
+    normalizedRecords.push({
+      canonicalBrand,
+      originalBrands: records.map(r => r.brand),
+      net_sales: totalNetSales,
+      gross_margin_pct: weightedMargin,
+      pct_of_total_net_sales: totalPct,
+      avg_cost_wo_excise: weightedCost,
+      store_id: firstRecord.store_id,
+      store: firstRecord.store,
+      productTypes: Array.from(productTypes),
+    });
+  }
+
+  // Sort by net sales descending
+  normalizedRecords.sort((a, b) => b.net_sales - a.net_sales);
+
+  // Recalculate percentage of total based on consolidated data
+  const grandTotal = normalizedRecords.reduce((sum, r) => sum + r.net_sales, 0);
+  for (const record of normalizedRecords) {
+    record.pct_of_total_net_sales = grandTotal > 0
+      ? (record.net_sales / grandTotal) * 100
+      : 0;
+  }
+
+  // Log consolidation results
+  const consolidatedCount = normalizedRecords.filter(r => r.originalBrands.length > 1).length;
+  console.log(`[normalizeBrandData] Result: ${normalizedRecords.length} unique brands (${consolidatedCount} consolidated from multiple aliases)`);
+
+  return normalizedRecords;
+}
+
+// Convert NormalizedBrandRecord back to BrandRecord format for compatibility
+export function toCompatibleBrandRecords(normalized: NormalizedBrandRecord[]): BrandRecord[] {
+  return normalized.map(n => ({
+    brand: n.canonicalBrand,
+    net_sales: n.net_sales,
+    gross_margin_pct: n.gross_margin_pct,
+    pct_of_total_net_sales: n.pct_of_total_net_sales,
+    avg_cost_wo_excise: n.avg_cost_wo_excise,
+    store_id: n.store_id,
+    store: n.store,
+  }));
+}
+
+// ============================================
+// CSV PARSING UTILITIES
+// ============================================
 
 // Parse CSV string to objects
 export function parseCSV<T>(csvString: string): T[] {
@@ -31,7 +215,8 @@ export function parseCSV<T>(csvString: string): T[] {
         .toLowerCase()
         .replace(/\s+/g, '_')
         .replace(/[()%]/g, '')
-        .replace(/_+/g, '_');
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
     },
   });
 
@@ -67,7 +252,7 @@ export function cleanSalesData(rawData: Record<string, string>[]): SalesRecord[]
         gross_receipts: parseNumber(row.gross_receipts || row['Gross Receipts'] || '0'),
         cogs_with_excise: parseNumber(row.cogs_with_excise || row['COGS (with excise)'] || '0'),
         gross_income: parseNumber(row.gross_income || row['Gross Income'] || '0'),
-        gross_margin_pct: parseNumber(row.gross_margin_ || row.gross_margin || row['Gross Margin %'] || '0'),
+        gross_margin_pct: parseNumber(row.gross_margin || row['Gross Margin %'] || '0'),
         discount_pct: parseNumber(row.discount || row['Discount %'] || '0'),
         cost_pct: parseNumber(row.cost || row['Cost %'] || '0'),
         avg_basket_size: parseNumber(row.avg_basket_size || row['Avg Basket Size'] || '0'),
@@ -103,7 +288,7 @@ export function cleanBrandData(
       const record: BrandRecord = {
         brand,
         pct_of_total_net_sales: parseNumber(row.of_total_net_sales || row['% of Total Net Sales'] || '0'),
-        gross_margin_pct: parseNumber(row.gross_margin_ || row.gross_margin || row['Gross Margin %'] || '0'),
+        gross_margin_pct: parseNumber(row.gross_margin || row['Gross Margin %'] || '0'),
         avg_cost_wo_excise: parseNumber(row.avg_cost_wo_excise || row['Avg Cost (w/o excise)'] || '0'),
         net_sales: parseNumber(row.net_sales || row['Net Sales'] || '0'),
         store: row.store || row.Store || '',
@@ -132,7 +317,7 @@ export function cleanProductData(
       const record: ProductRecord = {
         product_type: row.product_type || row['Product Type'] || '',
         pct_of_total_net_sales: parseNumber(row.of_total_net_sales || row['% of Total Net Sales'] || '0'),
-        gross_margin_pct: parseNumber(row.gross_margin_ || row.gross_margin || row['Gross Margin %'] || '0'),
+        gross_margin_pct: parseNumber(row.gross_margin || row['Gross Margin %'] || '0'),
         avg_cost_wo_excise: parseNumber(row.avg_cost_wo_excise || row['Avg Cost (w/o excise)'] || '0'),
         net_sales: parseNumber(row.net_sales || row['Net Sales'] || '0'),
         store: row.store || row.Store || '',
@@ -344,10 +529,7 @@ export function calculateSalesSummary(salesData: SalesRecord[]): {
 }
 
 // Calculate brand summary metrics
-export function calculateBrandSummary(
-  brandData: BrandRecord[],
-  brandMappings?: { brand: string; product_type: string }[]
-): {
+export function calculateBrandSummary(brandData: BrandRecord[]): {
   topBrands: BrandRecord[];
   lowMarginBrands: BrandRecord[];
   byCategory: Record<string, BrandRecord[]>;
@@ -358,29 +540,10 @@ export function calculateBrandSummary(
     (b) => b.gross_margin_pct < 40 && b.net_sales > 1000
   );
 
-  // Build a lookup map from brand name to product_type
-  const brandToCategory = new Map<string, string>();
-  if (brandMappings && brandMappings.length > 0) {
-    for (const mapping of brandMappings) {
-      if (mapping.brand && mapping.product_type) {
-        // Store both exact match and lowercase for case-insensitive lookup
-        brandToCategory.set(mapping.brand, mapping.product_type);
-        brandToCategory.set(mapping.brand.toLowerCase(), mapping.product_type);
-      }
-    }
-  }
-
-  // Group by product category using brand mappings
+  // Group by first letter (simplified category)
   const byCategory: Record<string, BrandRecord[]> = {};
   for (const brand of brandData) {
-    // Look up the product_type for this brand
-    let category = brandToCategory.get(brand.brand) || brandToCategory.get(brand.brand.toLowerCase());
-
-    // If no mapping found, use 'Uncategorized'
-    if (!category) {
-      category = 'Uncategorized';
-    }
-
+    const category = brand.brand.charAt(0).toUpperCase();
     if (!byCategory[category]) {
       byCategory[category] = [];
     }
