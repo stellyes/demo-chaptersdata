@@ -102,7 +102,13 @@ export async function POST(request: NextRequest) {
         analysis = await analyzeSalesTrends(data);
         break;
       case 'brands':
-        analysis = await analyzeBrandPerformance(data.brandData, data.brandByCategory);
+        if (!data.brandData || !Array.isArray(data.brandData) || data.brandData.length === 0) {
+          return NextResponse.json(
+            { success: false, error: 'No brand data available for analysis' },
+            { status: 400 }
+          );
+        }
+        analysis = await analyzeBrandPerformance(data.brandData, data.brandByCategory || {});
         break;
       case 'categories':
         analysis = await analyzeCategoryPerformance(data.categoryData, data.brandSummary);
@@ -149,8 +155,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('AI analysis error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'AI analysis failed';
     return NextResponse.json(
-      { success: false, error: 'AI analysis failed' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

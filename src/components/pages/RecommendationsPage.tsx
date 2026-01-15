@@ -78,6 +78,7 @@ export function RecommendationsPage() {
     seoData,
     qrCodesData,
     dataStatus,
+    brandMappings,
   } = useAppStore();
 
   const [activeAnalysis, setActiveAnalysis] = useState<AnalysisType | null>(null);
@@ -107,7 +108,7 @@ export function RecommendationsPage() {
   });
 
   const salesSummary = useMemo(() => calculateSalesSummary(salesData), [salesData]);
-  const brandSummary = useMemo(() => calculateBrandSummary(brandData), [brandData]);
+  const brandSummary = useMemo(() => calculateBrandSummary(brandData, brandMappings), [brandData, brandMappings]);
 
   const runAnalysis = async (type: AnalysisType) => {
     setLoading(true);
@@ -131,6 +132,14 @@ export function RecommendationsPage() {
           };
           break;
         case 'brands':
+          // Transform brandByCategory to use camelCase field names for the API
+          const brandByCategory: Record<string, Array<{ brand: string; netSales: number }>> = {};
+          for (const [category, brands] of Object.entries(brandSummary.byCategory)) {
+            brandByCategory[category] = brands.slice(0, 10).map((b) => ({
+              brand: b.brand,
+              netSales: b.net_sales,
+            }));
+          }
           data = {
             brandData: brandSummary.topBrands.slice(0, 50).map((b) => ({
               brand: b.brand,
@@ -138,7 +147,7 @@ export function RecommendationsPage() {
               margin: b.gross_margin_pct,
               pctOfTotal: b.pct_of_total_net_sales,
             })),
-            brandByCategory: brandSummary.byCategory,
+            brandByCategory,
           };
           break;
         case 'categories':

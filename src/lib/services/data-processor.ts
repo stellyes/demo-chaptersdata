@@ -344,7 +344,10 @@ export function calculateSalesSummary(salesData: SalesRecord[]): {
 }
 
 // Calculate brand summary metrics
-export function calculateBrandSummary(brandData: BrandRecord[]): {
+export function calculateBrandSummary(
+  brandData: BrandRecord[],
+  brandMappings?: { brand: string; product_type: string }[]
+): {
   topBrands: BrandRecord[];
   lowMarginBrands: BrandRecord[];
   byCategory: Record<string, BrandRecord[]>;
@@ -355,10 +358,29 @@ export function calculateBrandSummary(brandData: BrandRecord[]): {
     (b) => b.gross_margin_pct < 40 && b.net_sales > 1000
   );
 
-  // Group by first letter (simplified category)
+  // Build a lookup map from brand name to product_type
+  const brandToCategory = new Map<string, string>();
+  if (brandMappings && brandMappings.length > 0) {
+    for (const mapping of brandMappings) {
+      if (mapping.brand && mapping.product_type) {
+        // Store both exact match and lowercase for case-insensitive lookup
+        brandToCategory.set(mapping.brand, mapping.product_type);
+        brandToCategory.set(mapping.brand.toLowerCase(), mapping.product_type);
+      }
+    }
+  }
+
+  // Group by product category using brand mappings
   const byCategory: Record<string, BrandRecord[]> = {};
   for (const brand of brandData) {
-    const category = brand.brand.charAt(0).toUpperCase();
+    // Look up the product_type for this brand
+    let category = brandToCategory.get(brand.brand) || brandToCategory.get(brand.brand.toLowerCase());
+
+    // If no mapping found, use 'Uncategorized'
+    if (!category) {
+      category = 'Uncategorized';
+    }
+
     if (!byCategory[category]) {
       byCategory[category] = [];
     }
