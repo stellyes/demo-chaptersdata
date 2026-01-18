@@ -322,6 +322,13 @@ interface InvoiceSummaryContext {
   topProducts: Array<{ product: string; quantity: number; totalCost: number }>;
 }
 
+// Brand mapping type (from S3 config/brand_product_mapping.json)
+interface BrandMappingData {
+  [canonicalBrand: string]: {
+    aliases: { [aliasName: string]: string }; // alias -> product_type
+  };
+}
+
 // Build token-efficient data context from raw data
 export function buildDataContext(
   data: {
@@ -333,6 +340,7 @@ export function buildDataContext(
     research?: Array<{ id: string; summary: string; key_findings: string[]; category: string; date: string }>;
     seo?: Array<{ site: string; score: number; priorities: string[]; quickWins: string[] }>;
     qrCodes?: Array<{ name: string; totalClicks: number; shortCode: string }>;
+    brandMappings?: BrandMappingData;
   },
   options: DataContextOptions,
   selectedResearchDocs?: Array<{ id: string; summary: string; key_findings: string[]; category: string; source?: string }>
@@ -412,18 +420,405 @@ ${Object.entries(customerSummary.recencyBreakdown).map(([seg, count]) =>
 ).join('\n')}`);
   }
 
-  // Invoice summary
+  // Invoice summary with detailed breakdowns
   if (options.includeInvoices && data.invoices && data.invoices.length > 0) {
     const invoiceSummary = buildInvoiceSummary(data.invoices);
-    contextParts.push(`## Purchasing/Invoice Summary
-- Total Invoices: ${invoiceSummary.totalInvoices}
-- Total Spend: $${invoiceSummary.totalSpend.toLocaleString()}
-- Average Invoice: $${invoiceSummary.avgInvoiceValue.toFixed(2)}
 
-Top Vendors:
-${invoiceSummary.topVendors.slice(0, 10).map(v =>
-  `- ${v.vendor}: $${v.totalSpend.toLocaleString()} (${v.invoiceCount} invoices)`
+    // Build brand-by-vendor breakdown for more detail
+    const brandByVendor = new Map<string, Map<string, { cost: number; units: number }>>();
+    // Build product type breakdown
+    const productTypeStats = new Map<string, { cost: number; units: number; lineItems: number }>();
+    // Build overall brand breakdown
+    const brandStats = new Map<string, { cost: number; units: number; vendor: string }>();
+    // Build vendor scoring data
+    const vendorScoring = new Map<string, {
+      totalSpend: number;
+      invoiceCount: number;
+      uniqueBrands: Set<string>;
+      productTypes: Map<string, { cost: number; units: number; avgUnitCost: number }>;
+      lineItems: number;
+    }>();
+    // Track product type costs by vendor for comparison
+    const productTypeByVendor = new Map<string, Map<string, { cost: number; units: number }>>();
+
+    for (const lineItem of data.invoices) {
+      const vendor = String(lineItem.vendor || 'Unknown');
+      const brand = String(lineItem.brand || 'Unknown');
+      const productType = String(lineItem.product_type || 'Unknown').toUpperCase();
+      const cost = Number(lineItem.total_cost_with_excise) || Number(lineItem.total_with_excise) || Number(lineItem.total_cost) || 0;
+      const units = Number(lineItem.sku_units) || 0;
+      const invoiceId = String(lineItem.invoice_id || '');
+
+      // Vendor -> Brand breakdown
+      if (!brandByVendor.has(vendor)) {
+        brandByVendor.set(vendor, new Map());
+      }
+      const vendorBrands = brandByVendor.get(vendor)!;
+      const existing = vendorBrands.get(brand) || { cost: 0, units: 0 };
+      vendorBrands.set(brand, { cost: existing.cost + cost, units: existing.units + units });
+
+      // Product type breakdown
+      const typeStats = productTypeStats.get(productType) || { cost: 0, units: 0, lineItems: 0 };
+      productTypeStats.set(productType, {
+        cost: typeStats.cost + cost,
+        units: typeStats.units + units,
+        lineItems: typeStats.lineItems + 1,
+      });
+
+      // Overall brand breakdown
+      const brandStat = brandStats.get(brand) || { cost: 0, units: 0, vendor };
+      brandStats.set(brand, { cost: brandStat.cost + cost, units: brandStat.units + units, vendor });
+
+      // Vendor scoring - track comprehensive vendor metrics
+      if (!vendorScoring.has(vendor)) {
+        vendorScoring.set(vendor, {
+          totalSpend: 0,
+          invoiceCount: 0,
+          uniqueBrands: new Set(),
+          productTypes: new Map(),
+          lineItems: 0,
+        });
+      }
+      const vendorScore = vendorScoring.get(vendor)!;
+      vendorScore.totalSpend += cost;
+      vendorScore.uniqueBrands.add(brand);
+      vendorScore.lineItems += 1;
+
+      // Track product type stats per vendor
+      const vendorProductType = vendorScore.productTypes.get(productType) || { cost: 0, units: 0, avgUnitCost: 0 };
+      vendorScore.productTypes.set(productType, {
+        cost: vendorProductType.cost + cost,
+        units: vendorProductType.units + units,
+        avgUnitCost: units > 0 ? (vendorProductType.cost + cost) / (vendorProductType.units + units) : 0,
+      });
+
+      // Product type by vendor for price comparison
+      if (!productTypeByVendor.has(productType)) {
+        productTypeByVendor.set(productType, new Map());
+      }
+      const typeVendors = productTypeByVendor.get(productType)!;
+      const vendorTypeStats = typeVendors.get(vendor) || { cost: 0, units: 0 };
+      typeVendors.set(vendor, { cost: vendorTypeStats.cost + cost, units: vendorTypeStats.units + units });
+    }
+
+    // Calculate unique invoices per vendor from invoice IDs
+    const vendorInvoices = new Map<string, Set<string>>();
+    for (const lineItem of data.invoices) {
+      const vendor = String(lineItem.vendor || 'Unknown');
+      const invoiceId = String(lineItem.invoice_id || '');
+      if (!vendorInvoices.has(vendor)) {
+        vendorInvoices.set(vendor, new Set());
+      }
+      vendorInvoices.get(vendor)!.add(invoiceId);
+    }
+    for (const [vendor, invoiceIds] of vendorInvoices.entries()) {
+      const score = vendorScoring.get(vendor);
+      if (score) {
+        score.invoiceCount = invoiceIds.size;
+      }
+    }
+
+    // Get top brands per top vendor
+    const vendorBrandDetails = invoiceSummary.topVendors.slice(0, 10).map(v => {
+      const brands = brandByVendor.get(v.vendor);
+      if (!brands) return { vendor: v, topBrands: [] };
+      const sortedBrands = Array.from(brands.entries())
+        .sort(([,a], [,b]) => b.cost - a.cost)
+        .slice(0, 5)
+        .map(([brand, stats]) => `${brand}: $${stats.cost.toLocaleString()} (${stats.units.toLocaleString()} units)`);
+      return { vendor: v, topBrands: sortedBrands };
+    });
+
+    // Sort product types by cost
+    const sortedProductTypes = Array.from(productTypeStats.entries())
+      .sort(([,a], [,b]) => b.cost - a.cost)
+      .slice(0, 15);
+
+    // Sort brands by cost and get top 20
+    const topBrandsByPurchase = Array.from(brandStats.entries())
+      .sort(([,a], [,b]) => b.cost - a.cost)
+      .slice(0, 20);
+
+    contextParts.push(`## Purchasing/Invoice Summary (Line Item Detail)
+- Total Line Items: ${data.invoices.length.toLocaleString()}
+- Unique Invoices: ${invoiceSummary.totalInvoices.toLocaleString()}
+- Total Spend: $${invoiceSummary.totalSpend.toLocaleString()}
+- Average Invoice Value: $${invoiceSummary.avgInvoiceValue.toFixed(2)}
+
+### Top Vendors (Distributors/Wholesalers):
+${vendorBrandDetails.map(vd =>
+  `- **${vd.vendor.vendor}**: $${vd.vendor.totalSpend.toLocaleString()} (${vd.vendor.invoiceCount} invoices)
+  Top Brands: ${vd.topBrands.join(', ') || 'N/A'}`
+).join('\n')}
+
+### Purchasing by Product Type:
+${sortedProductTypes.map(([type, stats]) =>
+  `- ${type}: $${stats.cost.toLocaleString()} (${stats.units.toLocaleString()} units, ${stats.lineItems} line items)`
+).join('\n')}
+
+### Top 20 Brands by Purchase Volume:
+${topBrandsByPurchase.map(([brand, stats], i) =>
+  `${i + 1}. ${brand}: $${stats.cost.toLocaleString()} (${stats.units.toLocaleString()} units) via ${stats.vendor}`
 ).join('\n')}`);
+
+    // Vendor Scoring Section - comprehensive vendor performance metrics
+    const vendorScores = Array.from(vendorScoring.entries())
+      .map(([vendor, stats]) => {
+        // Calculate diversity score (more product types = more versatile vendor)
+        const productTypeDiversity = stats.productTypes.size;
+        // Calculate brand diversity
+        const brandDiversity = stats.uniqueBrands.size;
+        // Calculate average order size
+        const avgOrderSize = stats.invoiceCount > 0 ? stats.totalSpend / stats.invoiceCount : 0;
+        // Calculate items per invoice (reliability indicator)
+        const itemsPerInvoice = stats.invoiceCount > 0 ? stats.lineItems / stats.invoiceCount : 0;
+
+        return {
+          vendor,
+          totalSpend: stats.totalSpend,
+          invoiceCount: stats.invoiceCount,
+          brandCount: brandDiversity,
+          productTypeCount: productTypeDiversity,
+          avgOrderSize,
+          itemsPerInvoice,
+          productTypes: stats.productTypes,
+        };
+      })
+      .filter(v => v.totalSpend > 1000) // Only vendors with significant spend
+      .sort((a, b) => b.totalSpend - a.totalSpend)
+      .slice(0, 15);
+
+    if (vendorScores.length > 0) {
+      contextParts.push(`## Vendor Performance Scorecard
+Comprehensive vendor metrics for supplier evaluation:
+
+| Vendor | Total Spend | Orders | Brands | Categories | Avg Order | Items/Order |
+|--------|-------------|--------|--------|------------|-----------|-------------|
+${vendorScores.map(v =>
+  `| ${v.vendor} | $${v.totalSpend.toLocaleString()} | ${v.invoiceCount} | ${v.brandCount} | ${v.productTypeCount} | $${v.avgOrderSize.toFixed(0)} | ${v.itemsPerInvoice.toFixed(1)} |`
+).join('\n')}
+
+**Vendor Insights:**
+- Higher Items/Order suggests better fulfillment efficiency
+- More Brands/Categories indicates a versatile supplier
+- Compare Avg Order size for bulk ordering opportunities`);
+    }
+
+    // Product-Level Cost Comparison by Vendor
+    // Find product types with multiple vendors for price comparison
+    const multiVendorProductTypes = Array.from(productTypeByVendor.entries())
+      .filter(([, vendors]) => vendors.size >= 2)
+      .map(([productType, vendors]) => {
+        const vendorPricing = Array.from(vendors.entries())
+          .filter(([, stats]) => stats.units > 0)
+          .map(([vendor, stats]) => ({
+            vendor,
+            totalCost: stats.cost,
+            units: stats.units,
+            avgUnitCost: stats.cost / stats.units,
+          }))
+          .sort((a, b) => a.avgUnitCost - b.avgUnitCost); // Sort by price (cheapest first)
+
+        if (vendorPricing.length < 2) return null;
+
+        const cheapest = vendorPricing[0];
+        const mostExpensive = vendorPricing[vendorPricing.length - 1];
+        const priceDiff = mostExpensive.avgUnitCost - cheapest.avgUnitCost;
+        const priceDiffPct = cheapest.avgUnitCost > 0 ? (priceDiff / cheapest.avgUnitCost) * 100 : 0;
+
+        return {
+          productType,
+          vendorCount: vendorPricing.length,
+          cheapestVendor: cheapest.vendor,
+          cheapestPrice: cheapest.avgUnitCost,
+          mostExpensiveVendor: mostExpensive.vendor,
+          mostExpensivePrice: mostExpensive.avgUnitCost,
+          priceDiffPct,
+          totalSpend: vendorPricing.reduce((sum, v) => sum + v.totalCost, 0),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => b.priceDiffPct - a.priceDiffPct) // Sort by biggest price difference
+      .slice(0, 10);
+
+    if (multiVendorProductTypes.length > 0) {
+      contextParts.push(`## Product Category Price Comparison by Vendor
+Identifies pricing opportunities where multiple vendors supply the same product type:
+
+| Category | Vendors | Cheapest | Price | Most Expensive | Price | Diff % |
+|----------|---------|----------|-------|----------------|-------|--------|
+${multiVendorProductTypes.map(p =>
+  `| ${p.productType} | ${p.vendorCount} | ${p.cheapestVendor} | $${p.cheapestPrice.toFixed(2)} | ${p.mostExpensiveVendor} | $${p.mostExpensivePrice.toFixed(2)} | ${p.priceDiffPct.toFixed(0)}% |`
+).join('\n')}
+
+**Actionable Insights:**
+- Categories with high price differences (>20%) present negotiation opportunities
+- Consider consolidating orders with cheapest vendor where quality is equivalent
+- Use this data when renegotiating vendor contracts`);
+    }
+
+    // Cross-reference with brand sales data if available for profitability analysis
+    if (options.includeBrands && data.brands && data.brands.length > 0) {
+      // Build sales lookup by brand name (case-insensitive)
+      const brandSalesLookup = new Map<string, { netSales: number; margin: number }>();
+      for (const b of data.brands) {
+        const brandName = String(b.brand || '').toUpperCase();
+        const netSales = Number(b.net_sales) || 0;
+        const margin = Number(b.gross_margin_pct) || 0;
+        const existing = brandSalesLookup.get(brandName);
+        if (existing) {
+          brandSalesLookup.set(brandName, {
+            netSales: existing.netSales + netSales,
+            margin: (existing.margin + margin) / 2, // Average margin across stores
+          });
+        } else {
+          brandSalesLookup.set(brandName, { netSales, margin });
+        }
+      }
+
+      // Match invoice costs to sales for profitability analysis
+      const profitabilityAnalysis: Array<{
+        brand: string;
+        purchaseCost: number;
+        salesRevenue: number;
+        reportedMargin: number;
+        vendor: string;
+        units: number;
+      }> = [];
+
+      for (const [brand, costStats] of brandStats.entries()) {
+        const brandUpper = brand.toUpperCase();
+        const salesData = brandSalesLookup.get(brandUpper);
+        if (salesData && salesData.netSales > 0) {
+          profitabilityAnalysis.push({
+            brand,
+            purchaseCost: costStats.cost,
+            salesRevenue: salesData.netSales,
+            reportedMargin: salesData.margin,
+            vendor: costStats.vendor,
+            units: costStats.units,
+          });
+        }
+      }
+
+      if (profitabilityAnalysis.length > 0) {
+        // Sort by revenue for most impactful brands
+        profitabilityAnalysis.sort((a, b) => b.salesRevenue - a.salesRevenue);
+
+        // Calculate cost-to-revenue ratios
+        const withRatios = profitabilityAnalysis.slice(0, 15).map(p => ({
+          ...p,
+          costToRevenueRatio: p.purchaseCost / p.salesRevenue,
+        }));
+
+        contextParts.push(`## Brand Profitability Analysis (Cost vs. Revenue)
+This cross-references purchasing costs from invoices with sales revenue to identify true profitability:
+
+| Brand | Revenue | Cost | Ratio | Margin | Vendor |
+|-------|---------|------|-------|--------|--------|
+${withRatios.map(p =>
+  `| ${p.brand} | $${p.salesRevenue.toLocaleString()} | $${p.purchaseCost.toLocaleString()} | ${(p.costToRevenueRatio * 100).toFixed(0)}% | ${p.reportedMargin.toFixed(1)}% | ${p.vendor} |`
+).join('\n')}
+
+**Key Insights:**
+- Cost/Revenue Ratio: Lower is better (indicates higher markup)
+- Brands with high ratio (>60%) may need price increases or vendor renegotiation
+- Compare reported margin with cost ratio for discrepancies`);
+      }
+    }
+  }
+
+  // Brand mappings with product-level cost matching
+  if (data.brandMappings && Object.keys(data.brandMappings).length > 0) {
+    const mappingEntries = Object.entries(data.brandMappings);
+
+    // If we have invoice data, cross-reference for product-level cost analysis
+    if (options.includeInvoices && data.invoices && data.invoices.length > 0) {
+      // Build a lookup from product name (alias) to canonical brand and product type
+      const aliasLookup = new Map<string, { canonicalBrand: string; productType: string }>();
+      for (const [canonicalBrand, entry] of mappingEntries) {
+        for (const [alias, productType] of Object.entries(entry.aliases)) {
+          aliasLookup.set(alias.toUpperCase(), { canonicalBrand, productType: String(productType) });
+        }
+      }
+
+      // Match invoice line items to product mappings for detailed cost breakdown
+      const productCostByBrand = new Map<string, Map<string, { cost: number; units: number; lineItems: number }>>();
+
+      for (const lineItem of data.invoices) {
+        const productName = String(lineItem.product_name || '').toUpperCase();
+        const brand = String(lineItem.brand || 'Unknown').toUpperCase();
+        const cost = Number(lineItem.total_cost_with_excise) || Number(lineItem.total_with_excise) || Number(lineItem.total_cost) || 0;
+        const units = Number(lineItem.sku_units) || 0;
+
+        // Try to find product type from mapping
+        let productType = String(lineItem.product_type || 'Unknown').toUpperCase();
+        const aliasMatch = aliasLookup.get(productName);
+        if (aliasMatch) {
+          productType = aliasMatch.productType.toUpperCase();
+        }
+
+        // Group by brand then by product type
+        if (!productCostByBrand.has(brand)) {
+          productCostByBrand.set(brand, new Map());
+        }
+        const brandProducts = productCostByBrand.get(brand)!;
+        const existing = brandProducts.get(productType) || { cost: 0, units: 0, lineItems: 0 };
+        brandProducts.set(productType, {
+          cost: existing.cost + cost,
+          units: existing.units + units,
+          lineItems: existing.lineItems + 1,
+        });
+      }
+
+      // Generate product-level cost breakdown for top brands
+      const topBrandProductCosts = Array.from(productCostByBrand.entries())
+        .map(([brand, products]) => ({
+          brand,
+          totalCost: Array.from(products.values()).reduce((sum, p) => sum + p.cost, 0),
+          products: Array.from(products.entries())
+            .map(([type, stats]) => ({ type, ...stats, avgUnitCost: stats.units > 0 ? stats.cost / stats.units : 0 }))
+            .sort((a, b) => b.cost - a.cost),
+        }))
+        .sort((a, b) => b.totalCost - a.totalCost)
+        .slice(0, 10);
+
+      if (topBrandProductCosts.length > 0) {
+        contextParts.push(`## Product-Level Cost Analysis by Brand
+Detailed cost breakdown showing what product types are being purchased from each brand:
+
+${topBrandProductCosts.map(b => {
+  const productBreakdown = b.products.slice(0, 5).map(p =>
+    `  - ${p.type}: $${p.cost.toLocaleString()} (${p.units.toLocaleString()} units @ $${p.avgUnitCost.toFixed(2)}/unit)`
+  ).join('\n');
+  return `**${b.brand}** - Total: $${b.totalCost.toLocaleString()}
+${productBreakdown}`;
+}).join('\n\n')}
+
+**Use This For:**
+- Identify which product types drive costs for each brand
+- Compare unit costs across similar products
+- Spot opportunities to consolidate or renegotiate by product category`);
+      }
+    }
+
+    // Only include brands that have multiple aliases or are in top purchased brands
+    const relevantMappings = mappingEntries
+      .filter(([, entry]) => Object.keys(entry.aliases).length >= 1)
+      .slice(0, 30); // Limit to top 30 for token efficiency
+
+    if (relevantMappings.length > 0) {
+      contextParts.push(`## Brand Product Mappings (${mappingEntries.length} total brands)
+This maps canonical brand names to their product aliases and types:
+${relevantMappings.map(([canonical, entry]) => {
+  const aliases = Object.entries(entry.aliases)
+    .slice(0, 5) // Limit aliases shown
+    .map(([alias, productType]) => `${alias} (${productType})`)
+    .join(', ');
+  const moreCount = Object.keys(entry.aliases).length - 5;
+  return `- **${canonical}**: ${aliases}${moreCount > 0 ? ` +${moreCount} more` : ''}`;
+}).join('\n')}`);
+    }
   }
 
   // Research summaries (brief unless selected)
@@ -595,31 +990,55 @@ function buildCustomerSummary(customers: Array<Record<string, unknown>>): Custom
 }
 
 // Helper to build invoice summary
+// Note: invoices are actually line items with vendor info joined from headers
 function buildInvoiceSummary(invoices: Array<Record<string, unknown>>): InvoiceSummaryContext {
-  const vendorMap = new Map<string, { totalSpend: number; invoiceCount: number }>();
+  const vendorMap = new Map<string, { totalSpend: number; invoiceCount: number; lineItemCount: number; brands: Set<string> }>();
+  const invoiceIds = new Set<string>();
   let totalSpend = 0;
 
-  for (const invoice of invoices) {
-    const vendor = String(invoice.vendor || 'Unknown');
-    const cost = Number(invoice.total_cost) || Number(invoice.total_with_excise) || 0;
+  for (const lineItem of invoices) {
+    const vendor = String(lineItem.vendor || 'Unknown');
+    const invoiceId = String(lineItem.invoice_id || '');
+    const brand = String(lineItem.brand || 'Unknown');
+    // Handle both field name variants from Python storage
+    const cost = Number(lineItem.total_cost_with_excise) || Number(lineItem.total_with_excise) || Number(lineItem.total_cost) || 0;
 
     totalSpend += cost;
+    invoiceIds.add(invoiceId);
 
-    const existing = vendorMap.get(vendor) || { totalSpend: 0, invoiceCount: 0 };
+    const existing = vendorMap.get(vendor) || { totalSpend: 0, invoiceCount: 0, lineItemCount: 0, brands: new Set<string>() };
     existing.totalSpend += cost;
-    existing.invoiceCount += 1;
+    existing.lineItemCount += 1;
+    existing.brands.add(brand);
     vendorMap.set(vendor, existing);
   }
 
+  // Count unique invoices per vendor
+  const invoicesByVendor = new Map<string, Set<string>>();
+  for (const lineItem of invoices) {
+    const vendor = String(lineItem.vendor || 'Unknown');
+    const invoiceId = String(lineItem.invoice_id || '');
+    if (!invoicesByVendor.has(vendor)) {
+      invoicesByVendor.set(vendor, new Set<string>());
+    }
+    invoicesByVendor.get(vendor)!.add(invoiceId);
+  }
+
   const topVendors = Array.from(vendorMap.entries())
-    .map(([vendor, stats]) => ({ vendor, ...stats }))
+    .map(([vendor, stats]) => ({
+      vendor,
+      totalSpend: stats.totalSpend,
+      invoiceCount: invoicesByVendor.get(vendor)?.size || 0,
+      lineItemCount: stats.lineItemCount,
+      brandCount: stats.brands.size,
+    }))
     .sort((a, b) => b.totalSpend - a.totalSpend);
 
   return {
-    totalInvoices: invoices.length,
+    totalInvoices: invoiceIds.size,
     totalSpend,
-    avgInvoiceValue: invoices.length > 0 ? totalSpend / invoices.length : 0,
-    topVendors,
+    avgInvoiceValue: invoiceIds.size > 0 ? totalSpend / invoiceIds.size : 0,
+    topVendors: topVendors.map(v => ({ vendor: v.vendor, totalSpend: v.totalSpend, invoiceCount: v.invoiceCount })),
     topProducts: [],
   };
 }

@@ -227,35 +227,56 @@ function SalesDataTab() {
 // ============================================
 // INVOICE DATA TAB
 // ============================================
-interface Invoice {
+interface InvoiceSummary {
   [key: string]: string | number;
-  id: string;
-  invoiceNumber: string;
+  invoice_id: string;
+  invoice_number: string;
   vendor: string;
-  invoiceDate: string;
-  totalCost: number;
-  lineItemsCount: number;
-  status: 'processed' | 'needs_review';
+  invoice_date: string;
+  total_cost: number;
+  line_items_count: number;
 }
 
 function InvoiceDataTab() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const { invoiceData, dataStatus } = useAppStore();
   const [processing, setProcessing] = useState(false);
+
+  // Aggregate line items into invoice summaries
+  const invoiceSummaries = useMemo(() => {
+    const summaryMap: Record<string, InvoiceSummary> = {};
+
+    for (const lineItem of invoiceData) {
+      const invoiceId = lineItem.invoice_id;
+      if (!summaryMap[invoiceId]) {
+        summaryMap[invoiceId] = {
+          invoice_id: invoiceId,
+          invoice_number: invoiceId, // Use invoice_id as number if not available
+          vendor: '', // Will be populated if available in line item data
+          invoice_date: '',
+          total_cost: 0,
+          line_items_count: 0,
+        };
+      }
+      summaryMap[invoiceId].total_cost += lineItem.total_cost || 0;
+      summaryMap[invoiceId].line_items_count += 1;
+    }
+
+    return Object.values(summaryMap).sort((a, b) =>
+      b.invoice_id.localeCompare(a.invoice_id)
+    );
+  }, [invoiceData]);
+
+  // Calculate totals
+  const totalInvoices = invoiceSummaries.length;
+  const totalCost = invoiceData.reduce((sum, item) => sum + (item.total_cost || 0), 0);
+  const totalLineItems = invoiceData.length;
 
   const handleInvoiceUpload = async (file: File) => {
     setProcessing(true);
     try {
-      // Simulated invoice extraction - in production uses DynamoDB
-      const mockInvoice: Invoice = {
-        id: `inv_${Date.now()}`,
-        invoiceNumber: `INV-${Math.floor(Math.random() * 10000)}`,
-        vendor: 'Sample Vendor',
-        invoiceDate: new Date().toISOString().split('T')[0],
-        totalCost: Math.floor(Math.random() * 5000) + 500,
-        lineItemsCount: Math.floor(Math.random() * 20) + 5,
-        status: 'processed',
-      };
-      setInvoices((prev) => [mockInvoice, ...prev]);
+      // In production, this would upload to S3/DynamoDB
+      // For now, just show processing
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } finally {
       setProcessing(false);
     }
@@ -282,6 +303,14 @@ function InvoiceDataTab() {
             <span className="text-sm">Extracting invoice data...</span>
           </div>
         )}
+        {dataStatus.invoices.loaded && (
+          <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-[var(--success)]" />
+            <span className="text-sm text-[var(--success)]">
+              {dataStatus.invoices.count.toLocaleString()} invoice line items loaded from S3
+            </span>
+          </div>
+        )}
       </Card>
 
       {/* Summary Stats */}
@@ -291,7 +320,7 @@ function InvoiceDataTab() {
             <FileText className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Invoices</p>
-              <p className="text-xl font-semibold font-serif">{invoices.length}</p>
+              <p className="text-xl font-semibold font-serif">{totalInvoices}</p>
             </div>
           </div>
         </Card>
@@ -301,7 +330,7 @@ function InvoiceDataTab() {
             <div>
               <p className="text-xs text-[var(--muted)]">Total Cost</p>
               <p className="text-xl font-semibold font-serif">
-                ${invoices.reduce((sum, inv) => sum + inv.totalCost, 0).toLocaleString()}
+                ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </p>
             </div>
           </div>
@@ -312,62 +341,88 @@ function InvoiceDataTab() {
             <div>
               <p className="text-xs text-[var(--muted)]">Line Items</p>
               <p className="text-xl font-semibold font-serif">
-                {invoices.reduce((sum, inv) => sum + inv.lineItemsCount, 0)}
+                {totalLineItems.toLocaleString()}
               </p>
             </div>
           </div>
         </Card>
         <Card className="p-3 md:p-4">
           <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
-            <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
+            <AlertCircle className="w-5 h-5 text-[var(--muted)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Needs Review</p>
-              <p className="text-xl font-semibold font-serif">
-                {invoices.filter((inv) => inv.status === 'needs_review').length}
-              </p>
+              <p className="text-xl font-semibold font-serif">0</p>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Invoice List */}
-      {invoices.length > 0 && (
+      {invoiceSummaries.length > 0 ? (
         <Card>
           <SectionLabel>Processed Invoices</SectionLabel>
           <SectionTitle>Invoice History</SectionTitle>
           <DataTable
-            data={invoices}
+            data={invoiceSummaries}
             columns={[
-              { key: 'invoiceNumber', label: 'Invoice #', sortable: true },
-              { key: 'vendor', label: 'Vendor', sortable: true },
-              { key: 'invoiceDate', label: 'Date', sortable: true },
+              { key: 'invoice_id', label: 'Invoice #', sortable: true },
               {
-                key: 'totalCost',
-                label: 'Total',
+                key: 'total_cost',
+                label: 'Total Cost',
                 sortable: true,
                 align: 'right',
-                render: (v) => `$${Number(v).toLocaleString()}`,
+                render: (v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
               },
-              { key: 'lineItemsCount', label: 'Items', sortable: true, align: 'right' },
-              {
-                key: 'status',
-                label: 'Status',
-                render: (v) => (
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      v === 'processed'
-                        ? 'bg-[var(--success)]/15 text-[var(--success)]'
-                        : 'bg-[var(--warning)]/15 text-[var(--warning)]'
-                    }`}
-                  >
-                    {v === 'processed' ? 'Processed' : 'Needs Review'}
-                  </span>
-                ),
-              },
+              { key: 'line_items_count', label: 'Items', sortable: true, align: 'right' },
             ]}
             pageSize={10}
             exportable
             exportFilename="invoices"
+          />
+        </Card>
+      ) : (
+        <Card>
+          <div className="text-center py-8">
+            <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--muted)] opacity-50" />
+            <p className="text-[var(--muted)]">
+              {dataStatus.invoices.loaded
+                ? 'No invoice data found. Upload invoice PDFs to get started.'
+                : 'Invoice data is loading from S3...'}
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Line Items Table */}
+      {invoiceData.length > 0 && (
+        <Card>
+          <SectionLabel>All Line Items</SectionLabel>
+          <SectionTitle>Invoice Line Item Details</SectionTitle>
+          <DataTable
+            data={invoiceData}
+            columns={[
+              { key: 'invoice_id', label: 'Invoice', sortable: true },
+              { key: 'product_name', label: 'Product', sortable: true },
+              { key: 'product_type', label: 'Type', sortable: true },
+              { key: 'sku_units', label: 'Units', sortable: true, align: 'right' },
+              {
+                key: 'unit_cost',
+                label: 'Unit Cost',
+                sortable: true,
+                align: 'right',
+                render: (v) => `$${Number(v).toFixed(2)}`,
+              },
+              {
+                key: 'total_cost',
+                label: 'Total',
+                sortable: true,
+                align: 'right',
+                render: (v) => `$${Number(v).toFixed(2)}`,
+              },
+            ]}
+            pageSize={20}
+            exportable
+            exportFilename="invoice-line-items"
           />
         </Card>
       )}

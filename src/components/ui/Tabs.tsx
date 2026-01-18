@@ -1,6 +1,7 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
+import { useAppStore } from '@/store/app-store';
 
 interface Tab {
   id: string;
@@ -14,7 +15,21 @@ interface TabsProps {
 }
 
 export function Tabs({ tabs, defaultTab }: TabsProps) {
-  const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id);
+  const { activeTab: globalActiveTab, setActiveTab: setGlobalActiveTab } = useAppStore();
+  const [localActiveTab, setLocalActiveTab] = useState(defaultTab || tabs[0]?.id);
+
+  // Sync with global activeTab when it changes (for search navigation)
+  useEffect(() => {
+    if (globalActiveTab && tabs.some(tab => tab.id === globalActiveTab)) {
+      setLocalActiveTab(globalActiveTab);
+      // Clear the global activeTab after navigating
+      setGlobalActiveTab(null);
+    }
+  }, [globalActiveTab, tabs, setGlobalActiveTab]);
+
+  const handleTabClick = (tabId: string) => {
+    setLocalActiveTab(tabId);
+  };
 
   return (
     <div>
@@ -24,9 +39,9 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabClick(tab.id)}
               className={`px-3 md:px-4 py-2 md:py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
-                activeTab === tab.id
+                localActiveTab === tab.id
                   ? 'border-[var(--accent)] text-[var(--accent)]'
                   : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
@@ -39,7 +54,7 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
 
       {/* Tab Content */}
       <div>
-        {tabs.find((tab) => tab.id === activeTab)?.content}
+        {tabs.find((tab) => tab.id === localActiveTab)?.content}
       </div>
     </div>
   );

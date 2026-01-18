@@ -11,9 +11,9 @@ import { SalesChart } from '@/components/charts/SalesChart';
 import { TopBrandsChart, MarginScatterChart } from '@/components/charts/BrandChart';
 import { CategoryPieChart, SegmentPieChart } from '@/components/charts/PieChart';
 import { useFilteredSalesData, useFilteredProductData, useAppStore, useNormalizedBrandDataCompat } from '@/store/app-store';
-import { format } from 'date-fns';
-import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Percent, Calendar, User, Search, BarChart3, AlertCircle } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { format, subMonths } from 'date-fns';
+import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Percent, Calendar, User, Search, BarChart3, AlertCircle, Package, FileText, Tag } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { calculateCustomerSummary } from '@/lib/services/data-processor';
 
 // ============================================
@@ -150,16 +150,11 @@ function BrandPerformanceTab() {
     return brandData.filter((b) => b.gross_margin_pct < 40 && b.net_sales > 1000);
   }, [brandData]);
 
-  // Calculate high-margin growth opportunities (>= 55% margin with low sales volume)
-  // These are brands with great margins but low visibility - push these!
+  // Calculate high-margin growth opportunities (> 71% margin with minimum $29k revenue)
+  // These are brands with great margins that meet revenue threshold
   const highMarginGrowthBrands = useMemo(() => {
-    // Get median sales to define "low sales"
-    const sortedSales = [...brandData].sort((a, b) => a.net_sales - b.net_sales);
-    const medianSales = sortedSales[Math.floor(sortedSales.length / 2)]?.net_sales || 5000;
-    const lowSalesThreshold = Math.min(medianSales * 0.5, 5000); // Below median or $5k, whichever is lower
-
     return brandData
-      .filter((b) => b.gross_margin_pct >= 55 && b.net_sales > 100 && b.net_sales < lowSalesThreshold)
+      .filter((b) => b.brand && b.gross_margin_pct > 71 && b.net_sales >= 29000)
       .sort((a, b) => b.gross_margin_pct - a.gross_margin_pct);
   }, [brandData]);
 
@@ -240,7 +235,7 @@ function BrandPerformanceTab() {
           <SectionLabel className="text-[var(--success)]">Growth Opportunity</SectionLabel>
           <SectionTitle>Untapped High-Margin Brands</SectionTitle>
           <p className="text-sm text-[var(--muted)] mb-4">
-            These brands have excellent margins (55%+) but low sales volume. Promote these through staff recommendations or featured displays.
+            These brands have excellent margins (71%+) and meet the $29k revenue threshold. Promote these through staff recommendations or featured displays.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {highMarginGrowthBrands.slice(0, 10).map((brand, i) => (
@@ -998,7 +993,7 @@ function BudtenderAnalyticsTab() {
       name: string;
       store: string;
       totalSales: number;
-      totalTickets: number;
+      totalBrands: number;
       totalCustomers: number;
       totalUnits: number;
       marginSum: number;
@@ -1012,7 +1007,7 @@ function BudtenderAnalyticsTab() {
           name: record.employee_name,
           store: record.store,
           totalSales: 0,
-          totalTickets: 0,
+          totalBrands: 0,
           totalCustomers: 0,
           totalUnits: 0,
           marginSum: 0,
@@ -1020,7 +1015,7 @@ function BudtenderAnalyticsTab() {
         };
       }
       byEmployee[key].totalSales += record.net_sales;
-      byEmployee[key].totalTickets += record.tickets_count;
+      byEmployee[key].totalBrands += 1; // Each record is a unique brand sold by this employee
       byEmployee[key].totalCustomers += record.customers_count;
       byEmployee[key].totalUnits += record.units_sold;
       byEmployee[key].marginSum += record.gross_margin_pct;
@@ -1031,8 +1026,8 @@ function BudtenderAnalyticsTab() {
       .map(e => ({
         ...e,
         avgMargin: e.dayCount > 0 ? e.marginSum / e.dayCount : 0,
-        avgTicketValue: e.totalTickets > 0 ? e.totalSales / e.totalTickets : 0,
-        avgUnitsPerTicket: e.totalTickets > 0 ? e.totalUnits / e.totalTickets : 0,
+        avgSalesPerBrand: e.totalBrands > 0 ? e.totalSales / e.totalBrands : 0,
+        avgUnitsPerBrand: e.totalBrands > 0 ? e.totalUnits / e.totalBrands : 0,
       }))
       .sort((a, b) => b.totalSales - a.totalSales);
   }, [filteredBudtenders]);
@@ -1040,7 +1035,7 @@ function BudtenderAnalyticsTab() {
   // Top performers
   const topBySales = budtenderSummary.slice(0, 10);
   const topByMargin = [...budtenderSummary].sort((a, b) => b.avgMargin - a.avgMargin).slice(0, 10);
-  const topByTickets = [...budtenderSummary].sort((a, b) => b.totalTickets - a.totalTickets).slice(0, 10);
+  const topByBrands = [...budtenderSummary].sort((a, b) => b.totalBrands - a.totalBrands).slice(0, 10);
 
   if (budtenderData.length === 0) {
     return (
@@ -1164,9 +1159,9 @@ function BudtenderAnalyticsTab() {
               <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
                 <ShoppingCart className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-[var(--muted)] truncate">Transactions</p>
+                  <p className="text-xs text-[var(--muted)] truncate">Brands Sold</p>
                   <p className="text-lg md:text-xl font-semibold font-serif">
-                    {budtenderSummary.reduce((sum, b) => sum + b.totalTickets, 0).toLocaleString()}
+                    {budtenderSummary.reduce((sum, b) => sum + b.totalBrands, 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -1226,9 +1221,9 @@ function BudtenderAnalyticsTab() {
 
             <Card>
               <SectionLabel>Volume Leaders</SectionLabel>
-              <SectionTitle>Top by Transactions</SectionTitle>
+              <SectionTitle>Top by Brands Sold</SectionTitle>
               <div className="space-y-2">
-                {topByTickets.slice(0, 5).map((b, i) => (
+                {topByBrands.slice(0, 5).map((b, i) => (
                   <div key={i} className="flex items-center justify-between p-2 bg-[var(--paper)] rounded">
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 flex items-center justify-center bg-[var(--warning)] text-white rounded-full text-xs font-bold">
@@ -1236,7 +1231,7 @@ function BudtenderAnalyticsTab() {
                       </span>
                       <span className="font-medium text-sm">{b.name}</span>
                     </div>
-                    <span className="font-semibold text-sm">{b.totalTickets.toLocaleString()}</span>
+                    <span className="font-semibold text-sm">{b.totalBrands.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -1255,10 +1250,10 @@ function BudtenderAnalyticsTab() {
               { key: 'name', label: 'Name', sortable: true },
               { key: 'store', label: 'Store', sortable: true },
               { key: 'totalSales', label: 'Total Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
-              { key: 'totalTickets', label: 'Transactions', sortable: true, align: 'right', render: (v) => Number(v).toLocaleString() },
-              { key: 'avgTicketValue', label: 'Avg Ticket', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(0)}` },
+              { key: 'totalBrands', label: 'Brands Sold', sortable: true, align: 'right', render: (v) => Number(v).toLocaleString() },
+              { key: 'avgSalesPerBrand', label: 'Avg $/Brand', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(0)}` },
               { key: 'avgMargin', label: 'Avg Margin', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
-              { key: 'avgUnitsPerTicket', label: 'Units/Ticket', sortable: true, align: 'right', render: (v) => Number(v).toFixed(1) },
+              { key: 'avgUnitsPerBrand', label: 'Units/Brand', sortable: true, align: 'right', render: (v) => Number(v).toFixed(1) },
             ]}
             pageSize={20}
             exportable
@@ -1286,6 +1281,428 @@ function BudtenderAnalyticsTab() {
             pageSize={20}
             exportable
             exportFilename="budtender_daily_data"
+          />
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// INVOICE ANALYTICS TAB
+// ============================================
+const INVOICE_PIE_COLORS = ['#3d5a4c', '#7a9b8a', '#a8c4b8', '#d4e4dc', '#e8f0ec', '#95b3a6', '#6b9680', '#4a7a5f'];
+
+function InvoiceAnalyticsTab() {
+  const { invoiceData, dataStatus } = useAppStore();
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'top-products' | 'by-type' | 'all-data'>('overview');
+
+  // Filter out invalid entries (null, Unknown, empty product types)
+  const validInvoiceData = useMemo(() => {
+    return invoiceData.filter(item => {
+      const productType = item.product_type?.trim().toLowerCase();
+      const productName = item.product_name?.trim();
+      // Exclude null, undefined, empty, or "unknown" product types
+      if (!productType || productType === 'unknown' || productType === 'null' || productType === '') {
+        return false;
+      }
+      // Exclude items without a product name
+      if (!productName || productName.toLowerCase() === 'unknown') {
+        return false;
+      }
+      return true;
+    });
+  }, [invoiceData]);
+
+  // Filter to last 12 months
+  const twelveMonthsAgo = useMemo(() => subMonths(new Date(), 12), []);
+
+  // Note: Invoice data may not have dates, so we'll use all valid data
+  // In future, if invoice_date is added, filter here
+
+  // Summary stats
+  const summaryStats = useMemo(() => {
+    const totalLineItems = validInvoiceData.length;
+    const totalUnits = validInvoiceData.reduce((sum, item) => sum + (item.sku_units || 0), 0);
+    const totalCost = validInvoiceData.reduce((sum, item) => sum + (item.total_cost || 0), 0);
+    const uniqueInvoices = new Set(validInvoiceData.map(item => item.invoice_id)).size;
+    const avgUnitCost = totalUnits > 0 ? totalCost / totalUnits : 0;
+
+    return { totalLineItems, totalUnits, totalCost, uniqueInvoices, avgUnitCost };
+  }, [validInvoiceData]);
+
+  // Top products by volume (units purchased)
+  const topProductsByVolume = useMemo(() => {
+    const productMap: Record<string, { name: string; units: number; cost: number; invoiceCount: number }> = {};
+
+    for (const item of validInvoiceData) {
+      const name = item.product_name.trim();
+      if (!productMap[name]) {
+        productMap[name] = { name, units: 0, cost: 0, invoiceCount: 0 };
+      }
+      productMap[name].units += item.sku_units || 0;
+      productMap[name].cost += item.total_cost || 0;
+      productMap[name].invoiceCount += 1;
+    }
+
+    return Object.values(productMap)
+      .sort((a, b) => b.units - a.units)
+      .slice(0, 50)
+      .map((p, idx) => ({
+        ...p,
+        rank: idx + 1,
+        avgCostPerUnit: p.units > 0 ? p.cost / p.units : 0,
+      }));
+  }, [validInvoiceData]);
+
+  // Top products by spend
+  const topProductsBySpend = useMemo(() => {
+    const productMap: Record<string, { name: string; units: number; cost: number }> = {};
+
+    for (const item of validInvoiceData) {
+      const name = item.product_name.trim();
+      if (!productMap[name]) {
+        productMap[name] = { name, units: 0, cost: 0 };
+      }
+      productMap[name].units += item.sku_units || 0;
+      productMap[name].cost += item.total_cost || 0;
+    }
+
+    return Object.values(productMap)
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 20);
+  }, [validInvoiceData]);
+
+  // Breakdown by product type
+  const productTypeBreakdown = useMemo(() => {
+    const typeMap: Record<string, { type: string; units: number; cost: number; lineItems: number }> = {};
+
+    for (const item of validInvoiceData) {
+      const type = item.product_type.trim().toUpperCase();
+      if (!typeMap[type]) {
+        typeMap[type] = { type, units: 0, cost: 0, lineItems: 0 };
+      }
+      typeMap[type].units += item.sku_units || 0;
+      typeMap[type].cost += item.total_cost || 0;
+      typeMap[type].lineItems += 1;
+    }
+
+    return Object.values(typeMap)
+      .sort((a, b) => b.cost - a.cost)
+      .map(t => ({
+        ...t,
+        pctOfSpend: summaryStats.totalCost > 0 ? (t.cost / summaryStats.totalCost) * 100 : 0,
+        pctOfUnits: summaryStats.totalUnits > 0 ? (t.units / summaryStats.totalUnits) * 100 : 0,
+      }));
+  }, [validInvoiceData, summaryStats]);
+
+  // Pie chart data for product types
+  const typesPieData = useMemo(() => {
+    return productTypeBreakdown.slice(0, 8).map(t => ({
+      name: t.type,
+      value: t.cost,
+    }));
+  }, [productTypeBreakdown]);
+
+  // Bar chart data for top 10 products
+  const topProductsBarData = useMemo(() => {
+    return topProductsByVolume.slice(0, 10).map(p => ({
+      name: p.name.length > 20 ? p.name.slice(0, 20) + '...' : p.name,
+      units: p.units,
+      cost: p.cost,
+    }));
+  }, [topProductsByVolume]);
+
+  if (!dataStatus.invoices.loaded) {
+    return (
+      <Card>
+        <div className="text-center py-12">
+          <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--muted)] opacity-50 animate-pulse" />
+          <SectionTitle>Loading Invoice Data</SectionTitle>
+          <p className="text-[var(--muted)]">
+            Invoice data is being loaded from the database...
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (validInvoiceData.length === 0) {
+    return (
+      <Card>
+        <div className="text-center py-12">
+          <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--muted)] opacity-50" />
+          <SectionTitle>No Invoice Data</SectionTitle>
+          <p className="text-[var(--muted)]">
+            No valid invoice data found. Upload invoices in the Data Center.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4 md:space-y-6">
+      {/* Sub-tabs */}
+      <div className="flex gap-2 flex-wrap justify-center md:justify-start">
+        {[
+          { key: 'overview', label: 'Overview', icon: BarChart3 },
+          { key: 'top-products', label: 'Top Products', icon: Package },
+          { key: 'by-type', label: 'By Category', icon: Tag },
+          { key: 'all-data', label: 'All Data', icon: FileText },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveSubTab(tab.key as typeof activeSubTab)}
+            className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded text-sm font-medium transition-colors ${
+              activeSubTab === tab.key
+                ? 'bg-[var(--ink)] text-[var(--paper)]'
+                : 'bg-[var(--paper)] text-[var(--ink)] border border-[var(--border)]'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
+          </button>
+        ))}
+      </div>
+
+      {activeSubTab === 'overview' && (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <FileText className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Total Invoices</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">{summaryStats.uniqueInvoices.toLocaleString()}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <Package className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Units Purchased</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">{summaryStats.totalUnits.toLocaleString()}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <DollarSign className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Total Spend</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">${summaryStats.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                <Tag className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[var(--muted)] truncate">Avg Unit Cost</p>
+                  <p className="text-lg md:text-xl font-semibold font-serif">${summaryStats.avgUnitCost.toFixed(2)}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            <Card>
+              <SectionLabel>Purchase Volume</SectionLabel>
+              <SectionTitle>Top 10 Products by Units</SectionTitle>
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topProductsBarData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" horizontal={true} vertical={false} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 11 }} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={120}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#6b6b6b', fontSize: 10 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #e0ddd8',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                      }}
+                      formatter={(value) => [typeof value === 'number' ? value.toLocaleString() : '0', 'Units']}
+                    />
+                    <Bar dataKey="units" fill="var(--accent)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            <Card>
+              <SectionLabel>Spend Distribution</SectionLabel>
+              <SectionTitle>Spend by Product Category</SectionTitle>
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={typesPieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={120}
+                      fill="var(--accent)"
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                    >
+                      {typesPieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={INVOICE_PIE_COLORS[index % INVOICE_PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #e0ddd8',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value) => [`$${typeof value === 'number' ? value.toLocaleString() : '0'}`, 'Spend']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          </div>
+
+          {/* Top Products Table */}
+          <Card>
+            <SectionLabel>Most Purchased</SectionLabel>
+            <SectionTitle>Top 20 Products by Spend</SectionTitle>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              {topProductsBySpend.slice(0, 10).map((product, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-[var(--paper)] rounded">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 flex items-center justify-center bg-[var(--accent)] text-white rounded-full text-xs font-bold">
+                      {i + 1}
+                    </span>
+                    <span className="font-medium text-sm truncate max-w-[180px]">{product.name}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-sm">${product.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    <p className="text-xs text-[var(--muted)]">{product.units.toLocaleString()} units</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </>
+      )}
+
+      {activeSubTab === 'top-products' && (
+        <Card>
+          <SectionLabel>Purchase Rankings</SectionLabel>
+          <SectionTitle>Top Products by Volume (All Time)</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Products ranked by total units purchased. Excludes unknown and invalid product types.
+          </p>
+          <DataTable
+            data={topProductsByVolume}
+            columns={[
+              { key: 'rank', label: '#', sortable: true, align: 'center' },
+              { key: 'name', label: 'Product Name', sortable: true },
+              { key: 'units', label: 'Units Purchased', sortable: true, align: 'right', render: (v) => Number(v).toLocaleString() },
+              { key: 'cost', label: 'Total Spend', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
+              { key: 'avgCostPerUnit', label: 'Avg Cost/Unit', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(2)}` },
+              { key: 'invoiceCount', label: 'Line Items', sortable: true, align: 'right' },
+            ]}
+            pageSize={25}
+            exportable
+            exportFilename="top_products_by_volume"
+          />
+        </Card>
+      )}
+
+      {activeSubTab === 'by-type' && (
+        <>
+          <Card>
+            <SectionLabel>Category Analysis</SectionLabel>
+            <SectionTitle>Purchases by Product Type</SectionTitle>
+            <p className="text-sm text-[var(--muted)] mb-4">
+              Breakdown of purchasing by product category. Excludes unknown and invalid types.
+            </p>
+            <DataTable
+              data={productTypeBreakdown}
+              columns={[
+                { key: 'type', label: 'Product Type', sortable: true },
+                { key: 'units', label: 'Units', sortable: true, align: 'right', render: (v) => Number(v).toLocaleString() },
+                { key: 'pctOfUnits', label: '% of Units', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
+                { key: 'cost', label: 'Total Spend', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
+                { key: 'pctOfSpend', label: '% of Spend', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
+                { key: 'lineItems', label: 'Line Items', sortable: true, align: 'right' },
+              ]}
+              pageSize={20}
+              exportable
+              exportFilename="purchases_by_type"
+            />
+          </Card>
+
+          {/* Visual breakdown cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {productTypeBreakdown.slice(0, 6).map((type, i) => (
+              <Card key={i} className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-semibold text-[var(--ink)]">{type.type}</span>
+                  <span className="text-sm text-[var(--muted)]">{type.pctOfSpend.toFixed(1)}% of spend</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--muted)]">Units Purchased</span>
+                    <span className="font-medium">{type.units.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--muted)]">Total Spend</span>
+                    <span className="font-medium">${type.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--muted)]">Avg Cost/Unit</span>
+                    <span className="font-medium">${(type.cost / type.units).toFixed(2)}</span>
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="mt-3 h-2 bg-[var(--border)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[var(--accent)] rounded-full"
+                    style={{ width: `${type.pctOfSpend}%` }}
+                  />
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      {activeSubTab === 'all-data' && (
+        <Card>
+          <SectionLabel>Raw Invoice Data</SectionLabel>
+          <SectionTitle>All Line Items</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Showing {validInvoiceData.length.toLocaleString()} valid line items (excluding unknown/invalid entries).
+          </p>
+          <DataTable
+            data={validInvoiceData}
+            columns={[
+              { key: 'invoice_id', label: 'Invoice', sortable: true },
+              { key: 'product_name', label: 'Product', sortable: true },
+              { key: 'product_type', label: 'Type', sortable: true },
+              { key: 'sku_units', label: 'Units', sortable: true, align: 'right' },
+              { key: 'unit_cost', label: 'Unit Cost', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(2)}` },
+              { key: 'total_cost', label: 'Total', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(2)}` },
+            ]}
+            pageSize={25}
+            exportable
+            exportFilename="invoice_line_items"
           />
         </Card>
       )}
@@ -1333,6 +1750,11 @@ export function SalesAnalyticsPage() {
       id: 'budtenders',
       label: 'Budtender Analytics',
       content: <BudtenderAnalyticsTab />,
+    },
+    {
+      id: 'invoices',
+      label: 'Invoice Analytics',
+      content: <InvoiceAnalyticsTab />,
     },
   ];
 

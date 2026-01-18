@@ -216,14 +216,14 @@ export function ResearchPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search documents..."
-                    className="w-full pl-10 pr-4 py-2 border border-[var(--border)] rounded text-sm bg-white"
+                    className="w-full pl-10 pr-4 py-2 border border-[var(--border)] rounded text-sm bg-[var(--white)]"
                   />
                 </div>
               </div>
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="px-3 py-2 border border-[var(--border)] rounded text-sm bg-white"
+                className="px-3 py-2 border border-[var(--border)] rounded text-sm bg-[var(--white)]"
               >
                 <option value="">All Categories</option>
                 {availableCategories.map((cat) => (
@@ -319,7 +319,7 @@ export function ResearchPage() {
                       </button>
 
                       <AnimatedCollapse isOpen={isExpanded}>
-                        <div className="p-4 border-t border-[var(--border)] bg-white">
+                        <div className="p-4 border-t border-[var(--border)] bg-[var(--white)]">
                           {/* Source URL */}
                           {doc.source && (
                             <div className="mb-4">
@@ -417,7 +417,7 @@ export function ResearchPage() {
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded text-sm bg-white"
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded text-sm bg-[var(--white)]"
                 >
                   <option value="">Select category...</option>
                   {RESEARCH_CATEGORIES.map((cat) => (
@@ -436,7 +436,7 @@ export function ResearchPage() {
                   value={sourceUrl}
                   onChange={(e) => setSourceUrl(e.target.value)}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded text-sm bg-white"
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded text-sm bg-[var(--white)]"
                 />
               </div>
             </div>

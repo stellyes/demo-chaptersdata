@@ -81,6 +81,7 @@ export function RecommendationsPage() {
   const {
     aiRecommendations,
     addAiRecommendation,
+    addNotification,
     productData,
     customerData,
     invoiceData,
@@ -145,9 +146,28 @@ export function RecommendationsPage() {
     };
   }, [brandMappings]);
 
+  // Get human-readable analysis type names
+  const getAnalysisTypeName = (type: AnalysisType): string => {
+    switch (type) {
+      case 'sales': return 'Sales Trends Analysis';
+      case 'brands': return 'Brand Performance Analysis';
+      case 'categories': return 'Category Analysis';
+      case 'insights': return 'Business Intelligence';
+      default: return 'Analysis';
+    }
+  };
+
   const runAnalysis = async (type: AnalysisType) => {
     setLoading(true);
     setActiveAnalysis(type);
+
+    // Show "Analysis Started" notification
+    const analysisName = getAnalysisTypeName(type);
+    addNotification({
+      type: 'info',
+      title: 'Analysis Started',
+      message: analysisName,
+    });
 
     try {
       let data: Record<string, unknown> = {};
@@ -236,17 +256,41 @@ export function RecommendationsPage() {
         if (result.data.report) {
           addAiRecommendation(result.data.report);
         }
+
+        // Show "Analysis Complete" notification with link to view
+        addNotification({
+          type: 'success',
+          title: 'Analysis Complete!',
+          message: `${analysisName} is ready to view.`,
+          actionLabel: 'View Results',
+          actionPage: 'recommendations',
+          actionTab: 'history',
+        });
       } else {
         setAnalysisResults((prev) => ({
           ...prev,
           [type]: `Error: ${result.error}`,
         }));
+
+        // Show error notification
+        addNotification({
+          type: 'error',
+          title: 'Analysis Failed',
+          message: result.error || 'An error occurred during analysis.',
+        });
       }
     } catch (error) {
       setAnalysisResults((prev) => ({
         ...prev,
         [type]: `Error: ${error instanceof Error ? error.message : 'Analysis failed'}`,
       }));
+
+      // Show error notification
+      addNotification({
+        type: 'error',
+        title: 'Analysis Failed',
+        message: error instanceof Error ? error.message : 'An error occurred during analysis.',
+      });
     } finally {
       setLoading(false);
     }
@@ -259,6 +303,18 @@ export function RecommendationsPage() {
     setCustomQueryLoading(true);
     setCustomQueryResult('');
 
+    // Truncate prompt for notification display (max 50 chars)
+    const truncatedPrompt = customPrompt.length > 50
+      ? customPrompt.substring(0, 47) + '...'
+      : customPrompt;
+
+    // Show "Query Started" notification
+    addNotification({
+      type: 'info',
+      title: 'Custom Query Started',
+      message: truncatedPrompt,
+    });
+
     try {
       const response = await fetch('/api/ai/query', {
         method: 'POST',
@@ -269,7 +325,7 @@ export function RecommendationsPage() {
           data: {
             sales: contextOptions.includeSales ? salesData : [],
             brands: contextOptions.includeBrands ? brandData : [],
-            brandMappings: contextOptions.includeBrandMappings ? brandMappingsSummary : null,
+            brandMappings: contextOptions.includeBrandMappings ? brandMappings : null,
             products: contextOptions.includeProducts ? productData : [],
             customers: contextOptions.includeCustomers ? customerData : [],
             invoices: contextOptions.includeInvoices ? invoiceData : [],
@@ -290,11 +346,35 @@ export function RecommendationsPage() {
         if (result.data.report) {
           addAiRecommendation(result.data.report);
         }
+
+        // Show "Query Complete" notification with link to view
+        addNotification({
+          type: 'success',
+          title: 'Custom Query Complete!',
+          message: 'Your analysis is ready to view.',
+          actionLabel: 'View Results',
+          actionPage: 'recommendations',
+          actionTab: 'history',
+        });
       } else {
         setCustomQueryResult(`Error: ${result.error}`);
+
+        // Show error notification
+        addNotification({
+          type: 'error',
+          title: 'Query Failed',
+          message: result.error || 'An error occurred during the query.',
+        });
       }
     } catch (error) {
       setCustomQueryResult(`Error: ${error instanceof Error ? error.message : 'Query failed'}`);
+
+      // Show error notification
+      addNotification({
+        type: 'error',
+        title: 'Query Failed',
+        message: error instanceof Error ? error.message : 'An error occurred during the query.',
+      });
     } finally {
       setCustomQueryLoading(false);
     }
@@ -596,7 +676,7 @@ export function RecommendationsPage() {
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}
                 placeholder="e.g., What are our best performing brands in terms of margin? Which products should we consider discontinuing? How can we improve customer retention?"
-                className="w-full h-32 p-4 border border-[var(--border)] rounded-lg text-sm text-[var(--ink)] bg-white resize-none focus:outline-none focus:border-[var(--accent)]"
+                className="w-full h-32 p-4 border border-[var(--border)] rounded-lg text-sm text-[var(--ink)] bg-[var(--white)] resize-none focus:outline-none focus:border-[var(--accent)]"
               />
             </div>
 
@@ -734,7 +814,7 @@ export function RecommendationsPage() {
                           />
                         </button>
                         <AnimatedCollapse isOpen={isExpanded}>
-                          <div className="p-4 border-t border-[var(--border)] bg-white">
+                          <div className="p-4 border-t border-[var(--border)] bg-[var(--white)]">
                             {report.summary && (
                               <div className="mb-4 p-3 bg-[var(--accent)]/5 rounded-lg">
                                 <p className="text-sm font-medium text-[var(--ink)]">Question</p>

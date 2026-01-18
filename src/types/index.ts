@@ -103,8 +103,11 @@ export interface InvoiceLineItem {
   [key: string]: string | number | boolean | undefined;
   invoice_id: string;
   line_item_id: string;
+  vendor: string;       // Distributor/wholesaler from invoice header
+  brand: string;        // Product brand from line item
   product_name: string;
   product_type: string;
+  product_subtype?: string;
   sku_units: number;
   unit_cost: number;
   total_cost: number;
@@ -113,6 +116,7 @@ export interface InvoiceLineItem {
   unit_size?: string;
   trace_id?: string;
   is_promo: boolean;
+  invoice_date?: string;
 }
 
 // Research document types
@@ -171,10 +175,20 @@ export interface QRClick {
   location?: string;
 }
 
+// Organization types
+export interface UserOrganization {
+  orgId: string;
+  name: string;
+  role: 'admin' | 'member';
+}
+
 // Auth types
 export interface User {
   username: string;
   role: 'admin' | 'analyst';
+  userId?: string;
+  organizations?: UserOrganization[];
+  isGlobalAdmin?: boolean;
 }
 
 // API Response types

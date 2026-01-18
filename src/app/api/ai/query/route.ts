@@ -62,6 +62,13 @@ async function saveReportToS3(report: {
   }
 }
 
+// Brand mapping type (from S3 config/brand_product_mapping.json)
+interface BrandMappingData {
+  [canonicalBrand: string]: {
+    aliases: { [aliasName: string]: string }; // alias -> product_type
+  };
+}
+
 interface RequestBody {
   prompt: string;
   contextOptions: DataContextOptions;
@@ -74,6 +81,7 @@ interface RequestBody {
     research?: Array<{ id: string; summary: string; key_findings: string[]; category: string; date: string; source?: string }>;
     seo?: Array<{ site: string; score: number; priorities: string[]; quickWins: string[] }>;
     qrCodes?: Array<{ name: string; totalClicks: number; shortCode: string }>;
+    brandMappings?: BrandMappingData;
   };
   selectedResearchIds?: string[];
 }

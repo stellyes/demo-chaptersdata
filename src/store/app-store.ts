@@ -10,6 +10,7 @@ import { useEffect, useRef, useMemo } from 'react';
 let saveToS3Timer: ReturnType<typeof setTimeout> | null = null;
 import {
   User,
+  UserOrganization,
   StoreId,
   SalesRecord,
   BrandRecord,
@@ -37,6 +38,18 @@ export interface AIRecommendation {
   summary?: string;
 }
 
+// Notification type for the notification center
+export interface AppNotification {
+  id: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  message: string;
+  timestamp: string;
+  actionLabel?: string;
+  actionPage?: PageType;
+  actionTab?: string;
+}
+
 // Navigation pages
 export type PageType =
   | 'dashboard'
@@ -53,9 +66,17 @@ interface AppState {
   user: User | null;
   setUser: (user: User | null) => void;
 
+  // Organization context
+  currentOrganization: UserOrganization | null;
+  setCurrentOrganization: (org: UserOrganization | null) => void;
+
   // Navigation
   currentPage: PageType;
   setCurrentPage: (page: PageType) => void;
+
+  // Active tab within pages (for search navigation)
+  activeTab: string | null;
+  setActiveTab: (tab: string | null) => void;
 
   // Store filter
   selectedStore: StoreId;
@@ -150,6 +171,13 @@ interface AppState {
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
 
+  // Notifications
+  notifications: AppNotification[];
+  dismissedNotificationIds: string[];
+  addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp'>) => void;
+  dismissNotification: (id: string) => void;
+  clearAllNotifications: () => void;
+
   // Reset all state
   reset: () => void;
 
@@ -161,7 +189,9 @@ interface AppState {
 
 const initialState = {
   user: null,
+  currentOrganization: null as UserOrganization | null,
   currentPage: 'dashboard' as PageType,
+  activeTab: null as string | null,
   selectedStore: 'combined' as StoreId,
   dateRange: null,
   salesData: [] as SalesRecord[],
@@ -193,6 +223,8 @@ const initialState = {
   darkMode: false,
   sidebarOpen: false,
   dataHash: null as string | null,
+  notifications: [] as AppNotification[],
+  dismissedNotificationIds: [] as string[],
 };
 
 export const useAppStore = create<AppState>()(
@@ -202,7 +234,11 @@ export const useAppStore = create<AppState>()(
 
       setUser: (user) => set({ user }),
 
+      setCurrentOrganization: (currentOrganization) => set({ currentOrganization }),
+
       setCurrentPage: (currentPage) => set({ currentPage }),
+
+      setActiveTab: (activeTab) => set({ activeTab }),
 
       setSelectedStore: (selectedStore) => set({ selectedStore }),
 
@@ -439,6 +475,31 @@ export const useAppStore = create<AppState>()(
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
+      addNotification: (notification) =>
+        set((state) => ({
+          notifications: [
+            {
+              ...notification,
+              id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: new Date().toISOString(),
+            },
+            ...state.notifications,
+          ],
+        })),
+
+      dismissNotification: (id) =>
+        set((state) => ({
+          dismissedNotificationIds: [...state.dismissedNotificationIds, id],
+        })),
+
+      clearAllNotifications: () =>
+        set((state) => ({
+          dismissedNotificationIds: [
+            ...state.dismissedNotificationIds,
+            ...state.notifications.map((n) => n.id),
+          ],
+        })),
+
       reset: () => set(initialState),
 
       setDataHash: (dataHash) => set({ dataHash }),
@@ -527,37 +588,66 @@ export const useAppStore = create<AppState>()(
               .then(researchResult => {
                 if (researchResult.success && researchResult.data) {
                   const { research, seo, qrCodes, aiRecommendations } = researchResult.data;
-                  set((state) => ({
-                    researchData: research || [],
-                    seoData: seo || [],
-                    qrCodesData: qrCodes || [],
-                    aiRecommendations: aiRecommendations || [],
-                    dataStatus: {
-                      ...state.dataStatus,
-                      research: {
-                        loaded: true,
-                        count: research?.length || 0,
-                        lastUpdated: new Date().toISOString(),
+                  set((state) => {
+                    // Calculate total documents loaded
+                    const totalDocuments =
+                      state.dataStatus.sales.count +
+                      state.dataStatus.brands.count +
+                      state.dataStatus.products.count +
+                      state.dataStatus.budtenders.count +
+                      state.dataStatus.mappings.count +
+                      state.dataStatus.customers.count +
+                      state.dataStatus.invoices.count +
+                      (research?.length || 0) +
+                      (seo?.length || 0) +
+                      (qrCodes?.length || 0) +
+                      (aiRecommendations?.length || 0);
+
+                    // Add success notification
+                    const newNotification: AppNotification = {
+                      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                      type: 'success',
+                      title: 'Data Refreshed!',
+                      message: `${totalDocuments.toLocaleString()} documents loaded successfully.`,
+                      timestamp: new Date().toISOString(),
+                      actionLabel: 'View Details',
+                      actionPage: 'data-center',
+                    };
+
+                    return {
+                      researchData: research || [],
+                      seoData: seo || [],
+                      qrCodesData: qrCodes || [],
+                      aiRecommendations: aiRecommendations || [],
+                      dataStatus: {
+                        ...state.dataStatus,
+                        research: {
+                          loaded: true,
+                          count: research?.length || 0,
+                          lastUpdated: new Date().toISOString(),
+                        },
+                        seo: {
+                          loaded: true,
+                          count: seo?.length || 0,
+                          lastUpdated: new Date().toISOString(),
+                        },
+                        qrCodes: {
+                          loaded: true,
+                          count: qrCodes?.length || 0,
+                          lastUpdated: new Date().toISOString(),
+                        },
+                        aiRecommendations: {
+                          loaded: true,
+                          count: aiRecommendations?.length || 0,
+                          lastUpdated: new Date().toISOString(),
+                        },
                       },
-                      seo: {
-                        loaded: true,
-                        count: seo?.length || 0,
-                        lastUpdated: new Date().toISOString(),
-                      },
-                      qrCodes: {
-                        loaded: true,
-                        count: qrCodes?.length || 0,
-                        lastUpdated: new Date().toISOString(),
-                      },
-                      aiRecommendations: {
-                        loaded: true,
-                        count: aiRecommendations?.length || 0,
-                        lastUpdated: new Date().toISOString(),
-                      },
-                    },
-                    // Now all data is loaded, hide the toast
-                    isLoading: false,
-                  }));
+                      // Add the notification
+                      notifications: [newNotification, ...state.notifications],
+                      // Now all data is loaded, hide the toast
+                      isLoading: false,
+                    };
+                  });
                 } else {
                   // Even on error, stop loading
                   set({ isLoading: false });
@@ -581,10 +671,13 @@ export const useAppStore = create<AppState>()(
       name: 'chapters-app-store',
       partialize: (state) => ({
         user: state.user,
+        currentOrganization: state.currentOrganization,
         selectedStore: state.selectedStore,
         dateRange: state.dateRange,
         darkMode: state.darkMode,
         permanentEmployees: state.permanentEmployees,
+        notifications: state.notifications,
+        dismissedNotificationIds: state.dismissedNotificationIds,
       }),
     }
   )

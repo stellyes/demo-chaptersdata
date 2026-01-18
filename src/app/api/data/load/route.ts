@@ -591,7 +591,7 @@ function cleanBudtenderRecord(raw: Record<string, string>): BudtenderRecord | nu
     store_id: storeId,
     employee_name: employeeName,
     date: raw.date || raw['Date'] || '',
-    tickets_count: parseNumber(raw.tickets_count || raw['Tickets Count'] || raw.tickets || raw['Tickets']),
+    tickets_count: parseNumber(raw.tickets_count || raw.ticket_count || raw.transactions || raw['Tickets Count'] || raw['Ticket Count'] || raw['Transactions'] || raw.tickets || raw['Tickets']),
     customers_count: parseNumber(raw.customers_count || raw['Customers Count'] || raw.customers || raw['Customers']),
     net_sales: parseNumber(raw.net_sales || raw['Net Sales']),
     gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin || raw.gross_margin_ || raw['Gross Margin %'])),
