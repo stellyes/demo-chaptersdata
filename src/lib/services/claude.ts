@@ -329,6 +329,24 @@ interface BrandMappingData {
   };
 }
 
+// Past AI report structure for learning context
+export interface PastAIReport {
+  report_id: string;
+  date: string;
+  question: string;
+  answer: string;
+  model_type: string;
+  data_sources?: string[];
+  // Feedback fields (to be populated when user provides feedback)
+  feedback?: {
+    helpful?: boolean;
+    rating?: number; // 1-5
+    implemented?: boolean;
+    outcome?: string; // 'positive' | 'negative' | 'neutral' | 'unknown'
+    notes?: string;
+  };
+}
+
 // Build token-efficient data context from raw data
 export function buildDataContext(
   data: {
@@ -341,6 +359,7 @@ export function buildDataContext(
     seo?: Array<{ site: string; score: number; priorities: string[]; quickWins: string[] }>;
     qrCodes?: Array<{ name: string; totalClicks: number; shortCode: string }>;
     brandMappings?: BrandMappingData;
+    pastReports?: PastAIReport[]; // Previous AI analyses for learning
   },
   options: DataContextOptions,
   selectedResearchDocs?: Array<{ id: string; summary: string; key_findings: string[]; category: string; source?: string }>
@@ -861,6 +880,35 @@ ${seoContext}`);
 ${activeQr.slice(0, 10).map(q =>
   `- ${q.name}: ${q.totalClicks} clicks (${q.shortCode})`
 ).join('\n')}`);
+  }
+
+  // Past AI Reports for Learning Context
+  if (data.pastReports && data.pastReports.length > 0) {
+    // Sort by date, most recent first
+    const sortedReports = [...data.pastReports]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5); // Limit to last 5 relevant reports
+
+    const reportsWithFeedback = sortedReports.filter(r => r.feedback);
+    const implementedReports = reportsWithFeedback.filter(r => r.feedback?.implemented);
+    const positiveOutcomes = reportsWithFeedback.filter(r => r.feedback?.outcome === 'positive');
+
+    contextParts.push(`## Previous AI Analyses (Learning Context)
+You have made ${data.pastReports.length} previous analyses. Here are the most recent relevant ones:
+
+${sortedReports.map(r => {
+  const feedbackStr = r.feedback
+    ? `\n  Feedback: ${r.feedback.rating ? `${r.feedback.rating}/5 rating` : ''} ${r.feedback.implemented ? '✅ Implemented' : '⏳ Not yet implemented'} ${r.feedback.outcome ? `| Outcome: ${r.feedback.outcome}` : ''}`
+    : '\n  Feedback: Not yet provided';
+  return `### ${r.date} - ${r.model_type}
+Question: ${r.question.slice(0, 200)}${r.question.length > 200 ? '...' : ''}
+Key Points: ${r.answer.slice(0, 300)}...${feedbackStr}`;
+}).join('\n\n')}
+
+**Learning Summary:**
+- ${implementedReports.length} of ${reportsWithFeedback.length} recommendations with feedback were implemented
+- ${positiveOutcomes.length} had positive outcomes
+- Use this context to build upon previous insights and avoid repeating unsuccessful recommendations`);
   }
 
   return contextParts.join('\n\n');

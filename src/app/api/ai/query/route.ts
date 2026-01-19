@@ -3,8 +3,8 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { buildDataContext, customQuery, DataContextOptions } from '@/lib/services/claude';
+import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { buildDataContext, customQuery, DataContextOptions, PastAIReport } from '@/lib/services/claude';
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -23,6 +23,59 @@ function getS3Client(): S3Client {
 }
 
 const BUCKET = process.env.CHAPTERS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'retail-data-bcgr';
+
+// Load past AI reports with feedback for learning context
+async function loadPastReportsWithFeedback(limit: number = 10): Promise<PastAIReport[]> {
+  try {
+    const client = getS3Client();
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET,
+        Prefix: 'ai-reports/',
+        MaxKeys: 100,
+      })
+    );
+
+    if (!response.Contents) return [];
+
+    const reports: PastAIReport[] = [];
+    const jsonFiles = response.Contents
+      .filter(obj => obj.Key?.endsWith('.json'))
+      .sort((a, b) => (b.LastModified?.getTime() || 0) - (a.LastModified?.getTime() || 0))
+      .slice(0, limit * 2); // Get extra in case some fail
+
+    for (const obj of jsonFiles) {
+      if (reports.length >= limit) break;
+      if (!obj.Key) continue;
+
+      try {
+        const data = await client.send(
+          new GetObjectCommand({ Bucket: BUCKET, Key: obj.Key })
+        );
+        const content = await data.Body?.transformToString();
+        if (content) {
+          const report = JSON.parse(content);
+          reports.push({
+            report_id: report.report_id || obj.Key,
+            date: report.timestamp || report.date || '',
+            question: report.question || report.summary || '',
+            answer: report.answer || report.analysis || '',
+            model_type: report.model_type || 'unknown',
+            data_sources: report.data_sources,
+            feedback: report.feedback,
+          });
+        }
+      } catch {
+        // Skip invalid files
+      }
+    }
+
+    return reports;
+  } catch (error) {
+    console.error('Error loading past reports:', error);
+    return [];
+  }
+}
 
 // Save report to S3
 async function saveReportToS3(report: {
@@ -104,8 +157,15 @@ export async function POST(request: NextRequest) {
       selectedResearchDocs = data.research.filter(r => selectedResearchIds.includes(r.id));
     }
 
-    // Build the data context with token-efficient summaries
-    const dataContext = buildDataContext(data, contextOptions, selectedResearchDocs);
+    // Load past reports with feedback for learning context
+    const pastReports = await loadPastReportsWithFeedback(5);
+
+    // Build the data context with token-efficient summaries and learning context
+    const dataContext = buildDataContext(
+      { ...data, pastReports },
+      contextOptions,
+      selectedResearchDocs
+    );
 
     // Execute the custom query
     const analysis = await customQuery(prompt, dataContext);
