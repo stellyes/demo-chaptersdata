@@ -284,6 +284,7 @@ export interface DataContextOptions {
   includeResearch?: boolean;
   includeSeo?: boolean;
   includeQrCodes?: boolean;
+  includeHealthCheck?: boolean; // Include data health status and gaps
   // Specific research document IDs to include with full text
   selectedResearchIds?: string[];
 }
@@ -347,6 +348,21 @@ export interface PastAIReport {
   };
 }
 
+// Health check report structure (imported type)
+interface HealthCheckReportContext {
+  timestamp: string;
+  summary: {
+    totalGaps: number;
+    criticalGaps: number;
+    warningGaps: number;
+    overallHealthScore: number;
+  };
+  dataFreshness: Array<{ source: string; lastDataPoint: string; dataLagDays: number; status: string }>;
+  gaps: Array<{ type: string; severity: string; source: string; description: string; suggestedAction?: string }>;
+  trends: Array<{ metric: string; currentValue: number; baselineValue: number; percentChange: number; direction: string; severity: string }>;
+  insights: string[];
+}
+
 // Build token-efficient data context from raw data
 export function buildDataContext(
   data: {
@@ -360,11 +376,63 @@ export function buildDataContext(
     qrCodes?: Array<{ name: string; totalClicks: number; shortCode: string }>;
     brandMappings?: BrandMappingData;
     pastReports?: PastAIReport[]; // Previous AI analyses for learning
+    healthCheck?: HealthCheckReportContext; // Data health status
   },
   options: DataContextOptions,
   selectedResearchDocs?: Array<{ id: string; summary: string; key_findings: string[]; category: string; source?: string }>
 ): string {
   const contextParts: string[] = [];
+
+  // Data Health Status (show first so Claude is aware of data quality)
+  if (options.includeHealthCheck && data.healthCheck) {
+    const hc = data.healthCheck;
+    const criticalGaps = hc.gaps.filter(g => g.severity === 'critical');
+    const warningGaps = hc.gaps.filter(g => g.severity === 'warning');
+    const criticalTrends = hc.trends.filter(t => t.severity === 'critical');
+
+    let healthContext = `## Data Health Status (as of ${hc.timestamp})
+**Overall Health Score: ${hc.summary.overallHealthScore}/100**
+
+### Data Freshness:
+${hc.dataFreshness.map(f =>
+  `- **${f.source}**: ${f.status.toUpperCase()} (last data: ${f.lastDataPoint}, ${f.dataLagDays} days ago)`
+).join('\n')}`;
+
+    if (criticalGaps.length > 0) {
+      healthContext += `\n
+### Critical Data Gaps (${criticalGaps.length}):
+${criticalGaps.map(g =>
+  `- **[${g.source.toUpperCase()}]** ${g.description}${g.suggestedAction ? `\n  → Action: ${g.suggestedAction}` : ''}`
+).join('\n')}`;
+    }
+
+    if (warningGaps.length > 0) {
+      healthContext += `\n
+### Warning Data Gaps (${warningGaps.length}):
+${warningGaps.slice(0, 5).map(g =>
+  `- [${g.source}] ${g.description}`
+).join('\n')}${warningGaps.length > 5 ? `\n- ... and ${warningGaps.length - 5} more warnings` : ''}`;
+    }
+
+    if (criticalTrends.length > 0) {
+      healthContext += `\n
+### Trend Anomalies Detected:
+${criticalTrends.map(t =>
+  `- **${t.metric}**: ${t.percentChange > 0 ? '+' : ''}${t.percentChange.toFixed(1)}% ${t.direction} (current: ${typeof t.currentValue === 'number' && t.currentValue > 100 ? '$' + t.currentValue.toLocaleString() : t.currentValue.toFixed(1)} vs baseline: ${typeof t.baselineValue === 'number' && t.baselineValue > 100 ? '$' + t.baselineValue.toLocaleString() : t.baselineValue.toFixed(1)})`
+).join('\n')}`;
+    }
+
+    if (hc.insights.length > 0) {
+      healthContext += `\n
+### Key Insights:
+${hc.insights.map(i => `- ${i}`).join('\n')}`;
+    }
+
+    healthContext += `\n
+**Note:** Consider these data quality issues when making recommendations. Data gaps may affect accuracy of insights for affected sources.`;
+
+    contextParts.push(healthContext);
+  }
 
   // Sales summary (token-efficient)
   if (options.includeSales && data.sales && data.sales.length > 0) {

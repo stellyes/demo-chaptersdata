@@ -511,21 +511,22 @@ function cleanProductRecord(raw: Record<string, string>, storeId: string): Produ
   };
 }
 
-// Customer segment thresholds
+// Customer segment thresholds (aligned with config.ts)
 const CUSTOMER_SEGMENTS: Record<string, { min: number; max: number }> = {
-  'New/Low': { min: 0, max: 100 },
-  Regular: { min: 100, max: 500 },
-  Good: { min: 500, max: 1500 },
-  VIP: { min: 1500, max: 5000 },
-  Whale: { min: 5000, max: Infinity },
+  'New/Low': { min: 0, max: 500 },
+  Regular: { min: 500, max: 2000 },
+  Good: { min: 2000, max: 5000 },
+  VIP: { min: 5000, max: 10000 },
+  Whale: { min: 10000, max: Infinity },
 };
 
+// Recency segment thresholds (aligned with config.ts)
 const RECENCY_SEGMENTS: Record<string, { min: number; max: number }> = {
-  Active: { min: 0, max: 14 },
-  Warm: { min: 14, max: 30 },
-  Cool: { min: 30, max: 60 },
-  Cold: { min: 60, max: 120 },
-  Lost: { min: 120, max: Infinity },
+  Active: { min: 0, max: 30 },
+  Warm: { min: 30, max: 90 },
+  Cool: { min: 90, max: 180 },
+  Cold: { min: 180, max: 365 },
+  Lost: { min: 365, max: Infinity },
 };
 
 function getCustomerSegment(lifetimeValue: number): string {

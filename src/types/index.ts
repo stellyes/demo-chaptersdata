@@ -259,3 +259,73 @@ export interface UploadMetadata {
   uploaded_at: string;
   filename: string;
 }
+
+// ============================================
+// DATA HEALTH & TREND DETECTION TYPES
+// ============================================
+
+export type DataHealthSeverity = 'critical' | 'warning' | 'info';
+
+export type GapType =
+  | 'missing_date_range'
+  | 'empty_field'
+  | 'unmapped_brand'
+  | 'stale_data'
+  | 'threshold_mismatch';
+
+export type DataSourceType = 'sales' | 'brands' | 'products' | 'customers' | 'invoices' | 'research' | 'qr' | 'config';
+
+export interface DataGap {
+  id: string;
+  type: GapType;
+  severity: DataHealthSeverity;
+  source: DataSourceType;
+  description: string;
+  affectedRecords: number;
+  detectedAt: string;
+  context?: Record<string, unknown>;
+  suggestedAction?: string;
+}
+
+export interface TrendAnomaly {
+  id: string;
+  metric: string;
+  source: DataSourceType;
+  currentValue: number;
+  baselineValue: number;
+  percentChange: number;
+  direction: 'increase' | 'decrease';
+  severity: DataHealthSeverity;
+  period: { start: string; end: string };
+  detectedAt: string;
+  context?: string;
+}
+
+export interface DataFreshnessMetric {
+  source: DataSourceType;
+  lastDataPoint: string;
+  dataLagDays: number;
+  lastUpdated: string;
+  recordCount: number;
+  status: 'fresh' | 'stale' | 'critical';
+}
+
+export interface HealthCheckSummary {
+  totalGaps: number;
+  criticalGaps: number;
+  warningGaps: number;
+  infoGaps: number;
+  trendAnomalies: number;
+  overallHealthScore: number; // 0-100
+}
+
+export interface HealthCheckReport {
+  report_id: string;
+  timestamp: string;
+  summary: HealthCheckSummary;
+  dataFreshness: DataFreshnessMetric[];
+  gaps: DataGap[];
+  trends: TrendAnomaly[];
+  insights: string[];
+  recommendations: string[];
+}

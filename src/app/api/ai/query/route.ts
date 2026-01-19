@@ -24,6 +24,42 @@ function getS3Client(): S3Client {
 
 const BUCKET = process.env.CHAPTERS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'retail-data-bcgr';
 
+// Health check report type for context
+interface HealthCheckReportContext {
+  timestamp: string;
+  summary: {
+    totalGaps: number;
+    criticalGaps: number;
+    warningGaps: number;
+    overallHealthScore: number;
+  };
+  dataFreshness: Array<{ source: string; lastDataPoint: string; dataLagDays: number; status: string }>;
+  gaps: Array<{ type: string; severity: string; source: string; description: string; suggestedAction?: string }>;
+  trends: Array<{ metric: string; currentValue: number; baselineValue: number; percentChange: number; direction: string; severity: string }>;
+  insights: string[];
+}
+
+// Load latest health check from S3
+async function loadLatestHealthCheck(): Promise<HealthCheckReportContext | null> {
+  try {
+    const client = getS3Client();
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: BUCKET,
+        Key: 'data-health/latest.json',
+      })
+    );
+    const content = await response.Body?.transformToString();
+    if (content) {
+      return JSON.parse(content) as HealthCheckReportContext;
+    }
+    return null;
+  } catch {
+    // Health check not yet run
+    return null;
+  }
+}
+
 // Load past AI reports with feedback for learning context
 async function loadPastReportsWithFeedback(limit: number = 10): Promise<PastAIReport[]> {
   try {
@@ -160,10 +196,19 @@ export async function POST(request: NextRequest) {
     // Load past reports with feedback for learning context
     const pastReports = await loadPastReportsWithFeedback(5);
 
+    // Load latest health check for data quality awareness
+    const healthCheck = await loadLatestHealthCheck();
+
+    // Auto-enable health check in context if data is available
+    const enhancedContextOptions = {
+      ...contextOptions,
+      includeHealthCheck: healthCheck !== null,
+    };
+
     // Build the data context with token-efficient summaries and learning context
     const dataContext = buildDataContext(
-      { ...data, pastReports },
-      contextOptions,
+      { ...data, pastReports, healthCheck: healthCheck || undefined },
+      enhancedContextOptions,
       selectedResearchDocs
     );
 
@@ -204,6 +249,7 @@ export async function POST(request: NextRequest) {
           seo: contextOptions.includeSeo && (data.seo?.length || 0) > 0,
           qrCodes: contextOptions.includeQrCodes && (data.qrCodes?.length || 0) > 0,
           selectedResearch: selectedResearchDocs?.length || 0,
+          healthCheck: healthCheck !== null,
         },
       },
     });
