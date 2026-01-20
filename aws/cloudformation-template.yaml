@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Daily Learning System for Chapters-Data - Lambda + EventBridge
+Description: Learning System for Chapters-Data - Daily + Monthly Analysis with Lambda + EventBridge
 
 Parameters:
   Environment:
@@ -44,7 +44,9 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/daily-learning-*'
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/daily-learning-*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/monthly-analysis-*'
 
   # Scheduled Lambda Function (runs daily at 5 AM UTC / 9 PM PST)
   DailyLearningScheduledFunction:
@@ -267,21 +269,266 @@ Resources:
         - Name: FunctionName
           Value: !Ref DailyLearningScheduledFunction
 
+  # ============================================
+  # MONTHLY OPUS STRATEGIC ANALYSIS
+  # Runs on the 1st of each month at 6 AM UTC
+  # ============================================
+
+  # Monthly Analysis Lambda Function
+  MonthlyAnalysisScheduledFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'monthly-analysis-scheduled-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt DailyLearningLambdaRole.Arn
+      Timeout: 900
+      MemorySize: 512
+      Environment:
+        Variables:
+          API_ENDPOINT: !Ref ApiEndpoint
+          LEARNING_API_KEY: !Ref LearningApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          const https = require('https');
+          const http = require('http');
+
+          exports.handler = async (event) => {
+            console.log('Monthly Opus Analysis Lambda triggered', JSON.stringify(event));
+
+            const apiEndpoint = process.env.API_ENDPOINT;
+            const apiKey = process.env.LEARNING_API_KEY;
+
+            if (!apiEndpoint || !apiKey) {
+              throw new Error('Missing required environment variables');
+            }
+
+            const url = new URL('/api/learning/monthly', apiEndpoint);
+            const isHttps = url.protocol === 'https:';
+            const client = isHttps ? https : http;
+
+            const requestBody = JSON.stringify({
+              action: 'run',
+              forceRun: false
+            });
+
+            const options = {
+              hostname: url.hostname,
+              port: url.port || (isHttps ? 443 : 80),
+              path: url.pathname,
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Length': Buffer.byteLength(requestBody)
+              }
+            };
+
+            return new Promise((resolve, reject) => {
+              const req = client.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  console.log('Response status:', res.statusCode);
+                  console.log('Response body:', data);
+
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({
+                      statusCode: 200,
+                      body: JSON.stringify({
+                        message: 'Monthly analysis triggered successfully',
+                        response: JSON.parse(data)
+                      })
+                    });
+                  } else {
+                    reject(new Error(`API returned ${res.statusCode}: ${data}`));
+                  }
+                });
+              });
+
+              req.on('error', (e) => {
+                console.error('Request error:', e);
+                reject(e);
+              });
+
+              req.write(requestBody);
+              req.end();
+            });
+          };
+
+  # Manual Monthly Analysis Lambda
+  MonthlyAnalysisManualFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'monthly-analysis-manual-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt DailyLearningLambdaRole.Arn
+      Timeout: 900
+      MemorySize: 512
+      Environment:
+        Variables:
+          API_ENDPOINT: !Ref ApiEndpoint
+          LEARNING_API_KEY: !Ref LearningApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          const https = require('https');
+          const http = require('http');
+
+          exports.handler = async (event) => {
+            console.log('Manual Monthly Analysis Lambda triggered', JSON.stringify(event));
+
+            const apiEndpoint = process.env.API_ENDPOINT;
+            const apiKey = process.env.LEARNING_API_KEY;
+            const monthYear = event.monthYear || null;
+            const forceRun = event.forceRun || false;
+
+            if (!apiEndpoint || !apiKey) {
+              throw new Error('Missing required environment variables');
+            }
+
+            const url = new URL('/api/learning/monthly', apiEndpoint);
+            const isHttps = url.protocol === 'https:';
+            const client = isHttps ? https : http;
+
+            const requestBody = JSON.stringify({
+              action: 'run',
+              monthYear,
+              forceRun
+            });
+
+            const options = {
+              hostname: url.hostname,
+              port: url.port || (isHttps ? 443 : 80),
+              path: url.pathname,
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Length': Buffer.byteLength(requestBody)
+              }
+            };
+
+            return new Promise((resolve, reject) => {
+              const req = client.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  console.log('Response status:', res.statusCode);
+                  console.log('Response body:', data);
+
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({
+                      statusCode: 200,
+                      body: JSON.stringify({
+                        message: 'Monthly analysis triggered successfully',
+                        response: JSON.parse(data)
+                      })
+                    });
+                  } else {
+                    reject(new Error(`API returned ${res.statusCode}: ${data}`));
+                  }
+                });
+              });
+
+              req.on('error', (e) => {
+                console.error('Request error:', e);
+                reject(e);
+              });
+
+              req.write(requestBody);
+              req.end();
+            });
+          };
+
+  # EventBridge Rule - Monthly on 1st at 6 AM UTC (10 PM PST previous day)
+  MonthlyAnalysisScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'monthly-analysis-schedule-${Environment}'
+      Description: Triggers monthly Opus analysis on the 1st at 6 AM UTC
+      ScheduleExpression: 'cron(0 6 1 * ? *)'
+      State: ENABLED
+      Targets:
+        - Id: MonthlyAnalysisTarget
+          Arn: !GetAtt MonthlyAnalysisScheduledFunction.Arn
+
+  # Permission for EventBridge to invoke Monthly Lambda
+  MonthlyAnalysisSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MonthlyAnalysisScheduledFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt MonthlyAnalysisScheduleRule.Arn
+
+  # CloudWatch Log Groups for Monthly Analysis
+  MonthlyScheduledFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/monthly-analysis-scheduled-${Environment}'
+      RetentionInDays: 90
+
+  MonthlyManualFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/monthly-analysis-manual-${Environment}'
+      RetentionInDays: 90
+
+  # CloudWatch Alarm for Monthly Analysis failures
+  MonthlyAnalysisFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'monthly-analysis-failure-${Environment}'
+      AlarmDescription: Alerts when monthly Opus analysis Lambda fails
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MonthlyAnalysisScheduledFunction
+
 Outputs:
-  ScheduledFunctionArn:
-    Description: ARN of the scheduled Lambda function
+  # Daily Learning Outputs
+  DailyScheduledFunctionArn:
+    Description: ARN of the daily scheduled Lambda function
     Value: !GetAtt DailyLearningScheduledFunction.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-ScheduledFunctionArn'
+      Name: !Sub '${AWS::StackName}-DailyScheduledFunctionArn'
 
-  ManualFunctionArn:
-    Description: ARN of the manual trigger Lambda function
+  DailyManualFunctionArn:
+    Description: ARN of the daily manual trigger Lambda function
     Value: !GetAtt DailyLearningManualFunction.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-ManualFunctionArn'
+      Name: !Sub '${AWS::StackName}-DailyManualFunctionArn'
 
-  ScheduleRuleArn:
-    Description: ARN of the EventBridge schedule rule
+  DailyScheduleRuleArn:
+    Description: ARN of the daily EventBridge schedule rule
     Value: !GetAtt DailyLearningScheduleRule.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-ScheduleRuleArn'
+      Name: !Sub '${AWS::StackName}-DailyScheduleRuleArn'
+
+  # Monthly Analysis Outputs
+  MonthlyScheduledFunctionArn:
+    Description: ARN of the monthly Opus analysis Lambda function
+    Value: !GetAtt MonthlyAnalysisScheduledFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-MonthlyScheduledFunctionArn'
+
+  MonthlyManualFunctionArn:
+    Description: ARN of the monthly manual trigger Lambda function
+    Value: !GetAtt MonthlyAnalysisManualFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-MonthlyManualFunctionArn'
+
+  MonthlyScheduleRuleArn:
+    Description: ARN of the monthly EventBridge schedule rule
+    Value: !GetAtt MonthlyAnalysisScheduleRule.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-MonthlyScheduleRuleArn'

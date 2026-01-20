@@ -642,3 +642,91 @@ model ApiUsageTracker {
 
   @@map("api_usage_tracker")
 }
+
+// ============================================
+// MONTHLY OPUS STRATEGIC ANALYSIS
+// Deep strategic analysis using Claude Opus
+// Runs once per month for comprehensive review
+// ============================================
+
+model MonthlyAnalysisJob {
+  id              String    @id @default(uuid())
+  startedAt       DateTime  @default(now()) @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  status          String    @default("running") // running, completed, failed
+  currentPhase    String?   @map("current_phase")
+
+  monthYear       String    @map("month_year") // e.g., "2025-01"
+
+  dataAggregationDone   Boolean @default(false) @map("data_aggregation_done")
+  trendAnalysisDone     Boolean @default(false) @map("trend_analysis_done")
+  strategyGenDone       Boolean @default(false) @map("strategy_gen_done")
+  reportGenDone         Boolean @default(false) @map("report_gen_done")
+
+  inputTokens     Int      @default(0) @map("input_tokens")
+  outputTokens    Int      @default(0) @map("output_tokens")
+  estimatedCost   Decimal  @default(0) @map("estimated_cost") @db.Decimal(10, 4)
+
+  errorMessage    String?  @map("error_message") @db.Text
+  errorPhase      String?  @map("error_phase")
+
+  reportId        String?  @unique @map("report_id")
+  report          MonthlyStrategicReport? @relation(fields: [reportId], references: [id])
+
+  @@unique([monthYear])
+  @@index([startedAt])
+  @@index([status])
+  @@map("monthly_analysis_jobs")
+}
+
+model MonthlyStrategicReport {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now()) @map("created_at")
+  monthYear       String   @unique @map("month_year") // e.g., "2025-01"
+
+  // Executive Analysis
+  executiveSummary      String  @map("executive_summary") @db.Text
+  performanceGrade      String  @map("performance_grade") // A, B, C, D, F
+  monthOverMonthChange  Json    @map("mom_change") // { revenue: +5%, customers: -2%, etc }
+
+  // Strategic Analysis
+  strengthsAnalysis     Json    @default("[]") @map("strengths_analysis")
+  weaknessesAnalysis    Json    @default("[]") @map("weaknesses_analysis")
+  opportunitiesAnalysis Json    @default("[]") @map("opportunities_analysis")
+  threatsAnalysis       Json    @default("[]") @map("threats_analysis")
+
+  // Trend Analysis
+  salesTrends           Json    @default("[]") @map("sales_trends")
+  customerTrends        Json    @default("[]") @map("customer_trends")
+  brandTrends           Json    @default("[]") @map("brand_trends")
+  marketTrends          Json    @default("[]") @map("market_trends")
+
+  // Strategic Recommendations
+  strategicPriorities   Json    @default("[]") @map("strategic_priorities")
+  quarterlyGoals        Json    @default("[]") @map("quarterly_goals")
+  resourceAllocations   Json    @default("[]") @map("resource_allocations")
+  riskMitigations       Json    @default("[]") @map("risk_mitigations")
+
+  // Competitive & Market Analysis
+  competitiveLandscape  Json    @default("{}") @map("competitive_landscape")
+  marketPositioning     Json    @default("{}") @map("market_positioning")
+  regulatoryOutlook     Json    @default("{}") @map("regulatory_outlook")
+
+  // Forecasts
+  revenueProjections    Json    @default("[]") @map("revenue_projections")
+  growthOpportunities   Json    @default("[]") @map("growth_opportunities")
+  riskFactors           Json    @default("[]") @map("risk_factors")
+
+  // Questions for Next Month
+  keyQuestionsNext      Json    @default("[]") @map("key_questions_next")
+
+  // Metadata
+  dataHealthScore       Float   @default(0) @map("data_health_score")
+  confidenceScore       Float   @default(0) @map("confidence_score")
+  dailyDigestsIncluded  Int     @default(0) @map("daily_digests_included")
+
+  job                   MonthlyAnalysisJob?
+
+  @@index([createdAt])
+  @@map("monthly_strategic_reports")
+}
