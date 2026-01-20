@@ -135,3 +135,85 @@ CREATE INDEX IF NOT EXISTS idx_api_usage_tracker_service_month ON api_usage_trac
 INSERT INTO api_usage_tracker (service, month, usage_count, monthly_limit)
 VALUES ('serpapi', TO_CHAR(NOW(), 'YYYY-MM'), 0, 250)
 ON CONFLICT (service, month) DO NOTHING;
+
+-- ============================================
+-- MONTHLY OPUS STRATEGIC ANALYSIS TABLES
+-- ============================================
+
+-- Monthly Analysis Jobs table
+CREATE TABLE IF NOT EXISTS monthly_analysis_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'running',
+    current_phase VARCHAR(100),
+    month_year VARCHAR(7) NOT NULL UNIQUE,
+    data_aggregation_done BOOLEAN DEFAULT FALSE,
+    trend_analysis_done BOOLEAN DEFAULT FALSE,
+    strategy_gen_done BOOLEAN DEFAULT FALSE,
+    report_gen_done BOOLEAN DEFAULT FALSE,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    estimated_cost DECIMAL(10, 4) DEFAULT 0,
+    error_message TEXT,
+    error_phase VARCHAR(100),
+    report_id UUID UNIQUE
+);
+
+CREATE INDEX IF NOT EXISTS idx_monthly_analysis_jobs_started_at ON monthly_analysis_jobs(started_at);
+CREATE INDEX IF NOT EXISTS idx_monthly_analysis_jobs_status ON monthly_analysis_jobs(status);
+
+-- Monthly Strategic Reports table
+CREATE TABLE IF NOT EXISTS monthly_strategic_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    month_year VARCHAR(7) NOT NULL UNIQUE,
+
+    -- Executive Analysis
+    executive_summary TEXT NOT NULL,
+    performance_grade VARCHAR(2) NOT NULL,
+    mom_change JSONB NOT NULL DEFAULT '{}',
+
+    -- SWOT Analysis
+    strengths_analysis JSONB NOT NULL DEFAULT '[]',
+    weaknesses_analysis JSONB NOT NULL DEFAULT '[]',
+    opportunities_analysis JSONB NOT NULL DEFAULT '[]',
+    threats_analysis JSONB NOT NULL DEFAULT '[]',
+
+    -- Trend Analysis
+    sales_trends JSONB NOT NULL DEFAULT '[]',
+    customer_trends JSONB NOT NULL DEFAULT '[]',
+    brand_trends JSONB NOT NULL DEFAULT '[]',
+    market_trends JSONB NOT NULL DEFAULT '[]',
+
+    -- Strategic Recommendations
+    strategic_priorities JSONB NOT NULL DEFAULT '[]',
+    quarterly_goals JSONB NOT NULL DEFAULT '[]',
+    resource_allocations JSONB NOT NULL DEFAULT '[]',
+    risk_mitigations JSONB NOT NULL DEFAULT '[]',
+
+    -- Competitive & Market Analysis
+    competitive_landscape JSONB NOT NULL DEFAULT '{}',
+    market_positioning JSONB NOT NULL DEFAULT '{}',
+    regulatory_outlook JSONB NOT NULL DEFAULT '{}',
+
+    -- Forecasts
+    revenue_projections JSONB NOT NULL DEFAULT '[]',
+    growth_opportunities JSONB NOT NULL DEFAULT '[]',
+    risk_factors JSONB NOT NULL DEFAULT '[]',
+
+    -- Questions for Next Month
+    key_questions_next JSONB NOT NULL DEFAULT '[]',
+
+    -- Metadata
+    data_health_score FLOAT DEFAULT 0,
+    confidence_score FLOAT DEFAULT 0,
+    daily_digests_included INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_monthly_strategic_reports_created_at ON monthly_strategic_reports(created_at);
+
+-- Add foreign key constraint for report_id
+ALTER TABLE monthly_analysis_jobs
+ADD CONSTRAINT fk_monthly_analysis_jobs_report
+FOREIGN KEY (report_id) REFERENCES monthly_strategic_reports(id);

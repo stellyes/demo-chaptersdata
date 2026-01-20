@@ -1,12 +1,14 @@
-# Daily Learning System - AWS Deployment
+# Learning System - AWS Deployment
 
-This directory contains the AWS infrastructure for the autonomous daily learning system.
+This directory contains the AWS infrastructure for the autonomous learning system:
+- **Daily Learning**: Runs every day at 5 AM UTC using Haiku/Sonnet (~$2.50/day)
+- **Monthly Opus Analysis**: Runs on the 1st of each month at 6 AM UTC using Opus (~$10-15/month)
 
 ## Architecture
 
-- **Lambda Functions**: Two functions for scheduled and manual triggers
-- **EventBridge**: Scheduled rule runs daily at 5 AM UTC (9 PM PST)
-- **CloudWatch**: Logs and failure alarms
+- **Lambda Functions**: Four functions (daily scheduled, daily manual, monthly scheduled, monthly manual)
+- **EventBridge**: Two scheduled rules (daily at 5 AM UTC, monthly on 1st at 6 AM UTC)
+- **CloudWatch**: Logs and failure alarms for both systems
 
 ## Deployment
 
@@ -45,12 +47,31 @@ npx prisma db push
 
 ## Manual Invocation
 
-Trigger a learning job manually via AWS CLI:
+### Daily Learning
+Trigger a daily learning job manually:
 
 ```bash
 aws lambda invoke \
   --function-name daily-learning-manual-production \
   --payload '{"forceRun": false, "skipWebResearch": false}' \
+  response.json
+```
+
+### Monthly Opus Analysis
+Trigger a monthly analysis manually:
+
+```bash
+aws lambda invoke \
+  --function-name monthly-analysis-manual-production \
+  --payload '{"forceRun": false}' \
+  response.json
+```
+
+To analyze a specific month:
+```bash
+aws lambda invoke \
+  --function-name monthly-analysis-manual-production \
+  --payload '{"monthYear": "2025-01", "forceRun": true}' \
   response.json
 ```
 
@@ -64,13 +85,28 @@ aws lambda invoke \
 
 ## Monitoring
 
+### Daily Learning
 - **CloudWatch Logs**: `/aws/lambda/daily-learning-scheduled-production`
 - **Failure Alarm**: `daily-learning-failure-production`
 
+### Monthly Opus Analysis
+- **CloudWatch Logs**: `/aws/lambda/monthly-analysis-scheduled-production`
+- **Failure Alarm**: `monthly-analysis-failure-production`
+
 ## Cost Estimate
 
-- Lambda: ~$0.01/month (one execution per day)
-- EventBridge: Free tier covers daily triggers
-- CloudWatch Logs: ~$0.50/month for retention
+### AWS Infrastructure
+- Lambda: ~$0.02/month (daily + monthly executions)
+- EventBridge: Free tier covers triggers
+- CloudWatch Logs: ~$1/month for retention
 
-Total AWS infrastructure cost: ~$1/month
+### Claude API Costs
+| System | Model | Frequency | Est. Cost |
+|--------|-------|-----------|-----------|
+| Daily Learning | Haiku + Sonnet | Daily | ~$75/month |
+| Monthly Analysis | Opus | Monthly | ~$10-15/month |
+
+### External APIs
+- SerpAPI: ~$50/month (250 searches)
+
+**Total Monthly Estimate: ~$135-140/month**
