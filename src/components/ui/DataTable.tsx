@@ -11,12 +11,6 @@ interface Column<T> {
   align?: 'left' | 'right' | 'center';
 }
 
-const alignmentClasses = {
-  left: 'text-left justify-start',
-  right: 'text-right justify-end',
-  center: 'text-center justify-center',
-} as const;
-
 interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
@@ -105,12 +99,12 @@ export function DataTable<T extends Record<string, unknown>>({
               {columns.map((col) => (
                 <th
                   key={String(col.key)}
-                  className={`py-3 px-4 text-[var(--muted)] font-medium text-xs uppercase tracking-wider ${
-                    alignmentClasses[col.align || 'left']
-                  } ${col.sortable ? 'cursor-pointer hover:text-[var(--ink)]' : ''}`}
+                  className={`py-3 px-4 text-${col.align || 'left'} text-[var(--muted)] font-medium text-xs uppercase tracking-wider ${
+                    col.sortable ? 'cursor-pointer hover:text-[var(--ink)]' : ''
+                  }`}
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
-                  <div className={`flex items-center gap-1 ${alignmentClasses[col.align || 'left']}`}>
+                  <div className="flex items-center gap-1">
                     {col.label}
                     {col.sortable && (
                       <span className="ml-1">
@@ -136,7 +130,7 @@ export function DataTable<T extends Record<string, unknown>>({
                 {columns.map((col) => (
                   <td
                     key={String(col.key)}
-                    className={`py-4 px-4 text-sm ${alignmentClasses[col.align || 'left']}`}
+                    className={`py-4 px-4 text-${col.align || 'left'} text-sm`}
                   >
                     {col.render ? col.render(row[col.key], row) : String(row[col.key] ?? '')}
                   </td>

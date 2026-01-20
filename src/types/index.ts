@@ -103,11 +103,8 @@ export interface InvoiceLineItem {
   [key: string]: string | number | boolean | undefined;
   invoice_id: string;
   line_item_id: string;
-  vendor: string;       // Distributor/wholesaler from invoice header
-  brand: string;        // Product brand from line item
   product_name: string;
   product_type: string;
-  product_subtype?: string;
   sku_units: number;
   unit_cost: number;
   total_cost: number;
@@ -116,18 +113,17 @@ export interface InvoiceLineItem {
   unit_size?: string;
   trace_id?: string;
   is_promo: boolean;
-  invoice_date?: string;
 }
 
 // Research document types
 export interface ResearchDocument {
   id: string;
-  date: string;
+  filename: string;
+  s3_key: string;
   category: string;
-  summary: string;
-  key_findings: string[];
-  relevance: string;
-  source?: string;
+  source_url?: string;
+  uploaded_at: string;
+  analysis?: DocumentAnalysis;
 }
 
 export interface DocumentAnalysis {
@@ -150,20 +146,21 @@ export interface KeyFinding {
 export interface SEOSummary {
   site: string;
   score: number;
-  priorities: string[];
-  quickWins: string[];
-  lastUpdated: string;
+  top_priorities: string[];
+  quick_wins: string[];
+  analyzed_at: string;
 }
 
 // QR Code types
 export interface QRCode {
-  shortCode: string;
-  originalUrl: string;
+  short_code: string;
+  original_url: string;
   name: string;
   description?: string;
-  createdAt: string;
-  totalClicks: number;
+  created_at: string;
+  total_clicks: number;
   active: boolean;
+  deleted: boolean;
 }
 
 export interface QRClick {
@@ -175,20 +172,10 @@ export interface QRClick {
   location?: string;
 }
 
-// Organization types
-export interface UserOrganization {
-  orgId: string;
-  name: string;
-  role: 'admin' | 'member';
-}
-
 // Auth types
 export interface User {
   username: string;
   role: 'admin' | 'analyst';
-  userId?: string;
-  organizations?: UserOrganization[];
-  isGlobalAdmin?: boolean;
 }
 
 // API Response types
@@ -218,13 +205,23 @@ export interface BudtenderRecord {
   units_sold: number;
 }
 
-// Budtender store assignments (persisted to S3)
-export interface BudtenderAssignments {
-  assignments: Record<string, StoreId>; // employee_name -> store_id
-  last_updated: string;
+// Brand-Product Mapping types (v2 structure)
+// Maps alias names to their product types
+export interface BrandAliases {
+  [aliasName: string]: string; // alias -> product_type
 }
 
-// Brand-Product Mapping types (legacy v1)
+// A single brand entry with its canonical name and all aliases
+export interface BrandEntry {
+  aliases: BrandAliases;
+}
+
+// The full brand mapping structure: canonical brand name -> brand entry
+export interface BrandMappingData {
+  [canonicalBrand: string]: BrandEntry;
+}
+
+// Legacy types (deprecated, kept for backwards compatibility)
 export interface BrandMapping {
   brand: string;
   product_type: string;
@@ -237,20 +234,6 @@ export interface BrandMappingsData {
   last_updated: string;
 }
 
-// Brand-Product Mapping types (v2 structure)
-// Maps canonical brand name -> aliases -> product types
-export interface BrandAliases {
-  [aliasName: string]: string; // alias -> product_type
-}
-
-export interface BrandEntry {
-  aliases: BrandAliases;
-}
-
-export interface BrandMappingData {
-  [canonicalBrand: string]: BrandEntry;
-}
-
 // Upload metadata
 export interface UploadMetadata {
   store: StoreId;
@@ -258,74 +241,4 @@ export interface UploadMetadata {
   end_date: string;
   uploaded_at: string;
   filename: string;
-}
-
-// ============================================
-// DATA HEALTH & TREND DETECTION TYPES
-// ============================================
-
-export type DataHealthSeverity = 'critical' | 'warning' | 'info';
-
-export type GapType =
-  | 'missing_date_range'
-  | 'empty_field'
-  | 'unmapped_brand'
-  | 'stale_data'
-  | 'threshold_mismatch';
-
-export type DataSourceType = 'sales' | 'brands' | 'products' | 'customers' | 'invoices' | 'research' | 'qr' | 'config';
-
-export interface DataGap {
-  id: string;
-  type: GapType;
-  severity: DataHealthSeverity;
-  source: DataSourceType;
-  description: string;
-  affectedRecords: number;
-  detectedAt: string;
-  context?: Record<string, unknown>;
-  suggestedAction?: string;
-}
-
-export interface TrendAnomaly {
-  id: string;
-  metric: string;
-  source: DataSourceType;
-  currentValue: number;
-  baselineValue: number;
-  percentChange: number;
-  direction: 'increase' | 'decrease';
-  severity: DataHealthSeverity;
-  period: { start: string; end: string };
-  detectedAt: string;
-  context?: string;
-}
-
-export interface DataFreshnessMetric {
-  source: DataSourceType;
-  lastDataPoint: string;
-  dataLagDays: number;
-  lastUpdated: string;
-  recordCount: number;
-  status: 'fresh' | 'stale' | 'critical';
-}
-
-export interface HealthCheckSummary {
-  totalGaps: number;
-  criticalGaps: number;
-  warningGaps: number;
-  infoGaps: number;
-  trendAnomalies: number;
-  overallHealthScore: number; // 0-100
-}
-
-export interface HealthCheckReport {
-  report_id: string;
-  timestamp: string;
-  summary: HealthCheckSummary;
-  dataFreshness: DataFreshnessMetric[];
-  gaps: DataGap[];
-  trends: TrendAnomaly[];
-  insights: string[];
-  recommendations: string[];
 }

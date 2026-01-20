@@ -3,16 +3,16 @@
 // Loads all data from S3 bucket
 // ============================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import {
   S3Client,
   GetObjectCommand,
   ListObjectsV2Command,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'crypto';
-import { gzipSync } from 'zlib';
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -20,10 +20,10 @@ let s3Client: S3Client | null = null;
 function getS3Client(): S3Client {
   if (!s3Client) {
     s3Client = new S3Client({
-      region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
+      region: process.env.AWS_REGION || 'us-west-1',
       credentials: {
-        accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
       },
     });
   }
@@ -36,10 +36,10 @@ let dynamoClient: DynamoDBDocumentClient | null = null;
 function getDynamoClient(): DynamoDBDocumentClient {
   if (!dynamoClient) {
     const client = new DynamoDBClient({
-      region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
+      region: process.env.AWS_REGION || 'us-west-1',
       credentials: {
-        accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
       },
     });
     dynamoClient = DynamoDBDocumentClient.from(client);
@@ -47,7 +47,7 @@ function getDynamoClient(): DynamoDBDocumentClient {
   return dynamoClient;
 }
 
-const BUCKET = process.env.CHAPTERS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'retail-data-bcgr';
+const BUCKET = process.env.S3_BUCKET_NAME || 'retail-data-bcgr';
 const INVOICE_LINE_ITEMS_TABLE = 'retail-invoice-line-items';
 
 // In-memory cache for data
@@ -136,7 +136,7 @@ interface BudtenderRecord {
   units_sold: number;
 }
 
-// Brand mapping v2 structure types
+// Brand-Product Mapping types (v2 structure)
 interface BrandAliases {
   [aliasName: string]: string; // alias -> product_type
 }
@@ -168,10 +168,10 @@ interface AllDataResponse {
   sales: SalesRecord[];
   brands: BrandRecord[];
   products: ProductRecord[];
-  // Customers excluded from main load due to size (load via /api/data/customers)
+  customers: CustomerRecord[];
   budtenders: BudtenderRecord[];
   brandMappings: BrandMappingData;
-  // Invoices excluded from main load (load via /api/data/invoices)
+  invoices: InvoiceLineItem[];
   dataHash: string;
   loadedAt: string;
 }
@@ -189,7 +189,6 @@ function parseCSV<T>(csvString: string): T[] {
       .replace(/[()%]/g, '')
       .replace(/_+/g, '_')
       .replace(/^"|"$/g, '')
-      .replace(/^_|_$/g, '')  // Remove leading/trailing underscores
   );
 
   const results: T[] = [];
@@ -236,36 +235,6 @@ function parseNumber(value: string | number | undefined): number {
   const cleaned = String(value).replace(/[$,%]/g, '').replace(/,/g, '').trim();
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
-}
-
-// Normalize margin values to be in percentage form
-// Most retail data has margins in the 20-70% range
-// Treez CSV exports margin as decimal (0.55 = 55%), so we convert
-function normalizeMarginValue(value: number): number {
-  // Negative margins indicate data issues - return 0
-  if (value < 0) {
-    return 0;
-  }
-
-  // If value is clearly a decimal representation of percentage (between 0 and 1)
-  // Convert to percentage (e.g., 0.55 -> 55%)
-  if (value > 0 && value <= 1) {
-    return value * 100;
-  }
-
-  // Values between 1 and 100 are likely already in percentage form
-  // Return as-is
-  if (value > 1 && value <= 100) {
-    return value;
-  }
-
-  // Values above 100% are invalid - likely parsing error or wrong column
-  // Return 0 to indicate invalid data
-  if (value > 100) {
-    return 0;
-  }
-
-  return value;
 }
 
 // Store name to ID mapping
@@ -379,9 +348,9 @@ function cleanSalesRecord(raw: Record<string, string>, storeId: string): SalesRe
     gross_receipts: parseNumber(raw.gross_receipts || raw['Gross Receipts']),
     cogs_with_excise: parseNumber(raw.cogs_with_excise || raw['COGS (with excise)']),
     gross_income: parseNumber(raw.gross_income || raw['Gross Income']),
-    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin || raw.gross_margin_ || raw['Gross Margin %'])),
-    discount_pct: normalizeMarginValue(parseNumber(raw.discount || raw.discount_ || raw['Discount %'])),
-    cost_pct: normalizeMarginValue(parseNumber(raw.cost || raw.cost_ || raw['Cost %'])),
+    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
+    discount_pct: parseNumber(raw.discount_ || raw.discount || raw['Discount %']),
+    cost_pct: parseNumber(raw.cost_ || raw.cost || raw['Cost %']),
     avg_basket_size: parseNumber(raw.avg_basket_size || raw['Avg Basket Size']),
     avg_order_value: parseNumber(raw.avg_order_value || raw['Avg Order Value']),
     avg_order_profit: parseNumber(raw.avg_order_profit || raw['Avg Order Profit']),
@@ -400,53 +369,11 @@ function cleanBrandRecord(
   // Filter samples and zero sales
   if (brand.includes('[DS]') || brand.includes('[SS]') || netSales <= 0) return null;
 
-  // Parse percentage of total sales - try multiple column name variations
-  // After header normalization: "% of Total Net Sales" -> "of_total_net_sales" (leading underscore removed)
-  const pctOfTotal = parseNumber(
-    raw.of_total_net_sales ||
-    raw._of_total_net_sales ||
-    raw.pct_of_total_net_sales ||
-    raw['% of Total Net Sales'] ||
-    raw['Pct of Total Net Sales'] ||
-    0
-  );
-
-  // Parse margin - try multiple column name variations
-  // After header normalization: "Gross Margin %" -> "gross_margin" (trailing underscore removed)
-  // Treez exports may use various column names for margin data
-  const rawMargin = parseNumber(
-    raw.gross_margin ||
-    raw.gross_margin_ ||
-    raw.avg_gross_margin ||
-    raw.avg_gross_margin_ ||
-    raw.avg_gm ||
-    raw.avg_gm_ ||
-    raw.margin ||
-    raw.margin_ ||
-    raw.gm ||
-    raw.gm_ ||
-    raw['Gross Margin %'] ||
-    raw['Gross Margin'] ||
-    raw['Avg Gross Margin %'] ||
-    raw['Avg Gross Margin'] ||
-    raw['Avg. Gross Margin %'] ||
-    raw['Avg. GM %'] ||
-    raw['Avg GM %'] ||
-    raw['Avg GM'] ||
-    raw['AVG. GM'] ||
-    raw['Margin %'] ||
-    raw['Margin'] ||
-    raw['GM%'] ||
-    raw['GM'] ||
-    0
-  );
-  const grossMarginPct = normalizeMarginValue(rawMargin);
-
   return {
     brand,
-    pct_of_total_net_sales: pctOfTotal,
-    gross_margin_pct: grossMarginPct,
-    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)'] || raw.avg_cost || raw['Avg Cost'] || 0),
+    pct_of_total_net_sales: parseNumber(raw._of_total_net_sales || raw.of_total_net_sales || raw['% of Total Net Sales']),
+    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
+    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)']),
     net_sales: netSales,
     store: raw.store || raw['Store'] || '',
     store_id: storeId,
@@ -460,73 +387,32 @@ function cleanProductRecord(raw: Record<string, string>, storeId: string): Produ
   const netSales = parseNumber(raw.net_sales || raw['Net Sales']);
   if (netSales <= 0) return null;
 
-  // Parse percentage of total sales - try multiple column name variations
-  // After header normalization: "% of Total Net Sales" -> "of_total_net_sales" (leading underscore removed)
-  const pctOfTotal = parseNumber(
-    raw.of_total_net_sales ||
-    raw._of_total_net_sales ||
-    raw.pct_of_total_net_sales ||
-    raw['% of Total Net Sales'] ||
-    raw['Pct of Total Net Sales'] ||
-    0
-  );
-
-  // Parse margin - try multiple column name variations
-  // After header normalization: "Gross Margin %" -> "gross_margin" (trailing underscore removed)
-  // Treez exports may use various column names for margin data
-  const rawMargin = parseNumber(
-    raw.gross_margin ||
-    raw.gross_margin_ ||
-    raw.avg_gross_margin ||
-    raw.avg_gross_margin_ ||
-    raw.avg_gm ||
-    raw.avg_gm_ ||
-    raw.margin ||
-    raw.margin_ ||
-    raw.gm ||
-    raw.gm_ ||
-    raw['Gross Margin %'] ||
-    raw['Gross Margin'] ||
-    raw['Avg Gross Margin %'] ||
-    raw['Avg Gross Margin'] ||
-    raw['Avg GM %'] ||
-    raw['Avg GM'] ||
-    raw['AVG. GM'] ||
-    raw['Margin %'] ||
-    raw['Margin'] ||
-    raw['GM%'] ||
-    raw['GM'] ||
-    0
-  );
-  const grossMarginPct = normalizeMarginValue(rawMargin);
-
   return {
-    product_type: raw.product_type || raw['Product Type'] || raw.category || raw['Category'] || '',
-    pct_of_total_net_sales: pctOfTotal,
-    gross_margin_pct: grossMarginPct,
-    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)'] || raw.avg_cost || raw['Avg Cost'] || 0),
+    product_type: raw.product_type || raw['Product Type'] || '',
+    pct_of_total_net_sales: parseNumber(raw._of_total_net_sales || raw.of_total_net_sales || raw['% of Total Net Sales']),
+    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
+    avg_cost_wo_excise: parseNumber(raw.avg_cost_wo_excise || raw['Avg Cost (w/o excise)']),
     net_sales: netSales,
     store: raw.store || raw['Store'] || '',
     store_id: storeId,
   };
 }
 
-// Customer segment thresholds (aligned with config.ts)
+// Customer segment thresholds
 const CUSTOMER_SEGMENTS: Record<string, { min: number; max: number }> = {
-  'New/Low': { min: 0, max: 500 },
-  Regular: { min: 500, max: 2000 },
-  Good: { min: 2000, max: 5000 },
-  VIP: { min: 5000, max: 10000 },
-  Whale: { min: 10000, max: Infinity },
+  'New/Low': { min: 0, max: 100 },
+  Regular: { min: 100, max: 500 },
+  Good: { min: 500, max: 1500 },
+  VIP: { min: 1500, max: 5000 },
+  Whale: { min: 5000, max: Infinity },
 };
 
-// Recency segment thresholds (aligned with config.ts)
 const RECENCY_SEGMENTS: Record<string, { min: number; max: number }> = {
-  Active: { min: 0, max: 30 },
-  Warm: { min: 30, max: 90 },
-  Cool: { min: 90, max: 180 },
-  Cold: { min: 180, max: 365 },
-  Lost: { min: 365, max: Infinity },
+  Active: { min: 0, max: 14 },
+  Warm: { min: 14, max: 30 },
+  Cool: { min: 30, max: 60 },
+  Cold: { min: 60, max: 120 },
+  Lost: { min: 120, max: Infinity },
 };
 
 function getCustomerSegment(lifetimeValue: number): string {
@@ -592,10 +478,10 @@ function cleanBudtenderRecord(raw: Record<string, string>): BudtenderRecord | nu
     store_id: storeId,
     employee_name: employeeName,
     date: raw.date || raw['Date'] || '',
-    tickets_count: parseNumber(raw.tickets_count || raw.ticket_count || raw.transactions || raw['Tickets Count'] || raw['Ticket Count'] || raw['Transactions'] || raw.tickets || raw['Tickets']),
+    tickets_count: parseNumber(raw.tickets_count || raw['Tickets Count'] || raw.tickets || raw['Tickets']),
     customers_count: parseNumber(raw.customers_count || raw['Customers Count'] || raw.customers || raw['Customers']),
     net_sales: parseNumber(raw.net_sales || raw['Net Sales']),
-    gross_margin_pct: normalizeMarginValue(parseNumber(raw.gross_margin || raw.gross_margin_ || raw['Gross Margin %'])),
+    gross_margin_pct: parseNumber(raw.gross_margin_ || raw.gross_margin || raw['Gross Margin %']),
     avg_order_value: parseNumber(raw.avg_order_value || raw['Avg Order Value'] || raw.aov || raw['AOV']),
     units_sold: parseNumber(raw.units_sold || raw['Units Sold'] || raw.units || raw['Units']),
   };
@@ -607,16 +493,17 @@ async function loadBrandMappings(): Promise<BrandMappingData> {
     const jsonData = await downloadFromS3('config/brand_product_mapping.json');
     const data = JSON.parse(jsonData);
 
-    // Validate v2 structure: { "Brand Name": { "aliases": { "ALIAS": "PRODUCT_TYPE" } } }
+    // Expected v2 structure: { "Brand Name": { "aliases": { "ALIAS": "PRODUCT_TYPE" } } }
     if (typeof data === 'object' && !Array.isArray(data)) {
-      const firstValue = Object.values(data)[0] as { aliases?: Record<string, string> } | undefined;
-      if (firstValue && typeof firstValue === 'object' && 'aliases' in firstValue) {
-        console.log(`[loadBrandMappings] Loaded ${Object.keys(data).length} canonical brands`);
+      // Check if it's already in v2 format (has aliases property in entries)
+      const firstValue = Object.values(data)[0];
+      if (firstValue && typeof firstValue === 'object' && 'aliases' in (firstValue as object)) {
         return data as BrandMappingData;
       }
     }
 
-    console.warn('[loadBrandMappings] Brand mappings file not in expected v2 format');
+    // Return empty object if format is unexpected
+    console.warn('Brand mapping file not in expected v2 format');
     return {};
   } catch (error) {
     console.error('Error loading brand mappings:', error);
@@ -737,23 +624,6 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
       const rawRecords = parseCSV<Record<string, string>>(csvData);
       const storeId = extractStoreFromPath(file.key);
 
-      // Log first record headers for debugging
-      if (rawRecords.length > 0 && salesFiles.indexOf(file) === 0) {
-        const headers = Object.keys(rawRecords[0]);
-        console.log(`Sales CSV headers from ${file.key}:`, headers);
-        console.log(`First raw sales record:`, rawRecords[0]);
-        // Check which margin-related columns exist
-        const marginColumns = headers.filter(h =>
-          h.includes('margin') || h.includes('gm') || h.includes('Margin') || h.includes('GM')
-        );
-        console.log(`Sales margin-related columns found:`, marginColumns.length > 0 ? marginColumns : 'NONE FOUND');
-        // Log the actual gross_margin value and how it's being parsed
-        const rawMarginValue = rawRecords[0].gross_margin;
-        const parsedMarginValue = parseNumber(rawMarginValue);
-        const normalizedMarginValue = normalizeMarginValue(parsedMarginValue);
-        console.log(`First record gross_margin: raw="${rawMarginValue}", parsed=${parsedMarginValue}, normalized=${normalizedMarginValue}`);
-      }
-
       for (const raw of rawRecords) {
         const cleaned = cleanSalesRecord(raw, storeId);
         if (cleaned) allSales.push(cleaned);
@@ -762,10 +632,6 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
       console.error(`Error loading ${file.key}:`, error);
     }
   }
-
-  // Log sales data summary for debugging
-  const salesWithMargin = allSales.filter(s => s.gross_margin_pct > 0).length;
-  console.log(`Sales data loaded: ${allSales.length} total, ${salesWithMargin} with margin > 0`);
 
   // Load brand data
   for (const file of brandFiles) {
@@ -791,18 +657,6 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
       const rawRecords = parseCSV<Record<string, string>>(csvData);
       const storeId = extractStoreFromPath(file.key);
 
-      // Log first record headers for debugging
-      if (rawRecords.length > 0 && productFiles.indexOf(file) === 0) {
-        const headers = Object.keys(rawRecords[0]);
-        console.log(`Product CSV headers from ${file.key}:`, headers);
-        console.log(`First raw product record:`, rawRecords[0]);
-        // Check which margin-related columns exist
-        const marginColumns = headers.filter(h =>
-          h.includes('margin') || h.includes('gm') || h.includes('Margin') || h.includes('GM')
-        );
-        console.log(`Margin-related columns found:`, marginColumns.length > 0 ? marginColumns : 'NONE FOUND');
-      }
-
       for (const raw of rawRecords) {
         const cleaned = cleanProductRecord(raw, storeId);
         if (cleaned) allProducts.push(cleaned);
@@ -812,13 +666,20 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
     }
   }
 
-  // Log product data summary for debugging
-  const productsWithMargin = allProducts.filter(p => p.gross_margin_pct > 0).length;
-  const productsWithPct = allProducts.filter(p => p.pct_of_total_net_sales > 0).length;
-  console.log(`Product data loaded: ${allProducts.length} total, ${productsWithMargin} with margin > 0, ${productsWithPct} with pct > 0`);
+  // Load customer data
+  for (const file of customerFiles) {
+    try {
+      const csvData = await downloadFromS3(file.key);
+      const rawRecords = parseCSV<Record<string, string>>(csvData);
 
-  // NOTE: Customer data is loaded separately via /api/data/customers endpoint
-  // to avoid exceeding Lambda 6MB response limit (customer files are 30MB+)
+      for (const raw of rawRecords) {
+        const cleaned = cleanCustomerRecord(raw);
+        if (cleaned) allCustomers.push(cleaned);
+      }
+    } catch (error) {
+      console.error(`Error loading ${file.key}:`, error);
+    }
+  }
 
   // Load budtender performance data from data/ folder
   try {
@@ -833,8 +694,8 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
     console.error('Error loading budtender data:', error);
   }
 
-  // Load brand mappings
-  const allMappings = await loadBrandMappings();
+  // Load brand mappings (v2 structure)
+  const brandMappings = await loadBrandMappings();
 
   // NOTE: Invoice data is loaded separately via /api/data/invoices endpoint
   // to avoid blocking the main data load (DynamoDB scan is slow due to throttling)
@@ -853,72 +714,59 @@ async function loadAllDataFromS3(): Promise<AllDataResponse> {
     salesMap.set(key, record);
   }
 
+  // Deduplicate customers by ID
+  const customerMap = new Map<string, CustomerRecord>();
+  for (const record of allCustomers) {
+    customerMap.set(record.customer_id, record);
+  }
+
   const dataHash = await computeDataHash();
 
   return {
     sales: Array.from(salesMap.values()),
     brands: allBrands,
     products: allProducts,
+    customers: Array.from(customerMap.values()),
     budtenders: allBudtenders,
-    brandMappings: allMappings,
+    brandMappings,
+    invoices: allInvoices,
     dataHash,
     loadedAt: new Date().toISOString(),
   };
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Check cache
     const currentHash = await computeDataHash();
-    const acceptEncoding = request.headers.get('accept-encoding') || '';
-    const supportsGzip = acceptEncoding.includes('gzip');
-
-    let responseData: { success: boolean; data: AllDataResponse; cached: boolean };
 
     if (
       dataCache &&
       dataCache.hash === currentHash &&
       Date.now() - dataCache.timestamp < CACHE_TTL
     ) {
-      responseData = {
+      return NextResponse.json({
         success: true,
         data: dataCache.data,
         cached: true,
-      };
-    } else {
-      // Load fresh data
-      const data = await loadAllDataFromS3();
-
-      // Update cache
-      dataCache = {
-        data,
-        hash: currentHash,
-        timestamp: Date.now(),
-      };
-
-      responseData = {
-        success: true,
-        data,
-        cached: false,
-      };
-    }
-
-    // Compress response if client supports gzip (helps with Lambda 6MB limit)
-    if (supportsGzip) {
-      const jsonString = JSON.stringify(responseData);
-      const compressed = gzipSync(jsonString);
-
-      return new Response(compressed, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Encoding': 'gzip',
-          'Cache-Control': 'private, max-age=300',
-        },
       });
     }
 
-    return NextResponse.json(responseData);
+    // Load fresh data
+    const data = await loadAllDataFromS3();
+
+    // Update cache
+    dataCache = {
+      data,
+      hash: currentHash,
+      timestamp: Date.now(),
+    };
+
+    return NextResponse.json({
+      success: true,
+      data,
+      cached: false,
+    });
   } catch (error) {
     console.error('Data loading error:', error);
     return NextResponse.json(

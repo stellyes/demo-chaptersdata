@@ -227,56 +227,35 @@ function SalesDataTab() {
 // ============================================
 // INVOICE DATA TAB
 // ============================================
-interface InvoiceSummary {
+interface Invoice {
   [key: string]: string | number;
-  invoice_id: string;
-  invoice_number: string;
+  id: string;
+  invoiceNumber: string;
   vendor: string;
-  invoice_date: string;
-  total_cost: number;
-  line_items_count: number;
+  invoiceDate: string;
+  totalCost: number;
+  lineItemsCount: number;
+  status: 'processed' | 'needs_review';
 }
 
 function InvoiceDataTab() {
-  const { invoiceData, dataStatus } = useAppStore();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [processing, setProcessing] = useState(false);
-
-  // Aggregate line items into invoice summaries
-  const invoiceSummaries = useMemo(() => {
-    const summaryMap: Record<string, InvoiceSummary> = {};
-
-    for (const lineItem of invoiceData) {
-      const invoiceId = lineItem.invoice_id;
-      if (!summaryMap[invoiceId]) {
-        summaryMap[invoiceId] = {
-          invoice_id: invoiceId,
-          invoice_number: invoiceId, // Use invoice_id as number if not available
-          vendor: '', // Will be populated if available in line item data
-          invoice_date: '',
-          total_cost: 0,
-          line_items_count: 0,
-        };
-      }
-      summaryMap[invoiceId].total_cost += lineItem.total_cost || 0;
-      summaryMap[invoiceId].line_items_count += 1;
-    }
-
-    return Object.values(summaryMap).sort((a, b) =>
-      b.invoice_id.localeCompare(a.invoice_id)
-    );
-  }, [invoiceData]);
-
-  // Calculate totals
-  const totalInvoices = invoiceSummaries.length;
-  const totalCost = invoiceData.reduce((sum, item) => sum + (item.total_cost || 0), 0);
-  const totalLineItems = invoiceData.length;
 
   const handleInvoiceUpload = async (file: File) => {
     setProcessing(true);
     try {
-      // In production, this would upload to S3/DynamoDB
-      // For now, just show processing
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Simulated invoice extraction - in production uses DynamoDB
+      const mockInvoice: Invoice = {
+        id: `inv_${Date.now()}`,
+        invoiceNumber: `INV-${Math.floor(Math.random() * 10000)}`,
+        vendor: 'Sample Vendor',
+        invoiceDate: new Date().toISOString().split('T')[0],
+        totalCost: Math.floor(Math.random() * 5000) + 500,
+        lineItemsCount: Math.floor(Math.random() * 20) + 5,
+        status: 'processed',
+      };
+      setInvoices((prev) => [mockInvoice, ...prev]);
     } finally {
       setProcessing(false);
     }
@@ -303,126 +282,92 @@ function InvoiceDataTab() {
             <span className="text-sm">Extracting invoice data...</span>
           </div>
         )}
-        {dataStatus.invoices.loaded && (
-          <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-[var(--success)]" />
-            <span className="text-sm text-[var(--success)]">
-              {dataStatus.invoices.count.toLocaleString()} invoice line items loaded from S3
-            </span>
-          </div>
-        )}
       </Card>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+      <div className="grid grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
             <FileText className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Invoices</p>
-              <p className="text-xl font-semibold font-serif">{totalInvoices}</p>
+              <p className="text-xl font-semibold font-serif">{invoices.length}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
             <TrendingUp className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Cost</p>
               <p className="text-xl font-semibold font-serif">
-                ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                ${invoices.reduce((sum, inv) => sum + inv.totalCost, 0).toLocaleString()}
               </p>
             </div>
           </div>
         </Card>
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
             <Database className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Line Items</p>
               <p className="text-xl font-semibold font-serif">
-                {totalLineItems.toLocaleString()}
+                {invoices.reduce((sum, inv) => sum + inv.lineItemsCount, 0)}
               </p>
             </div>
           </div>
         </Card>
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
-            <AlertCircle className="w-5 h-5 text-[var(--muted)]" />
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Needs Review</p>
-              <p className="text-xl font-semibold font-serif">0</p>
+              <p className="text-xl font-semibold font-serif">
+                {invoices.filter((inv) => inv.status === 'needs_review').length}
+              </p>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Invoice List */}
-      {invoiceSummaries.length > 0 ? (
+      {invoices.length > 0 && (
         <Card>
           <SectionLabel>Processed Invoices</SectionLabel>
           <SectionTitle>Invoice History</SectionTitle>
           <DataTable
-            data={invoiceSummaries}
+            data={invoices}
             columns={[
-              { key: 'invoice_id', label: 'Invoice #', sortable: true },
+              { key: 'invoiceNumber', label: 'Invoice #', sortable: true },
+              { key: 'vendor', label: 'Vendor', sortable: true },
+              { key: 'invoiceDate', label: 'Date', sortable: true },
               {
-                key: 'total_cost',
-                label: 'Total Cost',
+                key: 'totalCost',
+                label: 'Total',
                 sortable: true,
                 align: 'right',
-                render: (v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+                render: (v) => `$${Number(v).toLocaleString()}`,
               },
-              { key: 'line_items_count', label: 'Items', sortable: true, align: 'right' },
+              { key: 'lineItemsCount', label: 'Items', sortable: true, align: 'right' },
+              {
+                key: 'status',
+                label: 'Status',
+                render: (v) => (
+                  <span
+                    className={`px-2 py-1 rounded text-xs ${
+                      v === 'processed'
+                        ? 'bg-[var(--success)]/15 text-[var(--success)]'
+                        : 'bg-[var(--warning)]/15 text-[var(--warning)]'
+                    }`}
+                  >
+                    {v === 'processed' ? 'Processed' : 'Needs Review'}
+                  </span>
+                ),
+              },
             ]}
             pageSize={10}
             exportable
             exportFilename="invoices"
-          />
-        </Card>
-      ) : (
-        <Card>
-          <div className="text-center py-8">
-            <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--muted)] opacity-50" />
-            <p className="text-[var(--muted)]">
-              {dataStatus.invoices.loaded
-                ? 'No invoice data found. Upload invoice PDFs to get started.'
-                : 'Invoice data is loading from S3...'}
-            </p>
-          </div>
-        </Card>
-      )}
-
-      {/* Line Items Table */}
-      {invoiceData.length > 0 && (
-        <Card>
-          <SectionLabel>All Line Items</SectionLabel>
-          <SectionTitle>Invoice Line Item Details</SectionTitle>
-          <DataTable
-            data={invoiceData}
-            columns={[
-              { key: 'invoice_id', label: 'Invoice', sortable: true },
-              { key: 'product_name', label: 'Product', sortable: true },
-              { key: 'product_type', label: 'Type', sortable: true },
-              { key: 'sku_units', label: 'Units', sortable: true, align: 'right' },
-              {
-                key: 'unit_cost',
-                label: 'Unit Cost',
-                sortable: true,
-                align: 'right',
-                render: (v) => `$${Number(v).toFixed(2)}`,
-              },
-              {
-                key: 'total_cost',
-                label: 'Total',
-                sortable: true,
-                align: 'right',
-                render: (v) => `$${Number(v).toFixed(2)}`,
-              },
-            ]}
-            pageSize={20}
-            exportable
-            exportFilename="invoice-line-items"
           />
         </Card>
       )}
@@ -603,9 +548,9 @@ function BudtenderPerformanceTab() {
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+      <div className="grid grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
             <Users className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Budtenders</p>
@@ -613,8 +558,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
             <CheckCircle className="w-5 h-5 text-[var(--success)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Permanent Employees</p>
@@ -622,8 +567,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Unassigned</p>
@@ -631,8 +576,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
             <Database className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Performance Records</p>
@@ -969,30 +914,27 @@ function BrandMappingTab() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
-  // Safely handle null/undefined brandMappings
-  const safeMappings = brandMappings || {};
-
   // Calculate stats
-  const brandCount = Object.keys(safeMappings).length;
-  const aliasCount = Object.values(safeMappings).reduce(
-    (acc, entry) => acc + (entry?.aliases ? Object.keys(entry.aliases).length : 0),
+  const brandCount = Object.keys(brandMappings).length;
+  const aliasCount = Object.values(brandMappings).reduce(
+    (acc, entry) => acc + Object.keys(entry.aliases).length,
     0
   );
 
   // Filter brands based on search
   const filteredBrands = useMemo(() => {
-    if (!searchTerm) return Object.entries(safeMappings);
+    if (!searchTerm) return Object.entries(brandMappings);
 
     const term = searchTerm.toLowerCase();
-    return Object.entries(safeMappings).filter(([brandName, entry]) => {
+    return Object.entries(brandMappings).filter(([brandName, entry]) => {
       // Match on brand name
       if (brandName.toLowerCase().includes(term)) return true;
       // Match on any alias
-      return entry?.aliases && Object.keys(entry.aliases).some(alias =>
+      return Object.keys(entry.aliases).some(alias =>
         alias.toLowerCase().includes(term)
       );
     });
-  }, [safeMappings, searchTerm]);
+  }, [brandMappings, searchTerm]);
 
   const toggleExpand = (brandName: string) => {
     const newExpanded = new Set(expandedBrands);
@@ -1343,7 +1285,7 @@ function SEOAnalysisTab() {
 
       {/* Score Card */}
       {seoData && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-3 gap-6">
           <Card>
             <SectionLabel>Overall Score</SectionLabel>
             <div className="flex items-end gap-2 mt-4">
@@ -1392,22 +1334,17 @@ function SEOAnalysisTab() {
 // QR PORTAL TAB
 // ============================================
 interface QRCodeRecord {
-  [key: string]: string | number | boolean | undefined;
+  [key: string]: string | number | boolean;
   shortCode: string;
   name: string;
   originalUrl: string;
   totalClicks: number;
   createdAt: string;
   active: boolean;
-  description?: string;
 }
 
 function QRPortalTab() {
-  // Load QR codes from app store
-  const { qrCodesData } = useAppStore();
-
-  // Convert store data to local format and merge with any newly created codes
-  const [localQrCodes, setLocalQrCodes] = useState<QRCodeRecord[]>([]);
+  const [qrCodes, setQrCodes] = useState<QRCodeRecord[]>([]);
   const [qrImage, setQrImage] = useState<string>('');
   const [formData, setFormData] = useState({
     name: '',
@@ -1415,26 +1352,6 @@ function QRPortalTab() {
     color: '#1e391f',
     bgColor: '#ffffff',
   });
-
-  // Merge store data with locally created QR codes
-  const qrCodes = useMemo(() => {
-    // Convert store data to QRCodeRecord format
-    const storeQrCodes: QRCodeRecord[] = (qrCodesData || []).map((qr) => ({
-      shortCode: qr.shortCode,
-      name: qr.name,
-      originalUrl: qr.originalUrl,
-      totalClicks: qr.totalClicks,
-      createdAt: qr.createdAt,
-      active: qr.active,
-      description: qr.description,
-    }));
-
-    // Merge with local codes (local codes first, then store codes not in local)
-    const localShortCodes = new Set(localQrCodes.map((qr) => qr.shortCode));
-    const uniqueStoreCodes = storeQrCodes.filter((qr) => !localShortCodes.has(qr.shortCode));
-
-    return [...localQrCodes, ...uniqueStoreCodes];
-  }, [qrCodesData, localQrCodes]);
 
   const generateQRCode = async () => {
     if (!formData.name || !formData.url) return;
@@ -1460,7 +1377,7 @@ function QRPortalTab() {
         active: true,
       };
 
-      setLocalQrCodes((prev) => [newQR, ...prev]);
+      setQrCodes((prev) => [newQR, ...prev]);
       setFormData({ ...formData, name: '', url: '' });
     } catch (error) {
       console.error('Failed to generate QR code:', error);
@@ -1477,7 +1394,7 @@ function QRPortalTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+      <div className="grid grid-cols-2 gap-6">
         <Card>
           <SectionLabel>QR Code Generator</SectionLabel>
           <SectionTitle>Create New QR Code</SectionTitle>
@@ -1573,20 +1490,20 @@ function QRPortalTab() {
       </div>
 
       {/* QR Code Stats */}
-      <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <Card className="p-3 md:p-4">
-          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
-          <p className="text-lg md:text-2xl font-semibold font-serif">{qrCodes.length}</p>
+      <div className="grid grid-cols-3 gap-4">
+        <Card className="p-4">
+          <p className="text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
+          <p className="text-2xl font-semibold font-serif">{qrCodes.length}</p>
         </Card>
-        <Card className="p-3 md:p-4">
-          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total Scans</p>
-          <p className="text-lg md:text-2xl font-semibold font-serif">
+        <Card className="p-4">
+          <p className="text-sm text-[var(--muted)] mb-1">Total Scans</p>
+          <p className="text-2xl font-semibold font-serif">
             {qrCodes.reduce((sum, qr) => sum + qr.totalClicks, 0)}
           </p>
         </Card>
-        <Card className="p-3 md:p-4">
-          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Active Codes</p>
-          <p className="text-lg md:text-2xl font-semibold font-serif">
+        <Card className="p-4">
+          <p className="text-sm text-[var(--muted)] mb-1">Active Codes</p>
+          <p className="text-2xl font-semibold font-serif">
             {qrCodes.filter((qr) => qr.active).length}
           </p>
         </Card>

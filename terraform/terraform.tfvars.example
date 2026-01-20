@@ -1,0 +1,21 @@
+# Copy this file to terraform.tfvars and customize for your environment
+
+aws_region = "us-west-1"
+
+environment = "production"
+
+# Aurora Serverless v2 scaling
+# 0.5 ACU = ~1GB RAM, scales up automatically under load
+min_capacity = 0.5
+max_capacity = 4.0
+
+# Backup retention (days)
+backup_retention_period = 7
+
+# Network access
+# Set to false in production and use VPC peering or bastion host
+publicly_accessible = true
+
+# Restrict to specific IPs in production
+# Example: ["10.0.0.0/8", "YOUR_OFFICE_IP/32"]
+allowed_cidr_blocks = ["0.0.0.0/0"]

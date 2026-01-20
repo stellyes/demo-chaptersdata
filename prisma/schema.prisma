@@ -1,0 +1,485 @@
+// Prisma Schema for Chapters Data Platform
+// Migrating from S3 + DynamoDB to Aurora PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MULTI-TENANT FOUNDATION
+// ============================================
+
+model Organization {
+  id             String        @id @default(uuid())
+  orgId          String        @unique @map("org_id")
+  name           String
+  type           String
+  status         String        @default("pending")
+  location       String?
+  monthlyBilling Decimal       @default(0) @map("monthly_billing") @db.Decimal(10, 2)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  storefronts    Storefront[]
+  userMappings   UserMapping[]
+
+  @@map("organizations")
+}
+
+model Storefront {
+  id              String          @id @default(uuid())
+  storefrontId    String          @unique @map("storefront_id")
+  orgId           String          @map("org_id")
+  organization    Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name            String
+  type            String
+  status          String          @default("pending")
+  location        String?
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?         @map("zip_code")
+  phone           String?
+  monthlyBilling  Decimal         @default(0) @map("monthly_billing") @db.Decimal(10, 2)
+  dashboardUrl    String?         @map("dashboard_url")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  invoices        Invoice[]
+  salesRecords    SalesRecord[]
+  brandRecords    BrandRecord[]
+  productRecords  ProductRecord[]
+  customers       Customer[]
+  budtenderRecords BudtenderRecord[]
+
+  @@map("storefronts")
+}
+
+model UserMapping {
+  id           String       @id @default(uuid())
+  userId       String       @map("user_id")
+  orgId        String       @map("org_id")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role         String       @default("member")
+  assignedAt   DateTime     @default(now()) @map("assigned_at")
+
+  @@unique([userId, orgId])
+  @@index([userId])
+  @@map("user_mappings")
+}
+
+model UserProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique @map("user_id")
+  displayName      String?  @map("display_name")
+  organizationName String?  @map("organization_name")
+  organizationType String?  @map("organization_type")
+  licenseNumber    String?  @map("license_number")
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?  @map("zip_code")
+  phone            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("user_profiles")
+}
+
+// ============================================
+// VENDOR NORMALIZATION
+// Maps ~130 canonical vendors with ~800 aliases
+// ============================================
+
+model Vendor {
+  id            String        @id @default(uuid())
+  canonicalName String        @unique @map("canonical_name")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  aliases       VendorAlias[]
+  invoices      Invoice[]
+
+  @@map("vendors")
+}
+
+model VendorAlias {
+  id        String @id @default(uuid())
+  vendorId  String @map("vendor_id")
+  vendor    Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  aliasName String @unique @map("alias_name")
+
+  @@index([aliasName])
+  @@map("vendor_aliases")
+}
+
+// ============================================
+// BRAND NORMALIZATION
+// Replaces S3 config/brand_product_mapping.json
+// ============================================
+
+model CanonicalBrand {
+  id            String            @id @default(uuid())
+  canonicalName String            @unique @map("canonical_name")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  aliases       BrandAlias[]
+  brandRecords  BrandRecord[]
+  lineItems     InvoiceLineItem[]
+
+  @@map("canonical_brands")
+}
+
+model BrandAlias {
+  id          String         @id @default(uuid())
+  brandId     String         @map("brand_id")
+  brand       CanonicalBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  aliasName   String         @unique @map("alias_name")
+  productType String?        @map("product_type")
+
+  @@index([aliasName])
+  @@map("brand_aliases")
+}
+
+// ============================================
+// SALES DATA
+// Replaces S3 raw-uploads/{store}/sales_*.csv
+// ============================================
+
+model SalesRecord {
+  id             String      @id @default(uuid())
+  storefrontId   String?     @map("storefront_id")
+  storefront     Storefront? @relation(fields: [storefrontId], references: [id])
+  storeId        String      @map("store_id")
+  storeName      String?     @map("store_name")
+  date           DateTime    @db.Date
+  week           String?
+  ticketsCount   Int         @default(0) @map("tickets_count")
+  unitsSold      Int         @default(0) @map("units_sold")
+  customersCount Int         @default(0) @map("customers_count")
+  newCustomers   Int         @default(0) @map("new_customers")
+  grossSales     Decimal     @default(0) @map("gross_sales") @db.Decimal(12, 2)
+  discounts      Decimal     @default(0) @db.Decimal(12, 2)
+  returns        Decimal     @default(0) @db.Decimal(12, 2)
+  netSales       Decimal     @default(0) @map("net_sales") @db.Decimal(12, 2)
+  taxes          Decimal     @default(0) @db.Decimal(12, 2)
+  grossReceipts  Decimal     @default(0) @map("gross_receipts") @db.Decimal(12, 2)
+  cogsWithExcise Decimal     @default(0) @map("cogs_with_excise") @db.Decimal(12, 2)
+  grossIncome    Decimal     @default(0) @map("gross_income") @db.Decimal(12, 2)
+  grossMarginPct Decimal     @default(0) @map("gross_margin_pct") @db.Decimal(6, 3)
+  discountPct    Decimal     @default(0) @map("discount_pct") @db.Decimal(6, 3)
+  costPct        Decimal     @default(0) @map("cost_pct") @db.Decimal(6, 3)
+  avgBasketSize  Decimal     @default(0) @map("avg_basket_size") @db.Decimal(10, 2)
+  avgOrderValue  Decimal     @default(0) @map("avg_order_value") @db.Decimal(10, 2)
+  avgOrderProfit Decimal     @default(0) @map("avg_order_profit") @db.Decimal(10, 2)
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@unique([storeId, date])
+  @@index([date])
+  @@index([storeId])
+  @@map("sales_records")
+}
+
+// ============================================
+// BRAND PERFORMANCE DATA
+// Replaces S3 raw-uploads/{store}/brand_*.csv
+// ============================================
+
+model BrandRecord {
+  id                 String          @id @default(uuid())
+  storefrontId       String?         @map("storefront_id")
+  storefront         Storefront?     @relation(fields: [storefrontId], references: [id])
+  storeId            String          @map("store_id")
+  storeName          String?         @map("store_name")
+  brandId            String?         @map("brand_id")
+  brand              CanonicalBrand? @relation(fields: [brandId], references: [id])
+  originalBrandName  String          @map("original_brand_name")
+  pctOfTotalNetSales Decimal         @default(0) @map("pct_of_total_net_sales") @db.Decimal(8, 4)
+  grossMarginPct     Decimal         @default(0) @map("gross_margin_pct") @db.Decimal(6, 3)
+  avgCostWoExcise    Decimal         @default(0) @map("avg_cost_wo_excise") @db.Decimal(10, 2)
+  netSales           Decimal         @default(0) @map("net_sales") @db.Decimal(12, 2)
+  uploadStartDate    DateTime?       @map("upload_start_date") @db.Date
+  uploadEndDate      DateTime?       @map("upload_end_date") @db.Date
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  @@index([brandId])
+  @@index([storeId])
+  @@map("brand_records")
+}
+
+// ============================================
+// PRODUCT CATEGORY PERFORMANCE
+// Replaces S3 raw-uploads/{store}/product_*.csv
+// ============================================
+
+model ProductRecord {
+  id                 String      @id @default(uuid())
+  storefrontId       String?     @map("storefront_id")
+  storefront         Storefront? @relation(fields: [storefrontId], references: [id])
+  storeId            String      @map("store_id")
+  storeName          String?     @map("store_name")
+  productType        String      @map("product_type")
+  pctOfTotalNetSales Decimal     @default(0) @map("pct_of_total_net_sales") @db.Decimal(8, 4)
+  grossMarginPct     Decimal     @default(0) @map("gross_margin_pct") @db.Decimal(6, 3)
+  avgCostWoExcise    Decimal     @default(0) @map("avg_cost_wo_excise") @db.Decimal(10, 2)
+  netSales           Decimal     @default(0) @map("net_sales") @db.Decimal(12, 2)
+  createdAt          DateTime    @default(now()) @map("created_at")
+
+  @@index([storeId])
+  @@index([productType])
+  @@map("product_records")
+}
+
+// ============================================
+// CUSTOMER DATA
+// Replaces S3 raw-uploads/{store}/customers_*.csv
+// ============================================
+
+model Customer {
+  id                   String      @id @default(uuid())
+  storefrontId         String?     @map("storefront_id")
+  storefront           Storefront? @relation(fields: [storefrontId], references: [id])
+  storeName            String      @map("store_name")
+  customerId           String      @map("customer_id")
+  name                 String?
+  dateOfBirth          DateTime?   @map("date_of_birth") @db.Date
+  age                  Int?
+  lifetimeVisits       Int         @default(0) @map("lifetime_visits")
+  lifetimeTransactions Int         @default(0) @map("lifetime_transactions")
+  lifetimeNetSales     Decimal     @default(0) @map("lifetime_net_sales") @db.Decimal(12, 2)
+  lifetimeAov          Decimal     @default(0) @map("lifetime_aov") @db.Decimal(10, 2)
+  signupDate           DateTime?   @map("signup_date") @db.Date
+  lastVisitDate        DateTime?   @map("last_visit_date") @db.Date
+  customerSegment      String?     @map("customer_segment")
+  recencySegment       String?     @map("recency_segment")
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  @@unique([storeName, customerId])
+  @@index([customerSegment])
+  @@index([recencySegment])
+  @@index([lastVisitDate])
+  @@map("customers")
+}
+
+// ============================================
+// INVOICE DATA
+// Replaces DynamoDB retail-invoices table
+// ============================================
+
+model Invoice {
+  id                 String            @id @default(uuid())
+  invoiceId          String            @unique @map("invoice_id")
+  invoiceNumber      String?           @map("invoice_number")
+  invoiceDate        DateTime?         @map("invoice_date") @db.Date
+  downloadDate       DateTime?         @map("download_date") @db.Date
+  vendorId           String?           @map("vendor_id")
+  vendor             Vendor?           @relation(fields: [vendorId], references: [id])
+  originalVendorName String?           @map("original_vendor_name")
+  customerName       String?           @map("customer_name")
+  storefrontId       String?           @map("storefront_id")
+  storefront         Storefront?       @relation(fields: [storefrontId], references: [id])
+  subtotal           Decimal           @default(0) @db.Decimal(12, 2)
+  discount           Decimal           @default(0) @db.Decimal(12, 2)
+  fees               Decimal           @default(0) @db.Decimal(12, 2)
+  tax                Decimal           @default(0) @db.Decimal(12, 2)
+  totalCost          Decimal           @default(0) @map("total_cost") @db.Decimal(12, 2)
+  totalWithExcise    Decimal           @default(0) @map("total_with_excise") @db.Decimal(12, 2)
+  balance            Decimal           @default(0) @db.Decimal(12, 2)
+  lineItemsCount     Int               @default(0) @map("line_items_count")
+  status             String?
+  paymentTerms       String?           @map("payment_terms")
+  createdBy          String?           @map("created_by")
+  pdfS3Key           String?           @map("pdf_s3_key")
+  sourceFile         String?           @map("source_file")
+  extractedAt        DateTime?         @map("extracted_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  lineItems          InvoiceLineItem[]
+
+  @@index([invoiceDate])
+  @@index([vendorId])
+  @@index([storefrontId])
+  @@index([customerName])
+  @@map("invoices")
+}
+
+// ============================================
+// INVOICE LINE ITEMS
+// Replaces DynamoDB retail-invoice-line-items table
+// ============================================
+
+model InvoiceLineItem {
+  id                  String          @id @default(uuid())
+  invoiceId           String          @map("invoice_id")
+  invoice             Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  lineNumber          Int             @map("line_number")
+  brandId             String?         @map("brand_id")
+  brand               CanonicalBrand? @relation(fields: [brandId], references: [id])
+  originalBrandName   String          @map("original_brand_name")
+  productName         String?         @map("product_name")
+  productType         String?         @map("product_type")
+  productSubtype      String?         @map("product_subtype")
+  skuUnits            Int             @default(0) @map("sku_units")
+  unitCost            Decimal         @default(0) @map("unit_cost") @db.Decimal(10, 4)
+  excisePerUnit       Decimal         @default(0) @map("excise_per_unit") @db.Decimal(10, 4)
+  totalCost           Decimal         @default(0) @map("total_cost") @db.Decimal(12, 2)
+  totalCostWithExcise Decimal         @default(0) @map("total_cost_with_excise") @db.Decimal(12, 2)
+  strain              String?
+  unitSize            String?         @map("unit_size")
+  traceId             String?         @map("trace_id")
+  isPromo             Boolean         @default(false) @map("is_promo")
+  createdAt           DateTime        @default(now()) @map("created_at")
+
+  @@unique([invoiceId, lineNumber])
+  @@index([brandId])
+  @@index([productType])
+  @@map("invoice_line_items")
+}
+
+// ============================================
+// QR TRACKER
+// Replaces DynamoDB qr-tracker-qr-codes table
+// ============================================
+
+model QrCode {
+  id          String    @id @default(uuid())
+  shortCode   String    @unique @map("short_code")
+  originalUrl String    @map("original_url")
+  name        String
+  description String?
+  totalClicks Int       @default(0) @map("total_clicks")
+  active      Boolean   @default(true)
+  deleted     Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  clicks      QrClick[]
+
+  @@map("qr_codes")
+}
+
+// ============================================
+// QR CLICK EVENTS
+// Replaces DynamoDB qr-tracker-clicks table
+// ============================================
+
+model QrClick {
+  id        String   @id @default(uuid())
+  qrCodeId  String   @map("qr_code_id")
+  qrCode    QrCode   @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
+  shortCode String   @map("short_code")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  referrer  String?
+  location  String?
+  clickedAt DateTime @default(now()) @map("clicked_at")
+
+  @@index([shortCode])
+  @@index([clickedAt])
+  @@map("qr_clicks")
+}
+
+// ============================================
+// BUDTENDER PERFORMANCE DATA
+// Replaces S3 data/budtender_performance.csv
+// ============================================
+
+model BudtenderRecord {
+  id             String      @id @default(uuid())
+  storefrontId   String?     @map("storefront_id")
+  storefront     Storefront? @relation(fields: [storefrontId], references: [id])
+  storeId        String      @map("store_id")
+  storeName      String?     @map("store_name")
+  employeeName   String      @map("employee_name")
+  date           DateTime    @db.Date
+  ticketsCount   Int         @default(0) @map("tickets_count")
+  customersCount Int         @default(0) @map("customers_count")
+  netSales       Decimal     @default(0) @map("net_sales") @db.Decimal(12, 2)
+  grossMarginPct Decimal     @default(0) @map("gross_margin_pct") @db.Decimal(6, 3)
+  avgOrderValue  Decimal     @default(0) @map("avg_order_value") @db.Decimal(10, 2)
+  unitsSold      Int         @default(0) @map("units_sold")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@index([storeId])
+  @@index([employeeName])
+  @@index([date])
+  @@map("budtender_records")
+}
+
+// ============================================
+// BUDTENDER STORE ASSIGNMENTS
+// Replaces S3 config/budtender_assignments.json
+// ============================================
+
+model BudtenderAssignment {
+  id           String   @id @default(uuid())
+  employeeName String   @unique @map("employee_name")
+  storeId      String   @map("store_id")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("budtender_assignments")
+}
+
+// ============================================
+// AI KNOWLEDGE BASE
+// Persistent context for Claude analyses
+// ============================================
+
+model BusinessInsight {
+  id           String   @id @default(uuid())
+  category     String   // sales, brands, categories, customers, purchasing, market
+  subcategory  String?  // more specific classification
+  insight      String   @db.Text // the actual insight/finding
+  confidence   String   @default("medium") // high, medium, low
+  source       String   // which analysis generated this
+  sourceData   String?  @map("source_data") @db.Text // summary of data that led to insight
+  dataRange    String?  @map("data_range") // e.g., "2024-01-01 to 2024-03-31"
+  storefrontId String?  @map("storefront_id")
+  isActive     Boolean  @default(true) @map("is_active")
+  validatedAt  DateTime? @map("validated_at") // when a human confirmed this
+  expiresAt    DateTime? @map("expires_at") // some insights become stale
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([storefrontId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("business_insights")
+}
+
+model BusinessRule {
+  id          String   @id @default(uuid())
+  category    String   // margin_threshold, reorder_point, pricing, etc.
+  name        String   // human-readable name
+  description String   @db.Text
+  rule        String   @db.Text // the actual rule/guideline
+  priority    Int      @default(5) // 1-10, higher = more important
+  isActive    Boolean  @default(true) @map("is_active")
+  createdBy   String?  @map("created_by") // "system" or user ID
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([category, name])
+  @@index([category])
+  @@index([isActive])
+  @@map("business_rules")
+}
+
+model AnalysisHistory {
+  id              String   @id @default(uuid())
+  analysisType    String   @map("analysis_type") // sales, brands, categories, etc.
+  storefrontId    String?  @map("storefront_id")
+  inputSummary    String   @map("input_summary") @db.Text // hash or summary of input data
+  outputSummary   String   @map("output_summary") @db.Text // key points from analysis
+  insightsCount   Int      @default(0) @map("insights_count")
+  tokensUsed      Int?     @map("tokens_used")
+  model           String?  // which Claude model was used
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([analysisType])
+  @@index([storefrontId])
+  @@index([createdAt])
+  @@map("analysis_history")
+}

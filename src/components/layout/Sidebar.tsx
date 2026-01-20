@@ -1,24 +1,27 @@
 'use client';
 
 import {
+  Activity,
   LayoutDashboard,
   TrendingUp,
   Sparkles,
   Database,
+  FileText,
+  Search,
+  FileBox,
+  QrCode,
   Settings,
   LogOut,
   Moon,
   Sun,
   Store,
-  X,
-  Building2,
+  RefreshCw,
+  Cloud,
+  Loader2,
 } from 'lucide-react';
-import Image from 'next/image';
 import { useAppStore, PageType } from '@/store/app-store';
 import { STORES } from '@/lib/config';
 import { StoreId } from '@/types';
-import { useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -32,13 +35,13 @@ function NavItem({ icon: Icon, label, active, onClick }: NavItemProps) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded border-none cursor-pointer transition-all duration-200 font-sans text-sm font-medium text-left ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded border-none cursor-pointer transition-all duration-200 font-sans text-sm font-medium text-left ${
         active
           ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
           : 'bg-transparent text-[var(--muted)] hover:bg-[var(--accent)]/5'
       }`}
     >
-      <Icon className="w-5 h-5 shrink-0" />
+      <Icon className="w-5 h-5" />
       <span>{label}</span>
     </button>
   );
@@ -54,44 +57,19 @@ export function Sidebar() {
     darkMode,
     toggleDarkMode,
     setUser,
-    sidebarOpen,
-    setSidebarOpen,
-    currentOrganization,
-    setCurrentOrganization,
+    loadDataFromS3,
+    isLoading,
+    dataStatus,
   } = useAppStore();
 
-  const { signOut } = useAuth();
-
-  const handleLogout = async () => {
-    await signOut();
+  const handleLogout = () => {
+    fetch('/api/auth', { method: 'DELETE' });
     setUser(null);
-    setCurrentOrganization(null);
   };
 
-  const handleOrganizationChange = (orgId: string) => {
-    if (!user?.organizations) return;
-    const org = user.organizations.find(o => o.orgId === orgId);
-    if (org) {
-      setCurrentOrganization(org);
-    }
+  const handleRefreshData = () => {
+    loadDataFromS3();
   };
-
-  const handleNavClick = (page: PageType) => {
-    setCurrentPage(page);
-    // Close sidebar on mobile after navigation
-    setSidebarOpen(false);
-  };
-
-  // Close sidebar when pressing Escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && sidebarOpen) {
-        setSidebarOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sidebarOpen, setSidebarOpen]);
 
   // Main navigation - matches Streamlit app structure
   // Research, SEO, Invoices, and QR are sub-tabs within Data Center
@@ -103,99 +81,23 @@ export function Sidebar() {
   ];
 
   return (
-    <>
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      <div
-        className={`
-          fixed lg:sticky top-0 left-0 z-50
-          w-72 lg:w-64 bg-[var(--paper)] border-r border-[var(--border)] p-4 sm:p-6 flex flex-col h-screen max-h-screen overflow-y-auto
-          transform transition-transform duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        `}
-      >
-        {/* Mobile close button */}
-        <button
-          onClick={() => setSidebarOpen(false)}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-[var(--accent)]/10 lg:hidden"
-        >
-          <X className="w-5 h-5 text-[var(--muted)]" />
-        </button>
+    <div className="w-64 bg-[var(--paper)] border-r border-[var(--border)] p-6 flex flex-col h-screen sticky top-0">
       {/* Logo */}
-      <div className="flex items-center gap-3 mb-4 sm:mb-6 shrink-0">
-        <Image
-          src="/chapters-logo.svg"
-          alt="Chapters Logo"
-          width={40}
-          height={40}
-          className="w-8 h-8 sm:w-10 sm:h-10 logo-dark-invert"
-        />
+      <div className="flex items-center gap-3 mb-6 shrink-0">
+        <div className="w-10 h-10 rounded bg-[var(--accent)] flex items-center justify-center">
+          <Activity className="w-6 h-6 text-[var(--paper)]" />
+        </div>
         <div>
-          <h1 className="font-serif text-lg sm:text-xl font-semibold text-[var(--ink)] tracking-tight m-0 leading-none">
+          <h1 className="font-serif text-xl font-semibold text-[var(--ink)] tracking-tight m-0">
             Chapters
           </h1>
-          <p className="text-[0.5rem] sm:text-[0.55rem] text-[var(--muted)] m-0 mt-0.5 leading-none">Data & Marketing Consulting, LLC</p>
+          <p className="text-[0.7rem] text-[var(--muted)] m-0">Analytics Dashboard</p>
         </div>
       </div>
 
-      {/* Organization Selector (for users with multiple organizations) */}
-      {user?.organizations && user.organizations.length > 1 && (
-        <div className="mb-4 sm:mb-6 shrink-0">
-          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
-            Organization
-          </label>
-          <div className="relative">
-            <Building2 className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
-            <select
-              value={currentOrganization?.orgId || ''}
-              onChange={(e) => handleOrganizationChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-1.5 sm:py-2 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--ink)] text-sm font-sans appearance-none cursor-pointer"
-            >
-              {user.organizations.map((org) => (
-                <option key={org.orgId} value={org.orgId}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
-
-      {/* Organization Display (for users with single organization) */}
-      {user?.organizations && user.organizations.length === 1 && (
-        <div className="mb-4 sm:mb-6 shrink-0">
-          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
-            Organization
-          </label>
-          <div className="flex items-center gap-2 px-3 py-2 rounded border border-[var(--border)] bg-[var(--white)]">
-            <Building2 className="w-4 h-4 text-[var(--accent)]" />
-            <span className="text-sm text-[var(--ink)]">{user.organizations[0].name}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Global Admin Badge */}
-      {user?.isGlobalAdmin && (
-        <div className="mb-4 sm:mb-6 shrink-0">
-          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
-            Organization
-          </label>
-          <div className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--accent)]/10 border border-[var(--accent)]/20">
-            <Building2 className="w-4 h-4 text-[var(--accent)]" />
-            <span className="text-sm font-medium text-[var(--accent)]">BCSF, Inc</span>
-          </div>
-        </div>
-      )}
-
       {/* Store Selector */}
-      <div className="mb-4 sm:mb-6 shrink-0">
-        <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
+      <div className="mb-6 shrink-0">
+        <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-2 block">
           Store
         </label>
         <div className="relative">
@@ -203,7 +105,7 @@ export function Sidebar() {
           <select
             value={selectedStore}
             onChange={(e) => setSelectedStore(e.target.value as StoreId)}
-            className="w-full pl-10 pr-4 py-1.5 sm:py-2 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--ink)] text-sm font-sans appearance-none cursor-pointer"
+            className="w-full pl-10 pr-4 py-2 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--ink)] text-sm font-sans appearance-none cursor-pointer"
           >
             {Object.values(STORES).map((store) => (
               <option key={store.id} value={store.id}>
@@ -223,46 +125,111 @@ export function Sidebar() {
             label={item.label}
             page={item.page}
             active={currentPage === item.page}
-            onClick={() => handleNavClick(item.page)}
+            onClick={() => setCurrentPage(item.page)}
           />
         ))}
       </nav>
 
       {/* Bottom section - fixed to bottom */}
-      <div className="mt-auto shrink-0 pt-2">
+      <div className="mt-auto shrink-0">
+        {/* Data Status & Refresh */}
+        <div className="mb-4 p-3 bg-[var(--accent)]/5 rounded">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Cloud className="w-4 h-4 text-[var(--accent)]" />
+              <span className="text-xs font-medium text-[var(--accent)]">Data Status</span>
+            </div>
+            <button
+              onClick={handleRefreshData}
+              disabled={isLoading}
+              className="p-1 rounded hover:bg-[var(--accent)]/10 disabled:opacity-50"
+              title="Refresh data from S3"
+            >
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 text-[var(--accent)] animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 text-[var(--accent)]" />
+              )}
+            </button>
+          </div>
+          <div className="text-xs text-[var(--muted)] space-y-0.5 max-h-36 overflow-y-auto">
+            <div className="flex justify-between">
+              <span>Sales:</span>
+              <span className={dataStatus.sales.loaded ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
+                {dataStatus.sales.count.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Brands:</span>
+              <span className={dataStatus.brands.loaded ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
+                {dataStatus.brands.count.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Products:</span>
+              <span className={dataStatus.products.loaded ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
+                {dataStatus.products.count.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Customers:</span>
+              <span className={dataStatus.customers.loaded ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
+                {dataStatus.customers.count.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Budtenders:</span>
+              <span className={dataStatus.budtenders.loaded ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
+                {dataStatus.budtenders.count.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Mappings:</span>
+              <span className={dataStatus.mappings.loaded ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
+                {dataStatus.mappings.count.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Invoices:</span>
+              <span className={dataStatus.invoices.loaded ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
+                {dataStatus.invoices.count.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Dark mode toggle */}
         <button
           onClick={toggleDarkMode}
-          className="w-full flex items-center gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--muted)] text-sm font-medium cursor-pointer mb-3 sm:mb-4 hover:bg-[var(--cream)] transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--muted)] text-sm font-medium cursor-pointer mb-4 hover:bg-[var(--cream)] transition-colors"
         >
-          {darkMode ? <Sun className="w-5 h-5 shrink-0" /> : <Moon className="w-5 h-5 shrink-0" />}
+          {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
         </button>
 
         {/* User section */}
-        <div className="pt-3 sm:pt-4 border-t border-[var(--border)]">
-          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[var(--accent-light)] flex items-center justify-center text-white font-semibold text-xs sm:text-sm shrink-0">
+        <div className="pt-4 border-t border-[var(--border)]">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-[var(--accent-light)] flex items-center justify-center text-white font-semibold text-sm">
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--ink)] m-0 capitalize truncate">
+              <p className="text-sm font-medium text-[var(--ink)] m-0 capitalize">
                 {user?.username || 'Guest'}
               </p>
               <p className="text-xs text-[var(--muted)] m-0 capitalize">{user?.role || 'User'}</p>
             </div>
-            <Settings className="w-5 h-5 text-[var(--muted)] cursor-pointer shrink-0" />
+            <Settings className="w-5 h-5 text-[var(--muted)] cursor-pointer" />
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--muted)] text-sm font-medium cursor-pointer hover:bg-[var(--cream)] transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--muted)] text-sm font-medium cursor-pointer hover:bg-[var(--cream)] transition-colors"
           >
-            <LogOut className="w-4 h-4 shrink-0" />
+            <LogOut className="w-4 h-4" />
             <span>Sign Out</span>
           </button>
         </div>
       </div>
-      </div>
-    </>
+    </div>
   );
 }

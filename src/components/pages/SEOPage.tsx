@@ -1,34 +1,46 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/ui/Header';
 import { Card } from '@/components/ui/Card';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { SEO_SITES } from '@/lib/config';
-import { useAppStore } from '@/store/app-store';
-import { Globe, AlertCircle, CheckCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { Globe, TrendingUp, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
+
+interface SEOData {
+  site: string;
+  score: number;
+  priorities: string[];
+  quickWins: string[];
+  lastUpdated: string;
+}
 
 export function SEOPage() {
   const [selectedSite, setSelectedSite] = useState(SEO_SITES[0].id);
-  const { seoData: storeSeoData, dataStatus, isLoading } = useAppStore();
+  const [seoData, setSeoData] = useState<SEOData | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Find SEO data for the selected site from the store
-  const seoData = useMemo(() => {
-    if (!storeSeoData || storeSeoData.length === 0) return null;
-
-    // Map site IDs to display names for matching
-    const siteNameMap: Record<string, string> = {
-      'barbarycoastsf': 'Barbary Coast',
-      'grassrootssf': 'Grass Roots',
-    };
-
-    const displayName = siteNameMap[selectedSite];
-    return storeSeoData.find(s => s.site === displayName) || null;
-  }, [storeSeoData, selectedSite]);
-
-  const loading = isLoading || !dataStatus.seo.loaded;
+  useEffect(() => {
+    // In production, this would load from S3
+    setSeoData({
+      site: selectedSite,
+      score: 72,
+      priorities: [
+        'Improve page load speed on mobile devices',
+        'Add more internal links between product pages',
+        'Optimize meta descriptions for key landing pages',
+        'Fix broken links in footer navigation',
+      ],
+      quickWins: [
+        'Add alt text to product images',
+        'Create XML sitemap',
+        'Add structured data for products',
+      ],
+      lastUpdated: new Date().toISOString(),
+    });
+  }, [selectedSite]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-[var(--success)]';
@@ -72,33 +84,8 @@ export function SEOPage() {
             </div>
           </Card>
 
-          {/* Loading State */}
-          {loading && (
-            <Card>
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-                <span className="ml-3 text-[var(--muted)]">Loading SEO data from S3...</span>
-              </div>
-            </Card>
-          )}
-
-          {/* No Data State */}
-          {!loading && !seoData && (
-            <Card>
-              <div className="text-center py-12">
-                <Globe className="w-12 h-12 mx-auto text-[var(--muted)] mb-4" />
-                <SectionTitle>No SEO Data Available</SectionTitle>
-                <p className="text-[var(--muted)] mt-2">
-                  No SEO analysis has been uploaded for this site yet.
-                  <br />
-                  Upload SEO analysis JSON files to <code className="bg-[var(--background)] px-1 rounded">seo-analysis/{selectedSite}/</code> in S3.
-                </p>
-              </div>
-            </Card>
-          )}
-
           {/* Score Card */}
-          {!loading && seoData && (
+          {seoData && (
             <div className="grid grid-cols-3 gap-6">
               <Card>
                 <SectionLabel>Overall Score</SectionLabel>
@@ -117,16 +104,12 @@ export function SEOPage() {
                 <SectionLabel>Top Priorities</SectionLabel>
                 <SectionTitle>Action Items</SectionTitle>
                 <div className="space-y-3">
-                  {seoData.priorities.length > 0 ? (
-                    seoData.priorities.slice(0, 3).map((priority, i) => (
-                      <div key={i} className="flex items-start gap-3">
-                        <AlertCircle className="w-4 h-4 text-[var(--warning)] mt-0.5 shrink-0" />
-                        <span className="text-sm text-[var(--ink)]">{priority}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-[var(--muted)]">No priorities identified</p>
-                  )}
+                  {seoData.priorities.slice(0, 3).map((priority, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <AlertCircle className="w-4 h-4 text-[var(--warning)] mt-0.5 shrink-0" />
+                      <span className="text-sm text-[var(--ink)]">{priority}</span>
+                    </div>
+                  ))}
                 </div>
               </Card>
 
@@ -134,16 +117,12 @@ export function SEOPage() {
                 <SectionLabel>Quick Wins</SectionLabel>
                 <SectionTitle>Easy Fixes</SectionTitle>
                 <div className="space-y-3">
-                  {seoData.quickWins.length > 0 ? (
-                    seoData.quickWins.map((win, i) => (
-                      <div key={i} className="flex items-start gap-3">
-                        <CheckCircle className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
-                        <span className="text-sm text-[var(--ink)]">{win}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-[var(--muted)]">No quick wins identified</p>
-                  )}
+                  {seoData.quickWins.map((win, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <CheckCircle className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
+                      <span className="text-sm text-[var(--ink)]">{win}</span>
+                    </div>
+                  ))}
                 </div>
               </Card>
             </div>

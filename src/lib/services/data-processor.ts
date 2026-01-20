@@ -215,8 +215,7 @@ export function parseCSV<T>(csvString: string): T[] {
         .toLowerCase()
         .replace(/\s+/g, '_')
         .replace(/[()%]/g, '')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+        .replace(/_+/g, '_');
     },
   });
 

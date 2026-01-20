@@ -30,57 +30,44 @@ export function CategoryPieChart({ data, showLegend = true }: CategoryPieChartPr
     return name.length > maxLength ? name.slice(0, maxLength) + '...' : name;
   };
 
-  // Calculate dynamic height based on legend rows needed
-  const legendRows = showLegend ? Math.ceil(data.length / 4) : 0;
-  const legendHeight = legendRows * 28;
-  const chartHeight = 320 + legendHeight;
-
   return (
-    <div style={{ width: '100%', height: chartHeight }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 25, right: 30, bottom: legendHeight + 15, left: 30 }}>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="42%"
-            innerRadius={55}
-            outerRadius={90}
-            paddingAngle={2}
-            dataKey="value"
-            label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-            labelLine={false}
-          >
-            {data.map((_, index) => (
-              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e0ddd8',
-              borderRadius: '8px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            }}
-            formatter={(value, name) => [`$${Number(value).toLocaleString()}`, name]}
+    <ResponsiveContainer width="100%" height={showLegend ? 380 : 300}>
+      <PieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy={showLegend ? "40%" : "50%"}
+          innerRadius={50}
+          outerRadius={80}
+          paddingAngle={2}
+          dataKey="value"
+          label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
+          labelLine={false}
+        >
+          {data.map((_, index) => (
+            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip
+          contentStyle={{
+            backgroundColor: '#ffffff',
+            border: '1px solid #e0ddd8',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+          }}
+          formatter={(value, name) => [`$${Number(value).toLocaleString()}`, name]}
+        />
+        {showLegend && (
+          <Legend
+            layout="horizontal"
+            verticalAlign="bottom"
+            align="center"
+            wrapperStyle={{ paddingTop: '20px' }}
+            formatter={(value) => <span style={{ color: '#333', fontSize: '12px' }}>{truncateName(String(value))}</span>}
           />
-          {showLegend && (
-            <Legend
-              layout="horizontal"
-              verticalAlign="bottom"
-              align="center"
-              wrapperStyle={{
-                paddingTop: '8px',
-                fontSize: '11px',
-                lineHeight: '1.6',
-              }}
-              formatter={(value) => (
-                <span style={{ color: '#333', fontSize: '11px' }}>{truncateName(String(value))}</span>
-              )}
-            />
-          )}
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
+        )}
+      </PieChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -95,50 +82,32 @@ export function SegmentPieChart({ data }: SegmentPieChartProps) {
     value,
   }));
 
-  // Calculate dynamic height based on legend
-  const legendRows = Math.ceil(chartData.length / 3);
-  const legendHeight = legendRows * 28;
-  const chartHeight = 300 + legendHeight;
-
   return (
-    <div style={{ width: '100%', height: chartHeight }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 25, right: 30, bottom: legendHeight + 15, left: 30 }}>
-          <Pie
-            data={chartData}
-            cx="50%"
-            cy="40%"
-            innerRadius={40}
-            outerRadius={75}
-            paddingAngle={2}
-            dataKey="value"
-            label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-            labelLine={false}
-          >
-            {chartData.map((_, index) => (
-              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e0ddd8',
-              borderRadius: '8px',
-            }}
-            formatter={(value, name) => [Number(value).toLocaleString(), name]}
-          />
-          <Legend
-            layout="horizontal"
-            verticalAlign="bottom"
-            align="center"
-            wrapperStyle={{
-              paddingTop: '8px',
-              fontSize: '11px',
-              lineHeight: '1.6',
-            }}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
+    <ResponsiveContainer width="100%" height={250}>
+      <PieChart>
+        <Pie
+          data={chartData}
+          cx="50%"
+          cy="50%"
+          innerRadius={40}
+          outerRadius={80}
+          paddingAngle={2}
+          dataKey="value"
+        >
+          {chartData.map((_, index) => (
+            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip
+          contentStyle={{
+            backgroundColor: '#ffffff',
+            border: '1px solid #e0ddd8',
+            borderRadius: '8px',
+          }}
+          formatter={(value, name) => [value, name]}
+        />
+        <Legend />
+      </PieChart>
+    </ResponsiveContainer>
   );
 }

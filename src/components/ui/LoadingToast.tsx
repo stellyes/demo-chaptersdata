@@ -35,10 +35,6 @@ interface LoadingToastProps {
     budtenders: { loaded: boolean; count: number };
     mappings: { loaded: boolean; count: number };
     invoices: { loaded: boolean; count: number };
-    research: { loaded: boolean; count: number };
-    seo: { loaded: boolean; count: number };
-    qrCodes: { loaded: boolean; count: number };
-    aiRecommendations: { loaded: boolean; count: number };
   };
 }
 
@@ -103,7 +99,7 @@ export function LoadingToast({ isVisible, dataStatus }: LoadingToastProps) {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
-      <div className="bg-[var(--ink)] text-[var(--paper)] rounded-lg shadow-2xl overflow-hidden min-w-[320px] transition-all duration-500 ease-in-out">
+      <div className="bg-[var(--ink)] text-[var(--paper)] rounded-lg shadow-2xl overflow-hidden min-w-[320px]">
         {/* Progress bar */}
         <div className="h-1 bg-[var(--ink)]">
           <div
@@ -138,11 +134,8 @@ export function LoadingToast({ isVisible, dataStatus }: LoadingToastProps) {
               <DataStatusItem label="Products" status={dataStatus.products} />
               <DataStatusItem label="Customers" status={dataStatus.customers} />
               <DataStatusItem label="Budtenders" status={dataStatus.budtenders} />
+              <DataStatusItem label="Mappings" status={dataStatus.mappings} />
               <DataStatusItem label="Invoices" status={dataStatus.invoices} />
-              <DataStatusItem label="Research" status={dataStatus.research} />
-              <DataStatusItem label="SEO Data" status={dataStatus.seo} />
-              <DataStatusItem label="QR Codes" status={dataStatus.qrCodes} />
-              <DataStatusItem label="AI Reports" status={dataStatus.aiRecommendations} />
             </div>
           )}
 
@@ -160,24 +153,19 @@ export function LoadingToast({ isVisible, dataStatus }: LoadingToastProps) {
             ))}
           </div>
 
-          {/* Extended loading message - shows after 30 seconds with smooth height animation */}
-          <div
-            className="grid transition-all duration-500 ease-in-out"
-            style={{ gridTemplateRows: showExtendedMessage ? '1fr' : '0fr' }}
-          >
-            <div className="overflow-hidden">
-              <div className="mt-4 pt-3 border-t border-[var(--paper)]/10">
-                <div className="flex items-start gap-2">
-                  <Clock className="w-4 h-4 text-[var(--paper)]/60 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-[var(--paper)]/70 leading-relaxed">
-                    Initial data synchronization may take a few minutes.
-                    Your dashboard is working in the background — feel free to wait
-                    while we prepare your analytics.
-                  </p>
-                </div>
+          {/* Extended loading message - shows after 30 seconds */}
+          {showExtendedMessage && (
+            <div className="mt-4 pt-3 border-t border-[var(--paper)]/10 animate-in fade-in duration-500">
+              <div className="flex items-start gap-2">
+                <Clock className="w-4 h-4 text-[var(--paper)]/60 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-[var(--paper)]/70 leading-relaxed">
+                  Initial data synchronization may take a few minutes.
+                  Your dashboard is working in the background — feel free to wait
+                  while we prepare your analytics.
+                </p>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
