@@ -730,3 +730,34 @@ model MonthlyStrategicReport {
   @@index([createdAt])
   @@map("monthly_strategic_reports")
 }
+
+// ============================================
+// BILLING & ACTION TRACKING
+// Tracks billable actions for organizations
+// ============================================
+
+model BillingEvent {
+  id              String   @id @default(uuid())
+  orgId           String   @map("org_id")
+  storefrontId    String?  @map("storefront_id")
+  userId          String?  @map("user_id")
+
+  eventType       String   @map("event_type") // aws_action, claude_action
+  actionCategory  String   @map("action_category") // data_import, data_load, ai_analysis, daily_learning, monthly_analysis, research
+  actionName      String   @map("action_name")
+
+  baseCost        Decimal  @map("base_cost") @db.Decimal(10, 6)
+  billedAmount    Decimal  @map("billed_amount") @db.Decimal(10, 4)
+  multiplier      Decimal  @default(1) @db.Decimal(4, 2)
+
+  billingMonth    String   @map("billing_month") // e.g., "2025-01"
+  metadata        Json?
+
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@index([billingMonth])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("billing_events")
+}
