@@ -239,24 +239,24 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt DailyLearningScheduleRule.Arn
 
-  # CloudWatch Log Groups
-  ScheduledFunctionLogGroup:
+  # CloudWatch Log Groups (matching existing stack resource names)
+  DailyLearningScheduledLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/daily-learning-scheduled-${Environment}'
       RetentionInDays: 30
 
-  ManualFunctionLogGroup:
+  DailyLearningManualLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/daily-learning-manual-${Environment}'
       RetentionInDays: 30
 
-  # CloudWatch Alarm for failures
+  # CloudWatch Alarm for failures (matching existing alarm name)
   DailyLearningFailureAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub 'daily-learning-failure-${Environment}'
+      AlarmName: !Sub 'daily-learning-failures-${Environment}'
       AlarmDescription: Alerts when daily learning Lambda fails
       MetricName: Errors
       Namespace: AWS/Lambda
