@@ -1,0 +1,287 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Daily Learning System for Chapters-Data - Lambda + EventBridge
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+    Description: Deployment environment
+
+  ApiEndpoint:
+    Type: String
+    Description: The Amplify app URL for the chapters-data API
+
+  LearningApiKey:
+    Type: String
+    NoEcho: true
+    Description: API key for authenticating with the learning endpoint
+
+Resources:
+  # IAM Role for Lambda
+  DailyLearningLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'daily-learning-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/daily-learning-*'
+
+  # Scheduled Lambda Function (runs daily at 5 AM UTC / 9 PM PST)
+  DailyLearningScheduledFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'daily-learning-scheduled-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt DailyLearningLambdaRole.Arn
+      Timeout: 900
+      MemorySize: 256
+      Environment:
+        Variables:
+          API_ENDPOINT: !Ref ApiEndpoint
+          LEARNING_API_KEY: !Ref LearningApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          const https = require('https');
+          const http = require('http');
+
+          exports.handler = async (event) => {
+            console.log('Daily Learning Lambda triggered', JSON.stringify(event));
+
+            const apiEndpoint = process.env.API_ENDPOINT;
+            const apiKey = process.env.LEARNING_API_KEY;
+
+            if (!apiEndpoint || !apiKey) {
+              throw new Error('Missing required environment variables');
+            }
+
+            const url = new URL('/api/learning/daily', apiEndpoint);
+            const isHttps = url.protocol === 'https:';
+            const client = isHttps ? https : http;
+
+            const requestBody = JSON.stringify({
+              action: 'run',
+              forceRun: false,
+              skipWebResearch: false
+            });
+
+            const options = {
+              hostname: url.hostname,
+              port: url.port || (isHttps ? 443 : 80),
+              path: url.pathname,
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Length': Buffer.byteLength(requestBody)
+              }
+            };
+
+            return new Promise((resolve, reject) => {
+              const req = client.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  console.log('Response status:', res.statusCode);
+                  console.log('Response body:', data);
+
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({
+                      statusCode: 200,
+                      body: JSON.stringify({
+                        message: 'Daily learning triggered successfully',
+                        response: JSON.parse(data)
+                      })
+                    });
+                  } else {
+                    reject(new Error(`API returned ${res.statusCode}: ${data}`));
+                  }
+                });
+              });
+
+              req.on('error', (e) => {
+                console.error('Request error:', e);
+                reject(e);
+              });
+
+              req.write(requestBody);
+              req.end();
+            });
+          };
+
+  # Manual Trigger Lambda (for on-demand runs)
+  DailyLearningManualFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'daily-learning-manual-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt DailyLearningLambdaRole.Arn
+      Timeout: 900
+      MemorySize: 256
+      Environment:
+        Variables:
+          API_ENDPOINT: !Ref ApiEndpoint
+          LEARNING_API_KEY: !Ref LearningApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          const https = require('https');
+          const http = require('http');
+
+          exports.handler = async (event) => {
+            console.log('Manual Daily Learning Lambda triggered', JSON.stringify(event));
+
+            const apiEndpoint = process.env.API_ENDPOINT;
+            const apiKey = process.env.LEARNING_API_KEY;
+            const forceRun = event.forceRun || false;
+            const skipWebResearch = event.skipWebResearch || false;
+
+            if (!apiEndpoint || !apiKey) {
+              throw new Error('Missing required environment variables');
+            }
+
+            const url = new URL('/api/learning/daily', apiEndpoint);
+            const isHttps = url.protocol === 'https:';
+            const client = isHttps ? https : http;
+
+            const requestBody = JSON.stringify({
+              action: 'run',
+              forceRun,
+              skipWebResearch
+            });
+
+            const options = {
+              hostname: url.hostname,
+              port: url.port || (isHttps ? 443 : 80),
+              path: url.pathname,
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Length': Buffer.byteLength(requestBody)
+              }
+            };
+
+            return new Promise((resolve, reject) => {
+              const req = client.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  console.log('Response status:', res.statusCode);
+                  console.log('Response body:', data);
+
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({
+                      statusCode: 200,
+                      body: JSON.stringify({
+                        message: 'Daily learning triggered successfully',
+                        response: JSON.parse(data)
+                      })
+                    });
+                  } else {
+                    reject(new Error(`API returned ${res.statusCode}: ${data}`));
+                  }
+                });
+              });
+
+              req.on('error', (e) => {
+                console.error('Request error:', e);
+                reject(e);
+              });
+
+              req.write(requestBody);
+              req.end();
+            });
+          };
+
+  # EventBridge Rule - Daily at 5 AM UTC (9 PM PST)
+  DailyLearningScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'daily-learning-schedule-${Environment}'
+      Description: Triggers daily learning at 5 AM UTC (9 PM PST)
+      ScheduleExpression: 'cron(0 5 * * ? *)'
+      State: ENABLED
+      Targets:
+        - Id: DailyLearningTarget
+          Arn: !GetAtt DailyLearningScheduledFunction.Arn
+
+  # Permission for EventBridge to invoke Lambda
+  DailyLearningSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DailyLearningScheduledFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DailyLearningScheduleRule.Arn
+
+  # CloudWatch Log Groups
+  ScheduledFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/daily-learning-scheduled-${Environment}'
+      RetentionInDays: 30
+
+  ManualFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/daily-learning-manual-${Environment}'
+      RetentionInDays: 30
+
+  # CloudWatch Alarm for failures
+  DailyLearningFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'daily-learning-failure-${Environment}'
+      AlarmDescription: Alerts when daily learning Lambda fails
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DailyLearningScheduledFunction
+
+Outputs:
+  ScheduledFunctionArn:
+    Description: ARN of the scheduled Lambda function
+    Value: !GetAtt DailyLearningScheduledFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ScheduledFunctionArn'
+
+  ManualFunctionArn:
+    Description: ARN of the manual trigger Lambda function
+    Value: !GetAtt DailyLearningManualFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ManualFunctionArn'
+
+  ScheduleRuleArn:
+    Description: ARN of the EventBridge schedule rule
+    Value: !GetAtt DailyLearningScheduleRule.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ScheduleRuleArn'
