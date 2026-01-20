@@ -483,3 +483,162 @@ model AnalysisHistory {
   @@index([createdAt])
   @@map("analysis_history")
 }
+
+// ============================================
+// AUTONOMOUS DAILY LEARNING SYSTEM
+// Runs daily to review data, generate questions,
+// research the web, and produce actionable digests
+// ============================================
+
+model DailyLearningJob {
+  id              String    @id @default(uuid())
+  startedAt       DateTime  @default(now()) @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  status          String    @default("running") // running, completed, failed, partial
+  currentPhase    String?   @map("current_phase")
+
+  dataReviewDone      Boolean @default(false) @map("data_review_done")
+  questionGenDone     Boolean @default(false) @map("question_gen_done")
+  webResearchDone     Boolean @default(false) @map("web_research_done")
+  correlationDone     Boolean @default(false) @map("correlation_done")
+  digestGenDone       Boolean @default(false) @map("digest_gen_done")
+
+  inputTokens     Int      @default(0) @map("input_tokens")
+  outputTokens    Int      @default(0) @map("output_tokens")
+  searchesUsed    Int      @default(0) @map("searches_used")
+  estimatedCost   Decimal  @default(0) @map("estimated_cost") @db.Decimal(10, 4)
+
+  questionsGenerated  Int     @default(0) @map("questions_generated")
+  insightsDiscovered  Int     @default(0) @map("insights_discovered")
+  articlesAnalyzed    Int     @default(0) @map("articles_analyzed")
+
+  errorMessage    String?  @map("error_message") @db.Text
+  errorPhase      String?  @map("error_phase")
+
+  digestId        String?  @unique @map("digest_id")
+  digest          DailyDigest? @relation(fields: [digestId], references: [id])
+
+  @@index([startedAt])
+  @@index([status])
+  @@map("daily_learning_jobs")
+}
+
+model DailyDigest {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now()) @map("created_at")
+  digestDate      DateTime @map("digest_date") @db.Date
+
+  executiveSummary    String  @map("executive_summary") @db.Text
+  priorityActions     Json    @default("[]") @map("priority_actions")
+  quickWins           Json    @default("[]") @map("quick_wins")
+  watchItems          Json    @default("[]") @map("watch_items")
+  industryHighlights  Json    @default("[]") @map("industry_highlights")
+  regulatoryUpdates   Json    @default("[]") @map("regulatory_updates")
+  marketTrends        Json    @default("[]") @map("market_trends")
+  questionsForTomorrow Json   @default("[]") @map("questions_for_tomorrow")
+  correlatedInsights  Json    @default("[]") @map("correlated_insights")
+
+  dataHealthScore     Float   @default(0) @map("data_health_score")
+  confidenceScore     Float   @default(0) @map("confidence_score")
+
+  job                 DailyLearningJob?
+
+  @@unique([digestDate])
+  @@index([createdAt])
+  @@map("daily_digests")
+}
+
+model WebResearchCache {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now()) @map("created_at")
+  expiresAt       DateTime @map("expires_at")
+
+  searchQuery     String   @map("search_query") @db.Text
+  queryHash       String   @unique @map("query_hash")
+
+  resultCount     Int      @default(0) @map("result_count")
+  resultsJson     Json     @default("[]") @map("results_json")
+  urlHashes       String[] @map("url_hashes")
+
+  searchEngine    String   @default("google") @map("search_engine")
+  pagesRetrieved  Int      @default(1) @map("pages_retrieved")
+
+  @@index([queryHash])
+  @@index([expiresAt])
+  @@map("web_research_cache")
+}
+
+model CollectedUrl {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  url             String    @db.Text
+  urlHash         String    @unique @map("url_hash")
+  domain          String
+
+  contentHash     String?   @map("content_hash")
+  title           String?   @db.Text
+  snippet         String?   @db.Text
+  fullContent     String?   @map("full_content") @db.Text
+  publishedDate   DateTime? @map("published_date")
+
+  relevanceScore  Float     @default(0) @map("relevance_score")
+  categories      String[]
+
+  isFetched       Boolean   @default(false) @map("is_fetched")
+  isAnalyzed      Boolean   @default(false) @map("is_analyzed")
+  fetchError      String?   @map("fetch_error")
+
+  sourceQuery     String?   @map("source_query") @db.Text
+  sourceJobId     String?   @map("source_job_id")
+
+  @@index([urlHash])
+  @@index([domain])
+  @@index([createdAt])
+  @@index([isAnalyzed])
+  @@map("collected_urls")
+}
+
+model LearningQuestion {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  question        String    @db.Text
+  questionHash    String    @unique @map("question_hash")
+  category        String
+  priority        Int       @default(5)
+
+  requiresWebResearch Boolean @default(false) @map("requires_web_research")
+  requiresInternalData Boolean @default(true) @map("requires_internal_data")
+
+  generatedBy     String    @default("system") @map("generated_by")
+  sourceInsightId String?   @map("source_insight_id")
+
+  timesAsked      Int       @default(0) @map("times_asked")
+  lastAsked       DateTime? @map("last_asked")
+  lastAnswered    DateTime? @map("last_answered")
+
+  answerQuality   Float?    @map("answer_quality")
+  isActive        Boolean   @default(true) @map("is_active")
+
+  @@index([category])
+  @@index([priority])
+  @@index([isActive])
+  @@map("learning_questions")
+}
+
+model ApiUsageTracker {
+  id              String   @id @default(uuid())
+  monthYear       String   @unique @map("month_year")
+
+  serpApiSearches Int      @default(0) @map("serpapi_searches")
+  serpApiLimit    Int      @default(250) @map("serpapi_limit")
+
+  claudeInputTokens  Int   @default(0) @map("claude_input_tokens")
+  claudeOutputTokens Int   @default(0) @map("claude_output_tokens")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("api_usage_tracker")
+}
