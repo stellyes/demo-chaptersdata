@@ -7,16 +7,29 @@ frontend:
     build:
       commands:
         # Create .env.production file with runtime environment variables
-        - echo "CHAPTERS_ACCESS_KEY_ID=$CHAPTERS_ACCESS_KEY_ID" >> .env.production
-        - echo "CHAPTERS_SECRET_ACCESS_KEY=$CHAPTERS_SECRET_ACCESS_KEY" >> .env.production
-        - echo "CHAPTERS_AWS_REGION=$CHAPTERS_AWS_REGION" >> .env.production
-        - echo "CHAPTERS_S3_BUCKET=$CHAPTERS_S3_BUCKET" >> .env.production
+        # Database
+        - echo "DATABASE_URL=$DATABASE_URL" >> .env.production
+        # AWS Cognito (NEXT_PUBLIC_ prefix makes them available client-side)
+        - echo "NEXT_PUBLIC_AWS_REGION=$NEXT_PUBLIC_AWS_REGION" >> .env.production
+        - echo "NEXT_PUBLIC_COGNITO_USER_POOL_ID=$NEXT_PUBLIC_COGNITO_USER_POOL_ID" >> .env.production
+        - echo "NEXT_PUBLIC_COGNITO_CLIENT_ID=$NEXT_PUBLIC_COGNITO_CLIENT_ID" >> .env.production
+        - echo "NEXT_PUBLIC_COGNITO_IDENTITY_POOL_ID=$NEXT_PUBLIC_COGNITO_IDENTITY_POOL_ID" >> .env.production
+        # AWS credentials
+        - echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> .env.production
+        - echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> .env.production
+        - echo "AWS_REGION=$AWS_REGION" >> .env.production
+        - echo "S3_BUCKET_NAME=$S3_BUCKET_NAME" >> .env.production
+        # API keys
         - echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env.production
-        - echo "AUTH_ADMIN_HASH=$AUTH_ADMIN_HASH" >> .env.production
-        - echo "AUTH_ANALYST_HASH=$AUTH_ANALYST_HASH" >> .env.production
+        - echo "SERPAPI_API_KEY=$SERPAPI_API_KEY" >> .env.production
+        # DynamoDB
         - echo "DYNAMODB_QR_TABLE=$DYNAMODB_QR_TABLE" >> .env.production
         - echo "DYNAMODB_CLICKS_TABLE=$DYNAMODB_CLICKS_TABLE" >> .env.production
+        # QR
         - echo "QR_REDIRECT_BASE_URL=$QR_REDIRECT_BASE_URL" >> .env.production
+        # Legacy auth (if still used)
+        - echo "AUTH_ADMIN_HASH=$AUTH_ADMIN_HASH" >> .env.production
+        - echo "AUTH_ANALYST_HASH=$AUTH_ANALYST_HASH" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
