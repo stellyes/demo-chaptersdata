@@ -30,6 +30,8 @@ frontend:
         # Legacy auth (if still used)
         - echo "AUTH_ADMIN_HASH=$AUTH_ADMIN_HASH" >> .env.production
         - echo "AUTH_ANALYST_HASH=$AUTH_ANALYST_HASH" >> .env.production
+        # Learning API (for Lambda-triggered autonomous learning)
+        - echo "LEARNING_API_KEY=$LEARNING_API_KEY" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
