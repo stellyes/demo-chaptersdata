@@ -75,7 +75,7 @@ export function QRCodePage() {
     {
       id: 'generate',
       label: 'Generate QR Code',
-      content: (
+      render: () => (
         <div className="grid grid-cols-2 gap-6">
           <Card>
             <SectionLabel>QR Code Generator</SectionLabel>
@@ -177,7 +177,7 @@ export function QRCodePage() {
     {
       id: 'analytics',
       label: 'Analytics',
-      content: (
+      render: () => (
         <Card>
           <SectionLabel>Click Tracking</SectionLabel>
           <SectionTitle>QR Code Performance</SectionTitle>
@@ -210,7 +210,7 @@ export function QRCodePage() {
     {
       id: 'manage',
       label: 'Manage QR Codes',
-      content: (
+      render: () => (
         <Card>
           <SectionLabel>QR Code Library</SectionLabel>
           <SectionTitle>All QR Codes</SectionTitle>

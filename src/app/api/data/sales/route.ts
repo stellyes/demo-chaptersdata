@@ -1,39 +1,50 @@
 // ============================================
 // SALES DATA API ROUTE
+// Loads sales data from Aurora PostgreSQL
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loadAllSalesData, uploadSalesData } from '@/lib/aws/s3';
+import { prisma } from '@/lib/prisma';
 import { parseCSV, cleanSalesData } from '@/lib/services/data-processor';
-import { StoreId, UploadMetadata, SalesRecord } from '@/types';
+import { StoreId, SalesRecord } from '@/types';
 
-// GET - Load all sales data from S3
+// GET - Load all sales data from Aurora
 export async function GET() {
   try {
-    const files = await loadAllSalesData();
+    const salesRecords = await prisma.salesRecord.findMany({
+      orderBy: { date: 'asc' },
+    });
 
-    const allRecords: SalesRecord[] = [];
-
-    for (const file of files) {
-      const rawData = parseCSV<Record<string, string>>(file.data);
-      const cleanedData = cleanSalesData(rawData);
-      allRecords.push(...cleanedData);
-    }
-
-    // Remove duplicates based on date + store
-    const uniqueRecords = allRecords.reduce((acc, record) => {
-      const key = `${record.date}_${record.store_id}`;
-      if (!acc.has(key) || new Date(record.date) > new Date(acc.get(key)!.date)) {
-        acc.set(key, record);
-      }
-      return acc;
-    }, new Map<string, SalesRecord>());
+    // Transform to frontend format
+    const records: SalesRecord[] = salesRecords.map((r) => ({
+      date: r.date.toISOString().split('T')[0],
+      store: r.storeName || r.storeId,
+      store_id: r.storeId as StoreId,
+      week: r.week || '',
+      tickets_count: r.ticketsCount,
+      units_sold: r.unitsSold,
+      customers_count: r.customersCount,
+      new_customers: r.newCustomers,
+      gross_sales: Number(r.grossSales),
+      discounts: Number(r.discounts),
+      returns: Number(r.returns),
+      net_sales: Number(r.netSales),
+      taxes: Number(r.taxes),
+      gross_receipts: Number(r.grossReceipts),
+      cogs_with_excise: Number(r.cogsWithExcise),
+      gross_income: Number(r.grossIncome),
+      gross_margin_pct: Number(r.grossMarginPct),
+      discount_pct: Number(r.discountPct),
+      cost_pct: Number(r.costPct),
+      avg_basket_size: Number(r.avgBasketSize),
+      avg_order_value: Number(r.avgOrderValue),
+      avg_order_profit: Number(r.avgOrderProfit),
+    }));
 
     return NextResponse.json({
       success: true,
-      data: Array.from(uniqueRecords.values()).sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-      ),
+      data: records,
+      source: 'aurora',
     });
   } catch (error) {
     console.error('Error loading sales data:', error);
@@ -44,7 +55,7 @@ export async function GET() {
   }
 }
 
-// POST - Upload new sales data
+// POST - Upload new sales data to Aurora
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -74,23 +85,77 @@ export async function POST(request: NextRequest) {
     // Clean and validate data
     const cleanedData = cleanSalesData(rawData);
 
-    const metadata: UploadMetadata = {
-      store: storeId,
-      start_date: startDate,
-      end_date: endDate,
-      uploaded_at: new Date().toISOString(),
-      filename: file.name,
-    };
+    // Insert into Aurora
+    let insertedCount = 0;
+    for (const record of cleanedData) {
+      const dateObj = new Date(record.date);
 
-    const s3Key = await uploadSalesData(storeId, csvContent, metadata);
+      await prisma.salesRecord.upsert({
+        where: {
+          storeId_date: {
+            storeId: record.store_id,
+            date: dateObj,
+          },
+        },
+        create: {
+          storeId: record.store_id,
+          storeName: record.store,
+          date: dateObj,
+          week: record.week,
+          ticketsCount: record.tickets_count,
+          unitsSold: record.units_sold,
+          customersCount: record.customers_count,
+          newCustomers: record.new_customers,
+          grossSales: record.gross_sales,
+          discounts: record.discounts,
+          returns: record.returns,
+          netSales: record.net_sales,
+          taxes: record.taxes,
+          grossReceipts: record.gross_receipts,
+          cogsWithExcise: record.cogs_with_excise,
+          grossIncome: record.gross_income,
+          grossMarginPct: record.gross_margin_pct,
+          discountPct: record.discount_pct,
+          costPct: record.cost_pct,
+          avgBasketSize: record.avg_basket_size,
+          avgOrderValue: record.avg_order_value,
+          avgOrderProfit: record.avg_order_profit,
+        },
+        update: {
+          storeName: record.store,
+          week: record.week,
+          ticketsCount: record.tickets_count,
+          unitsSold: record.units_sold,
+          customersCount: record.customers_count,
+          newCustomers: record.new_customers,
+          grossSales: record.gross_sales,
+          discounts: record.discounts,
+          returns: record.returns,
+          netSales: record.net_sales,
+          taxes: record.taxes,
+          grossReceipts: record.gross_receipts,
+          cogsWithExcise: record.cogs_with_excise,
+          grossIncome: record.gross_income,
+          grossMarginPct: record.gross_margin_pct,
+          discountPct: record.discount_pct,
+          costPct: record.cost_pct,
+          avgBasketSize: record.avg_basket_size,
+          avgOrderValue: record.avg_order_value,
+          avgOrderProfit: record.avg_order_profit,
+        },
+      });
+      insertedCount++;
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        key: s3Key,
-        recordCount: cleanedData.length,
-        metadata,
+        recordCount: insertedCount,
+        storeId,
+        startDate,
+        endDate,
       },
+      source: 'aurora',
     });
   } catch (error) {
     console.error('Error uploading sales data:', error);

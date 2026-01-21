@@ -1,30 +1,43 @@
 // ============================================
 // BRAND MAPPINGS API ROUTE
-// Upload/download brand mappings JSON (v2 structure)
+// Read/update brand mappings from Aurora PostgreSQL (v2 structure)
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { uploadBrandMappings, downloadBrandMappings } from '@/lib/aws/s3';
+import { prisma } from '@/lib/prisma';
+
+// Brand mapping v2 structure
+interface BrandMappingData {
+  [canonicalBrand: string]: {
+    aliases: { [aliasName: string]: string };
+  };
+}
 
 // GET - Download current brand mappings
 export async function GET() {
   try {
-    const mappings = await downloadBrandMappings();
+    const canonicalBrands = await prisma.canonicalBrand.findMany({
+      include: { aliases: true },
+      orderBy: { canonicalName: 'asc' },
+    });
 
-    if (!mappings) {
-      return NextResponse.json({
-        success: false,
-        error: 'No brand mappings found',
-      }, { status: 404 });
+    // Transform to v2 format
+    const mappings: BrandMappingData = {};
+    for (const brand of canonicalBrands) {
+      const aliases: { [aliasName: string]: string } = {};
+      for (const alias of brand.aliases) {
+        aliases[alias.aliasName] = alias.productType || '';
+      }
+      mappings[brand.canonicalName] = { aliases };
     }
 
-    const data = JSON.parse(mappings);
-    const count = Object.keys(data).length;
+    const count = Object.keys(mappings).length;
 
     return NextResponse.json({
       success: true,
-      data,
+      data: mappings,
       count,
+      source: 'aurora',
     });
   } catch (error) {
     console.error('Error loading brand mappings:', error);
@@ -38,7 +51,7 @@ export async function GET() {
 // POST - Upload new brand mappings
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await request.json() as BrandMappingData;
 
     // Validate the structure
     if (!body || typeof body !== 'object') {
@@ -49,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if it's in v2 format (has aliases property in entries)
-    const firstValue = Object.values(body)[0] as { aliases?: Record<string, string> };
+    const firstValue = Object.values(body)[0];
     if (!firstValue || typeof firstValue !== 'object' || !('aliases' in firstValue)) {
       return NextResponse.json({
         success: false,
@@ -57,15 +70,44 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const jsonString = JSON.stringify(body, null, 2);
-    const key = await uploadBrandMappings(jsonString);
-    const count = Object.keys(body).length;
+    // Process each canonical brand
+    let brandsCreated = 0;
+    let aliasesCreated = 0;
+
+    for (const [canonicalName, entry] of Object.entries(body)) {
+      // Upsert canonical brand
+      const brand = await prisma.canonicalBrand.upsert({
+        where: { canonicalName },
+        create: { canonicalName },
+        update: {},
+      });
+      brandsCreated++;
+
+      // Process aliases
+      for (const [aliasName, productType] of Object.entries(entry.aliases)) {
+        await prisma.brandAlias.upsert({
+          where: {
+            aliasName,
+          },
+          create: {
+            brandId: brand.id,
+            aliasName,
+            productType: productType || null,
+          },
+          update: {
+            brandId: brand.id,
+            productType: productType || null,
+          },
+        });
+        aliasesCreated++;
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Uploaded ${count} brand mappings`,
-      key,
-      count,
+      message: `Processed ${brandsCreated} brands with ${aliasesCreated} aliases`,
+      count: brandsCreated,
+      source: 'aurora',
     });
   } catch (error) {
     console.error('Error uploading brand mappings:', error);

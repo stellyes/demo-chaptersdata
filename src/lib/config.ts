@@ -34,7 +34,7 @@ export const STORE_NAME_TO_ID: Record<string, StoreId> = {
 };
 
 // AWS Configuration
-// Note: Using CHAPTERS_ prefix instead of AWS_ for Amplify compatibility
+// Uses CHAPTERS_ prefix for Amplify (AWS_ prefix is reserved)
 export const AWS_CONFIG = {
   region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
   bucket: process.env.CHAPTERS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'retail-data-bcgr',

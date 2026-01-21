@@ -154,21 +154,30 @@ export class DailyLearningService {
       const digest = await this.phase5DigestGeneration(state, dataReview, questions, webResearchResults, correlatedInsights);
       await this.markPhaseComplete(state.jobId, 'digestGenDone');
 
-      const digestRecord = await prisma.dailyDigest.create({
-        data: {
-          digestDate: today,
-          executiveSummary: digest.executiveSummary,
-          priorityActions: JSON.parse(JSON.stringify(digest.priorityActions)),
-          quickWins: JSON.parse(JSON.stringify(digest.quickWins)),
-          watchItems: JSON.parse(JSON.stringify(digest.watchItems)),
-          industryHighlights: JSON.parse(JSON.stringify(digest.industryHighlights)),
-          regulatoryUpdates: JSON.parse(JSON.stringify(digest.regulatoryUpdates)),
-          marketTrends: JSON.parse(JSON.stringify(digest.marketTrends)),
-          questionsForTomorrow: JSON.parse(JSON.stringify(digest.questionsForTomorrow)),
-          correlatedInsights: JSON.parse(JSON.stringify(digest.correlatedInsights)),
-          dataHealthScore: digest.dataHealthScore,
-          confidenceScore: digest.confidenceScore,
-        },
+      const digestData = {
+        executiveSummary: digest.executiveSummary,
+        priorityActions: JSON.parse(JSON.stringify(digest.priorityActions)),
+        quickWins: JSON.parse(JSON.stringify(digest.quickWins)),
+        watchItems: JSON.parse(JSON.stringify(digest.watchItems)),
+        industryHighlights: JSON.parse(JSON.stringify(digest.industryHighlights)),
+        regulatoryUpdates: JSON.parse(JSON.stringify(digest.regulatoryUpdates)),
+        marketTrends: JSON.parse(JSON.stringify(digest.marketTrends)),
+        questionsForTomorrow: JSON.parse(JSON.stringify(digest.questionsForTomorrow)),
+        correlatedInsights: JSON.parse(JSON.stringify(digest.correlatedInsights)),
+        dataHealthScore: digest.dataHealthScore,
+        confidenceScore: digest.confidenceScore,
+      };
+
+      const digestRecord = await prisma.dailyDigest.upsert({
+        where: { digestDate: today },
+        create: { digestDate: today, ...digestData },
+        update: digestData,
+      });
+
+      // Clear any existing job's link to this digest (unique constraint)
+      await prisma.dailyLearningJob.updateMany({
+        where: { digestId: digestRecord.id, id: { not: state.jobId } },
+        data: { digestId: null },
       });
 
       await prisma.dailyLearningJob.update({
@@ -207,10 +216,14 @@ export class DailyLearningService {
   }
 
   private async phase1DataReview(state: DailyLearningJobState): Promise<DataReviewResult> {
-    const [salesData, brandData, customerData] = await Promise.all([
+    // Load all data sources in parallel
+    const [salesData, brandData, customerData, invoiceData, qrData, seoData] = await Promise.all([
       this.loadRecentSalesData(),
       this.loadRecentBrandData(),
       this.loadRecentCustomerData(),
+      this.loadRecentInvoiceData(),
+      this.loadQrCodeData(),
+      this.loadSeoAuditData(),
     ]);
 
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
@@ -218,6 +231,9 @@ export class DailyLearningService {
 SALES DATA: ${JSON.stringify(salesData, null, 2)}
 BRAND DATA: ${JSON.stringify(brandData, null, 2)}
 CUSTOMER DATA: ${JSON.stringify(customerData, null, 2)}
+INVOICE/PURCHASING DATA: ${JSON.stringify(invoiceData, null, 2)}
+QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
+WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
 
 Return JSON:
 {
@@ -396,14 +412,56 @@ Return JSON:
     webResearchResults: WebResearchResult[],
     correlatedInsights: CorrelatedInsight[]
   ): Promise<DailyDigestContent> {
-    const prompt = `Generate daily business intelligence digest for cannabis dispensaries.
+    const prompt = `Generate a daily business intelligence digest for cannabis dispensaries based on the provided data.
 
-Data Review: ${JSON.stringify(dataReview)}
-Questions: ${questions.length}
-Web Research: ${webResearchResults.map(r => r.summary).join('\n')}
-Insights: ${correlatedInsights.length}
+DATA REVIEW:
+${JSON.stringify(dataReview, null, 2)}
 
-Return JSON with: executiveSummary, priorityActions[], quickWins[], watchItems[], industryHighlights[], regulatoryUpdates[], marketTrends[], questionsForTomorrow[], correlatedInsights, dataHealthScore (0-100), confidenceScore (0-1)`;
+GENERATED QUESTIONS (${questions.length}):
+${questions.map(q => `- ${q.question} [${q.category}]`).join('\n')}
+
+WEB RESEARCH FINDINGS:
+${webResearchResults.length > 0 ? webResearchResults.map(r => `Query: ${r.searchQuery}\nSummary: ${r.summary}`).join('\n\n') : 'No web research conducted (quick run mode)'}
+
+CORRELATED INSIGHTS (${correlatedInsights.length}):
+${correlatedInsights.map(i => `- ${i.correlation} (confidence: ${i.confidence})`).join('\n')}
+
+Return a JSON object with this EXACT structure (all arrays must contain objects with the specified properties):
+
+{
+  "executiveSummary": "string - 2-3 paragraph executive summary",
+  "priorityActions": [
+    { "action": "string - what to do", "timeframe": "string - e.g. 'This week', '30 days'", "impact": "string - expected result", "category": "string - e.g. 'Operations', 'Marketing', 'Compliance'" }
+  ],
+  "quickWins": [
+    { "action": "string - what to do", "effort": "string - e.g. 'Low', 'Medium'", "impact": "string - expected result" }
+  ],
+  "watchItems": [
+    { "item": "string - what to monitor", "reason": "string - why it matters", "monitorUntil": "string - timeframe" }
+  ],
+  "industryHighlights": [
+    { "headline": "string - news/trend headline", "source": "string - where from", "relevance": "string - why it matters", "actionItem": "string - optional suggested action" }
+  ],
+  "regulatoryUpdates": [
+    { "update": "string - regulatory change", "source": "string - regulatory body", "impactLevel": "high|medium|low", "deadline": "string - optional date" }
+  ],
+  "marketTrends": [
+    { "trend": "string - market trend", "evidence": "string - supporting data", "implication": "string - what it means for business" }
+  ],
+  "questionsForTomorrow": [
+    { "question": "string - question to investigate", "priority": 1-5, "category": "string - topic area" }
+  ],
+  "correlatedInsights": [
+    { "internalObservation": "string - what internal data shows", "externalEvidence": "string - supporting external info", "correlation": "string - the connection", "confidence": 0.0-1.0, "actionItem": "string - optional action", "category": "string - topic area" }
+  ],
+  "dataHealthScore": 0-100,
+  "confidenceScore": 0.0-1.0
+}
+
+Generate 3-5 items for priorityActions, quickWins, watchItems, and questionsForTomorrow.
+Generate 2-4 items for industryHighlights, regulatoryUpdates, marketTrends, and correlatedInsights.
+If web research was not conducted, base industryHighlights, regulatoryUpdates, and marketTrends on general cannabis industry knowledge.
+Return ONLY valid JSON, no markdown or explanation.`;
 
     const response = await this.client.messages.create({
       model: CLAUDE_CONFIG.defaultModel,
@@ -493,6 +551,95 @@ Return JSON with: executiveSummary, priorityActions[], quickWins[], watchItems[]
       activeCustomers30d: activeCustomers,
       totalCustomers,
       activeRate: ((activeCustomers / Math.max(totalCustomers, 1)) * 100).toFixed(1) + '%',
+    };
+  }
+
+  private async loadRecentInvoiceData(): Promise<Record<string, unknown>> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const invoices = await prisma.invoice.findMany({
+      where: { invoiceDate: { gte: thirtyDaysAgo } },
+      include: { vendor: true, lineItems: true },
+      orderBy: { invoiceDate: 'desc' },
+      take: 50,
+    });
+
+    const totalCost = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalCost.toString()), 0);
+    const vendorCounts: Record<string, number> = {};
+    invoices.forEach(inv => {
+      const vendorName = inv.vendor?.canonicalName || inv.originalVendorName || 'Unknown';
+      vendorCounts[vendorName] = (vendorCounts[vendorName] || 0) + 1;
+    });
+
+    const topVendors = Object.entries(vendorCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, invoiceCount: count }));
+
+    return {
+      recentInvoiceCount: invoices.length,
+      totalPurchasingCost30d: totalCost.toFixed(2),
+      topVendors,
+      lineItemsCount: invoices.reduce((sum, inv) => sum + inv.lineItems.length, 0),
+    };
+  }
+
+  private async loadQrCodeData(): Promise<Record<string, unknown>> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [totalCodes, activeCodes, recentClicks] = await Promise.all([
+      prisma.qrCode.count({ where: { deleted: false } }),
+      prisma.qrCode.count({ where: { active: true, deleted: false } }),
+      prisma.qrClick.count({ where: { clickedAt: { gte: thirtyDaysAgo } } }),
+    ]);
+
+    const topPerformers = await prisma.qrCode.findMany({
+      where: { deleted: false },
+      orderBy: { totalClicks: 'desc' },
+      take: 5,
+      select: { name: true, totalClicks: true, shortCode: true },
+    });
+
+    return {
+      totalQrCodes: totalCodes,
+      activeQrCodes: activeCodes,
+      clicksLast30Days: recentClicks,
+      topPerformers: topPerformers.map(qr => ({
+        name: qr.name,
+        clicks: qr.totalClicks,
+      })),
+    };
+  }
+
+  private async loadSeoAuditData(): Promise<Record<string, unknown>> {
+    const latestAudit = await prisma.seoAudit.findFirst({
+      where: { status: 'completed' },
+      orderBy: { completedAt: 'desc' },
+      include: {
+        _count: { select: { pages: true } },
+      },
+    });
+
+    if (!latestAudit || !latestAudit.summary) {
+      return { auditAvailable: false };
+    }
+
+    const summary = latestAudit.summary as {
+      healthScore?: number;
+      totalIssues?: number;
+      criticalIssues?: number;
+    };
+
+    return {
+      auditAvailable: true,
+      domain: latestAudit.domain,
+      healthScore: summary.healthScore || 0,
+      totalIssues: summary.totalIssues || 0,
+      criticalIssues: summary.criticalIssues || 0,
+      pagesAnalyzed: latestAudit._count.pages,
+      lastAuditDate: latestAudit.completedAt?.toISOString().split('T')[0],
     };
   }
 

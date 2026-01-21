@@ -63,7 +63,7 @@ export function InvoicesPage() {
     {
       id: 'upload',
       label: 'Upload Invoices',
-      content: (
+      render: () => (
         <div className="space-y-6">
           <Card>
             <SectionLabel>PDF Upload</SectionLabel>
@@ -133,7 +133,7 @@ export function InvoicesPage() {
     {
       id: 'invoices',
       label: 'Invoice List',
-      content: (
+      render: () => (
         <Card>
           <SectionLabel>Processed Invoices</SectionLabel>
           <SectionTitle>Invoice History</SectionTitle>
@@ -183,7 +183,7 @@ export function InvoicesPage() {
     {
       id: 'products',
       label: 'Product Analysis',
-      content: (
+      render: () => (
         <Card>
           <SectionLabel>Purchasing Insights</SectionLabel>
           <SectionTitle>Product Purchase Trends</SectionTitle>

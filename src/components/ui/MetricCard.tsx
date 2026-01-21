@@ -13,7 +13,7 @@ interface MetricCardProps {
 
 export function MetricCard({ title, value, change, changeType, icon: Icon, subtitle }: MetricCardProps) {
   return (
-    <div className="metric-card bg-white rounded-lg p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] cursor-pointer">
+    <div className="metric-card bg-[var(--white)] rounded-lg p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] cursor-pointer">
       <div className="flex items-start justify-between mb-4">
         <div className="w-12 h-12 rounded-lg bg-[var(--accent)]/10 flex items-center justify-center">
           <Icon className="w-6 h-6 text-[var(--accent)]" />

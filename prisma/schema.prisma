@@ -731,7 +731,6 @@ model MonthlyStrategicReport {
   @@map("monthly_strategic_reports")
 }
 
-
 // ============================================
 // BILLING & ACTION TRACKING
 // Tracks billable actions for organizations
@@ -761,4 +760,57 @@ model BillingEvent {
   @@index([eventType])
   @@index([createdAt])
   @@map("billing_events")
+}
+
+// ============================================
+// SEO AUDIT SYSTEM
+// Stores website SEO audit results and page analysis
+// ============================================
+
+model SeoAudit {
+  id            String         @id @default(uuid())
+  domain        String
+  status        String         @default("pending") // pending, crawling, analyzing, completed, failed
+  createdAt     DateTime       @default(now()) @map("created_at")
+  completedAt   DateTime?      @map("completed_at")
+
+  config        Json           @default("{}") // { maxPages, includeSitemap, checkPerformance, etc. }
+  progress      Json           @default("{}") // { pagesDiscovered, pagesCrawled, pagesAnalyzed }
+
+  summary       Json?          // { healthScore, totalPages, criticalIssues, warnings, passed }
+  error         String?
+
+  pages         SeoAuditPage[]
+
+  @@index([domain])
+  @@index([status])
+  @@index([createdAt])
+  @@map("seo_audits")
+}
+
+model SeoAuditPage {
+  id              String    @id @default(uuid())
+  auditId         String    @map("audit_id")
+  audit           SeoAudit  @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  url             String
+  statusCode      Int       @map("status_code")
+
+  title           String?
+  metaDescription String?   @map("meta_description")
+  canonical       String?
+  robots          String?
+
+  headings        Json      @default("{}") // { h1: [], h2: [], h3: [] }
+  images          Json      @default("{}") // { total, withAlt, withoutAlt, issues }
+  links           Json      @default("{}") // { internal, external, broken }
+
+  performance     Json?     // { loadTime, contentSize, requests, coreWebVitals }
+  issues          Json      @default("[]") // [{ type, severity, message, recommendation }]
+
+  crawledAt       DateTime  @default(now()) @map("crawled_at")
+
+  @@unique([auditId, url])
+  @@index([auditId])
+  @@map("seo_audit_pages")
 }

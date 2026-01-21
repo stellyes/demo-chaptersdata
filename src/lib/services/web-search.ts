@@ -207,18 +207,27 @@ export class WebSearchService {
     const newUrls = results.filter(r => r.isNew);
     if (newUrls.length === 0) return 0;
 
-    const urlRecords = newUrls.map(r => ({
-      url: r.url,
-      urlHash: r.urlHash,
-      domain: this.extractDomain(r.url),
-      title: r.title,
-      snippet: r.snippet,
-      publishedDate: r.publishedDate ? new Date(r.publishedDate) : null,
-      sourceQuery,
-      sourceJobId,
-      relevanceScore: 0.5,
-      categories: [] as string[],
-    }));
+    const urlRecords = newUrls.map(r => {
+      let publishedDate: Date | null = null;
+      if (r.publishedDate) {
+        const parsed = new Date(r.publishedDate);
+        if (!isNaN(parsed.getTime())) {
+          publishedDate = parsed;
+        }
+      }
+      return {
+        url: r.url,
+        urlHash: r.urlHash,
+        domain: this.extractDomain(r.url),
+        title: r.title,
+        snippet: r.snippet,
+        publishedDate,
+        sourceQuery,
+        sourceJobId,
+        relevanceScore: 0.5,
+        categories: [] as string[],
+      };
+    });
 
     const result = await prisma.collectedUrl.createMany({
       data: urlRecords,

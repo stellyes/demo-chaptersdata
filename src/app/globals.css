@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ============================================
    CHAPTERS DESIGN SYSTEM - CSS Variables
@@ -23,19 +24,24 @@
 /* Dark mode */
 :root.dark {
   --ink: #e8e6e3;
-  --paper: #121212;
-  --cream: #1a1a1a;
+  --paper: #0a0f0a;
+  --cream: #111611;
   --accent: #4CAF50;
   --accent-light: #66BB6A;
   --muted: #9e9e9e;
-  --border: #2d2d2d;
-  --white: #1e1e1e;
+  --border: #1e2a1e;
+  --white: #141a14;
   --success: #4CAF50;
   --warning: #FFB300;
   --error: #EF5350;
 
   --background: var(--paper);
   --foreground: var(--ink);
+}
+
+/* Dark mode logo filter - invert to white */
+:root.dark .logo-dark-invert {
+  filter: brightness(0) invert(1);
 }
 
 @theme inline {
@@ -125,6 +131,41 @@ button:focus-visible {
   line-height: 1.7;
 }
 
+.prose h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  color: var(--ink);
+}
+
+.prose h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  color: var(--ink);
+}
+
+.prose h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  color: var(--ink);
+}
+
+.prose h4 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--ink);
+}
+
 .prose p {
   margin-bottom: 1rem;
 }
@@ -141,4 +182,60 @@ button:focus-visible {
 
 .prose strong {
   font-weight: 600;
+}
+
+/* Table styles for markdown */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+
+.prose thead {
+  background-color: var(--cream);
+}
+
+.prose th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink);
+  border-bottom: 2px solid var(--border);
+}
+
+.prose td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+}
+
+.prose tbody tr:hover {
+  background-color: var(--cream);
+}
+
+.prose tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Responsive table wrapper */
+.prose-table-wrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+/* Blockquote styles */
+.prose blockquote {
+  border-left: 4px solid var(--accent);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* Horizontal rule */
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
 }

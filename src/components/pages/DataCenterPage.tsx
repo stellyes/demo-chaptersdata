@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { memo, useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '@/components/ui/Header';
 import { Card } from '@/components/ui/Card';
 import { SectionLabel } from '@/components/ui/SectionLabel';
@@ -37,6 +37,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
+import { DataHealthTab } from '@/components/data-health/DataHealthTab';
 
 // ============================================
 // DATA STATUS COMPONENT
@@ -227,35 +228,56 @@ function SalesDataTab() {
 // ============================================
 // INVOICE DATA TAB
 // ============================================
-interface Invoice {
+interface InvoiceSummary {
   [key: string]: string | number;
-  id: string;
-  invoiceNumber: string;
+  invoice_id: string;
+  invoice_number: string;
   vendor: string;
-  invoiceDate: string;
-  totalCost: number;
-  lineItemsCount: number;
-  status: 'processed' | 'needs_review';
+  invoice_date: string;
+  total_cost: number;
+  line_items_count: number;
 }
 
 function InvoiceDataTab() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const { invoiceData, dataStatus } = useAppStore();
   const [processing, setProcessing] = useState(false);
+
+  // Aggregate line items into invoice summaries
+  const invoiceSummaries = useMemo(() => {
+    const summaryMap: Record<string, InvoiceSummary> = {};
+
+    for (const lineItem of invoiceData) {
+      const invoiceId = lineItem.invoice_id;
+      if (!summaryMap[invoiceId]) {
+        summaryMap[invoiceId] = {
+          invoice_id: invoiceId,
+          invoice_number: invoiceId, // Use invoice_id as number if not available
+          vendor: '', // Will be populated if available in line item data
+          invoice_date: '',
+          total_cost: 0,
+          line_items_count: 0,
+        };
+      }
+      summaryMap[invoiceId].total_cost += lineItem.total_cost || 0;
+      summaryMap[invoiceId].line_items_count += 1;
+    }
+
+    return Object.values(summaryMap).sort((a, b) =>
+      b.invoice_id.localeCompare(a.invoice_id)
+    );
+  }, [invoiceData]);
+
+  // Calculate totals
+  const totalInvoices = invoiceSummaries.length;
+  const totalCost = invoiceData.reduce((sum, item) => sum + (item.total_cost || 0), 0);
+  const totalLineItems = invoiceData.length;
 
   const handleInvoiceUpload = async (file: File) => {
     setProcessing(true);
     try {
-      // Simulated invoice extraction - in production uses DynamoDB
-      const mockInvoice: Invoice = {
-        id: `inv_${Date.now()}`,
-        invoiceNumber: `INV-${Math.floor(Math.random() * 10000)}`,
-        vendor: 'Sample Vendor',
-        invoiceDate: new Date().toISOString().split('T')[0],
-        totalCost: Math.floor(Math.random() * 5000) + 500,
-        lineItemsCount: Math.floor(Math.random() * 20) + 5,
-        status: 'processed',
-      };
-      setInvoices((prev) => [mockInvoice, ...prev]);
+      // In production, this would upload to S3/DynamoDB
+      // For now, just show processing
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } finally {
       setProcessing(false);
     }
@@ -282,92 +304,126 @@ function InvoiceDataTab() {
             <span className="text-sm">Extracting invoice data...</span>
           </div>
         )}
+        {dataStatus.invoices.loaded && (
+          <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-[var(--success)]" />
+            <span className="text-sm text-[var(--success)]">
+              {dataStatus.invoices.count.toLocaleString()} invoice line items loaded from S3
+            </span>
+          </div>
+        )}
       </Card>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <FileText className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Invoices</p>
-              <p className="text-xl font-semibold font-serif">{invoices.length}</p>
+              <p className="text-xl font-semibold font-serif">{totalInvoices}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <TrendingUp className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Cost</p>
               <p className="text-xl font-semibold font-serif">
-                ${invoices.reduce((sum, inv) => sum + inv.totalCost, 0).toLocaleString()}
+                ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <Database className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Line Items</p>
               <p className="text-xl font-semibold font-serif">
-                {invoices.reduce((sum, inv) => sum + inv.lineItemsCount, 0)}
+                {totalLineItems.toLocaleString()}
               </p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+            <AlertCircle className="w-5 h-5 text-[var(--muted)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Needs Review</p>
-              <p className="text-xl font-semibold font-serif">
-                {invoices.filter((inv) => inv.status === 'needs_review').length}
-              </p>
+              <p className="text-xl font-semibold font-serif">0</p>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Invoice List */}
-      {invoices.length > 0 && (
+      {invoiceSummaries.length > 0 ? (
         <Card>
           <SectionLabel>Processed Invoices</SectionLabel>
           <SectionTitle>Invoice History</SectionTitle>
           <DataTable
-            data={invoices}
+            data={invoiceSummaries}
             columns={[
-              { key: 'invoiceNumber', label: 'Invoice #', sortable: true },
-              { key: 'vendor', label: 'Vendor', sortable: true },
-              { key: 'invoiceDate', label: 'Date', sortable: true },
+              { key: 'invoice_id', label: 'Invoice #', sortable: true },
               {
-                key: 'totalCost',
-                label: 'Total',
+                key: 'total_cost',
+                label: 'Total Cost',
                 sortable: true,
                 align: 'right',
-                render: (v) => `$${Number(v).toLocaleString()}`,
+                render: (v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
               },
-              { key: 'lineItemsCount', label: 'Items', sortable: true, align: 'right' },
-              {
-                key: 'status',
-                label: 'Status',
-                render: (v) => (
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      v === 'processed'
-                        ? 'bg-[var(--success)]/15 text-[var(--success)]'
-                        : 'bg-[var(--warning)]/15 text-[var(--warning)]'
-                    }`}
-                  >
-                    {v === 'processed' ? 'Processed' : 'Needs Review'}
-                  </span>
-                ),
-              },
+              { key: 'line_items_count', label: 'Items', sortable: true, align: 'right' },
             ]}
             pageSize={10}
             exportable
             exportFilename="invoices"
+          />
+        </Card>
+      ) : (
+        <Card>
+          <div className="text-center py-8">
+            <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--muted)] opacity-50" />
+            <p className="text-[var(--muted)]">
+              {dataStatus.invoices.loaded
+                ? 'No invoice data found. Upload invoice PDFs to get started.'
+                : 'Invoice data is loading from S3...'}
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Line Items Table */}
+      {invoiceData.length > 0 && (
+        <Card>
+          <SectionLabel>All Line Items</SectionLabel>
+          <SectionTitle>Invoice Line Item Details</SectionTitle>
+          <DataTable
+            data={invoiceData}
+            columns={[
+              { key: 'invoice_id', label: 'Invoice', sortable: true },
+              { key: 'product_name', label: 'Product', sortable: true },
+              { key: 'product_type', label: 'Type', sortable: true },
+              { key: 'sku_units', label: 'Units', sortable: true, align: 'right' },
+              {
+                key: 'unit_cost',
+                label: 'Unit Cost',
+                sortable: true,
+                align: 'right',
+                render: (v) => `$${Number(v).toFixed(2)}`,
+              },
+              {
+                key: 'total_cost',
+                label: 'Total',
+                sortable: true,
+                align: 'right',
+                render: (v) => `$${Number(v).toFixed(2)}`,
+              },
+            ]}
+            pageSize={20}
+            exportable
+            exportFilename="invoice-line-items"
           />
         </Card>
       )}
@@ -548,9 +604,9 @@ function BudtenderPerformanceTab() {
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <Users className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Total Budtenders</p>
@@ -558,8 +614,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <CheckCircle className="w-5 h-5 text-[var(--success)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Permanent Employees</p>
@@ -567,8 +623,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <AlertCircle className="w-5 h-5 text-[var(--warning)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Unassigned</p>
@@ -576,8 +632,8 @@ function BudtenderPerformanceTab() {
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
             <Database className="w-5 h-5 text-[var(--accent)]" />
             <div>
               <p className="text-xs text-[var(--muted)]">Performance Records</p>
@@ -914,27 +970,30 @@ function BrandMappingTab() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
+  // Safely handle null/undefined brandMappings
+  const safeMappings = brandMappings || {};
+
   // Calculate stats
-  const brandCount = Object.keys(brandMappings).length;
-  const aliasCount = Object.values(brandMappings).reduce(
-    (acc, entry) => acc + Object.keys(entry.aliases).length,
+  const brandCount = Object.keys(safeMappings).length;
+  const aliasCount = Object.values(safeMappings).reduce(
+    (acc, entry) => acc + (entry?.aliases ? Object.keys(entry.aliases).length : 0),
     0
   );
 
   // Filter brands based on search
   const filteredBrands = useMemo(() => {
-    if (!searchTerm) return Object.entries(brandMappings);
+    if (!searchTerm) return Object.entries(safeMappings);
 
     const term = searchTerm.toLowerCase();
-    return Object.entries(brandMappings).filter(([brandName, entry]) => {
+    return Object.entries(safeMappings).filter(([brandName, entry]) => {
       // Match on brand name
       if (brandName.toLowerCase().includes(term)) return true;
       // Match on any alias
-      return Object.keys(entry.aliases).some(alias =>
+      return entry?.aliases && Object.keys(entry.aliases).some(alias =>
         alias.toLowerCase().includes(term)
       );
     });
-  }, [brandMappings, searchTerm]);
+  }, [safeMappings, searchTerm]);
 
   const toggleExpand = (brandName: string) => {
     const newExpanded = new Set(expandedBrands);
@@ -1219,31 +1278,150 @@ function IndustryResearchTab() {
 // ============================================
 // SEO ANALYSIS TAB
 // ============================================
-function SEOAnalysisTab() {
-  const [selectedSite, setSelectedSite] = useState(SEO_SITES[0].id);
-  const [seoData, setSeoData] = useState<{
-    score: number;
-    priorities: string[];
-    quickWins: string[];
-  } | null>(null);
+interface SeoAudit {
+  id: string;
+  domain: string;
+  status: string;
+  createdAt: string;
+  completedAt?: string;
+  summary?: {
+    healthScore: number;
+    totalPages: number;
+    totalIssues: number;
+    criticalIssues: number;
+    highIssues: number;
+    mediumIssues: number;
+    lowIssues: number;
+  };
+  pages?: Array<{
+    url: string;
+    statusCode: number;
+    title?: string;
+    issues: Array<{
+      id: string;
+      code: string;
+      category: string;
+      priority: string;
+      title: string;
+      description: string;
+      recommendation: string;
+    }>;
+  }>;
+}
 
+function SEOAnalysisTab() {
+  const [selectedSite, setSelectedSite] = useState(SEO_SITES[0]);
+  const [audits, setAudits] = useState<SeoAudit[]>([]);
+  const [selectedAudit, setSelectedAudit] = useState<SeoAudit | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [crawling, setCrawling] = useState(false);
+  const [maxPages, setMaxPages] = useState(50);
+  const [customUrl, setCustomUrl] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load audits on mount
   useEffect(() => {
-    // Mock SEO data - in production loads from S3
-    setSeoData({
-      score: 72,
-      priorities: [
-        'Improve page load speed on mobile devices',
-        'Add more internal links between product pages',
-        'Optimize meta descriptions for key landing pages',
-        'Fix broken links in footer navigation',
-      ],
-      quickWins: [
-        'Add alt text to product images',
-        'Create XML sitemap',
-        'Add structured data for products',
-      ],
-    });
-  }, [selectedSite]);
+    loadAudits();
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  const loadAudits = async () => {
+    try {
+      const response = await fetch('/api/seo/audits?limit=50');
+      const result = await response.json();
+      if (result.success) {
+        setAudits(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to load audits:', error);
+    }
+  };
+
+  const startAudit = async (domain: string) => {
+    setCrawling(true);
+    try {
+      const response = await fetch('/api/seo/audits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, maxPages, async: true }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSelectedAudit(result.data);
+        loadAudits();
+        // Start polling for updates if audit is in progress
+        if (result.data.status === 'crawling') {
+          startPolling(result.data.id);
+        }
+      } else {
+        alert(`Audit failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to start audit:', error);
+      alert('Failed to start audit');
+    } finally {
+      setCrawling(false);
+    }
+  };
+
+  const startPolling = (auditId: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/seo/audits/${auditId}`);
+        const result = await response.json();
+        if (result.success) {
+          setSelectedAudit(result.data);
+          loadAudits();
+          if (result.data.status === 'completed' || result.data.status === 'failed') {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 3000);
+  };
+
+  const deleteAudit = async (auditId: string) => {
+    if (!confirm('Are you sure you want to delete this audit?')) return;
+    try {
+      await fetch(`/api/seo/audits/${auditId}`, { method: 'DELETE' });
+      setAudits(audits.filter(a => a.id !== auditId));
+      if (selectedAudit?.id === auditId) setSelectedAudit(null);
+    } catch (error) {
+      console.error('Failed to delete audit:', error);
+    }
+  };
+
+  const filteredAudits = audits.filter(audit => {
+    if (searchQuery && !audit.domain.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    if (statusFilter && audit.status !== statusFilter) {
+      return false;
+    }
+    return true;
+  });
+
+  const loadAuditDetails = async (auditId: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/seo/audits/${auditId}`);
+      const result = await response.json();
+      if (result.success) {
+        setSelectedAudit(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to load audit:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-[var(--success)]';
@@ -1251,79 +1429,275 @@ function SEOAnalysisTab() {
     return 'text-[var(--error)]';
   };
 
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'critical': return 'bg-red-100 text-red-800';
+      case 'high': return 'bg-orange-100 text-orange-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Site Selector */}
+      {/* New Audit Section */}
       <Card>
-        <SectionLabel>Website</SectionLabel>
-        <SectionTitle>Select Site to Analyze</SectionTitle>
-        <div className="flex gap-4">
-          {SEO_SITES.map((site) => (
-            <button
-              key={site.id}
-              onClick={() => setSelectedSite(site.id)}
-              className={`flex items-center gap-3 px-4 py-3 rounded border transition-all ${
-                selectedSite === site.id
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/5'
-                  : 'border-[var(--border)] hover:border-[var(--accent)]/50'
-              }`}
-            >
-              <Globe
-                className={`w-5 h-5 ${
-                  selectedSite === site.id ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
+        <SectionLabel>New Audit</SectionLabel>
+        <SectionTitle>Start SEO Analysis</SectionTitle>
+        <div className="space-y-4">
+          {/* Site Selector */}
+          <div className="flex flex-wrap gap-3">
+            {SEO_SITES.map((site) => (
+              <button
+                key={site.id}
+                onClick={() => {
+                  setSelectedSite(site);
+                  setCustomUrl('');
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded border transition-all ${
+                  selectedSite.id === site.id && !customUrl
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                    : 'border-[var(--border)] hover:border-[var(--accent)]/50'
                 }`}
+              >
+                <Globe className="w-4 h-4" />
+                <span className="text-sm font-medium">{site.name}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Custom URL Input */}
+          <div className="flex gap-3">
+            <input
+              type="url"
+              value={customUrl}
+              onChange={(e) => setCustomUrl(e.target.value)}
+              placeholder="Or enter a custom URL (e.g., https://example.com)"
+              className="flex-1 px-4 py-2 border border-[var(--border)] rounded text-sm"
+            />
+          </div>
+
+          {/* Audit Settings with Slider */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <label className="text-sm text-[var(--muted)] min-w-[80px]">Max Pages:</label>
+              <input
+                type="range"
+                min={10}
+                max={500}
+                step={10}
+                value={maxPages}
+                onChange={(e) => setMaxPages(Number(e.target.value))}
+                className="flex-1 h-2 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
               />
-              <div className="text-left">
-                <p className="font-medium text-[var(--ink)]">{site.name}</p>
-                <p className="text-xs text-[var(--muted)]">{site.url}</p>
-              </div>
-              <ExternalLink className="w-4 h-4 text-[var(--muted)] ml-2" />
-            </button>
-          ))}
+              <input
+                type="number"
+                min={10}
+                max={500}
+                value={maxPages}
+                onChange={(e) => setMaxPages(Math.min(500, Math.max(10, Number(e.target.value))))}
+                className="w-20 px-2 py-1 border border-[var(--border)] rounded text-sm text-center"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--muted)]">
+                Crawl up to {maxPages} pages • Higher values take longer but provide more comprehensive analysis
+              </span>
+              <button
+                onClick={() => startAudit(customUrl || selectedSite.url)}
+                disabled={crawling}
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded font-medium disabled:opacity-50"
+              >
+                {crawling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Start Audit
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </Card>
 
-      {/* Score Card */}
-      {seoData && (
-        <div className="grid grid-cols-3 gap-6">
-          <Card>
-            <SectionLabel>Overall Score</SectionLabel>
-            <div className="flex items-end gap-2 mt-4">
-              <span className={`text-5xl font-serif font-bold ${getScoreColor(seoData.score)}`}>
-                {seoData.score}
-              </span>
-              <span className="text-2xl text-[var(--muted)] mb-1">/100</span>
-            </div>
-            <p className="text-sm text-[var(--muted)] mt-2">
-              Last analyzed: {new Date().toLocaleDateString()}
-            </p>
-          </Card>
+      {/* Search and Filter */}
+      {audits.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted)]" />
+            <input
+              type="text"
+              placeholder="Search by domain..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-[var(--border)] rounded text-sm"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2 border border-[var(--border)] rounded text-sm"
+          >
+            <option value="">All Status</option>
+            <option value="completed">Completed</option>
+            <option value="crawling">Crawling</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+      )}
 
-          <Card>
-            <SectionLabel>Top Priorities</SectionLabel>
-            <SectionTitle>Action Items</SectionTitle>
-            <div className="space-y-3">
-              {seoData.priorities.slice(0, 3).map((priority, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <AlertCircle className="w-4 h-4 text-[var(--warning)] mt-0.5 shrink-0" />
-                  <span className="text-sm text-[var(--ink)]">{priority}</span>
+      {/* Audit Cards Grid */}
+      {filteredAudits.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredAudits.map((audit) => (
+            <Card
+              key={audit.id}
+              className={`cursor-pointer transition-all hover:border-[var(--accent)] ${selectedAudit?.id === audit.id ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : ''}`}
+              onClick={() => loadAuditDetails(audit.id)}
+            >
+              {/* Progress bar for active audits */}
+              {audit.status === 'crawling' && (
+                <div className="absolute inset-x-0 top-0 h-1 bg-[var(--border)] rounded-t">
+                  <div
+                    className="h-full bg-[var(--accent)] transition-all"
+                    style={{ width: `${audit.summary ? (audit.summary.totalPages / maxPages) * 100 : 10}%` }}
+                  />
                 </div>
-              ))}
-            </div>
-          </Card>
+              )}
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-[var(--ink)] truncate">
+                    {audit.domain.replace(/^https?:\/\//, '')}
+                  </p>
+                  <p className="text-xs text-[var(--muted)] mt-1">
+                    {new Date(audit.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <span className={`ml-2 px-2 py-1 text-xs rounded ${
+                  audit.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  audit.status === 'crawling' ? 'bg-blue-100 text-blue-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {audit.status}
+                </span>
+              </div>
+              {audit.summary && (
+                <div className="mt-4 grid grid-cols-3 gap-2 pt-3 border-t border-[var(--border)]">
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Health</p>
+                    <p className={`text-lg font-semibold ${getScoreColor(audit.summary.healthScore)}`}>
+                      {audit.summary.healthScore}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Pages</p>
+                    <p className="text-lg font-semibold">{audit.summary.totalPages}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">Issues</p>
+                    <p className="text-lg font-semibold">
+                      {(audit.summary.criticalIssues || 0) + (audit.summary.highIssues || 0) + (audit.summary.mediumIssues || 0) + (audit.summary.lowIssues || 0)}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between">
+                <span className="text-sm text-[var(--accent)] font-medium">View Details</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteAudit(audit.id); }}
+                  className="p-1.5 rounded hover:bg-red-50 text-[var(--muted)] hover:text-red-600 transition-colors"
+                  title="Delete audit"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
-          <Card>
-            <SectionLabel>Quick Wins</SectionLabel>
-            <SectionTitle>Easy Fixes</SectionTitle>
-            <div className="space-y-3">
-              {seoData.quickWins.map((win, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <CheckCircle className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
-                  <span className="text-sm text-[var(--ink)]">{win}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
+      {/* Selected Audit Results */}
+      {selectedAudit && selectedAudit.summary && (
+        <>
+          {/* Score Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+            <Card className="p-4 text-center">
+              <p className={`text-3xl font-bold font-serif ${getScoreColor(selectedAudit.summary.healthScore)}`}>
+                {selectedAudit.summary.healthScore}
+              </p>
+              <p className="text-xs text-[var(--muted)]">Health Score</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <p className="text-2xl font-semibold font-serif">{selectedAudit.summary.totalPages}</p>
+              <p className="text-xs text-[var(--muted)]">Pages</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <p className="text-2xl font-semibold font-serif text-red-600">{selectedAudit.summary.criticalIssues}</p>
+              <p className="text-xs text-[var(--muted)]">Critical</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <p className="text-2xl font-semibold font-serif text-orange-600">{selectedAudit.summary.highIssues}</p>
+              <p className="text-xs text-[var(--muted)]">High</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <p className="text-2xl font-semibold font-serif text-yellow-600">{selectedAudit.summary.mediumIssues + selectedAudit.summary.lowIssues}</p>
+              <p className="text-xs text-[var(--muted)]">Medium/Low</p>
+            </Card>
+          </div>
+
+          {/* Page Issues */}
+          {selectedAudit.pages && selectedAudit.pages.length > 0 && (
+            <Card>
+              <SectionLabel>Page Analysis</SectionLabel>
+              <SectionTitle>Issues by Page</SectionTitle>
+              <div className="mt-4 space-y-4 max-h-[500px] overflow-y-auto">
+                {selectedAudit.pages.map((page) => (
+                  <div key={page.url} className="border border-[var(--border)] rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="font-medium text-[var(--ink)] break-all">{page.url}</p>
+                        <p className="text-sm text-[var(--muted)]">{page.title || 'No title'}</p>
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded ${page.statusCode === 200 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {page.statusCode}
+                      </span>
+                    </div>
+                    {page.issues.length > 0 ? (
+                      <div className="space-y-2">
+                        {page.issues.map((issue) => (
+                          <div key={issue.id} className="flex items-start gap-3 p-2 bg-[var(--paper)] rounded">
+                            <span className={`px-2 py-0.5 text-xs rounded ${getPriorityColor(issue.priority)}`}>
+                              {issue.priority}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[var(--ink)]">{issue.title}</p>
+                              <p className="text-xs text-[var(--muted)]">{issue.description}</p>
+                              <p className="text-xs text-[var(--accent)] mt-1">→ {issue.recommendation}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-[var(--success)]">No issues found</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {loading && (
+        <div className="text-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-[var(--accent)]" />
+          <p className="text-sm text-[var(--muted)] mt-2">Loading audit details...</p>
         </div>
       )}
     </div>
@@ -1334,17 +1708,22 @@ function SEOAnalysisTab() {
 // QR PORTAL TAB
 // ============================================
 interface QRCodeRecord {
-  [key: string]: string | number | boolean;
+  [key: string]: string | number | boolean | undefined;
   shortCode: string;
   name: string;
   originalUrl: string;
   totalClicks: number;
   createdAt: string;
   active: boolean;
+  description?: string;
 }
 
 function QRPortalTab() {
-  const [qrCodes, setQrCodes] = useState<QRCodeRecord[]>([]);
+  // Load QR codes from app store
+  const { qrCodesData } = useAppStore();
+
+  // Convert store data to local format and merge with any newly created codes
+  const [localQrCodes, setLocalQrCodes] = useState<QRCodeRecord[]>([]);
   const [qrImage, setQrImage] = useState<string>('');
   const [formData, setFormData] = useState({
     name: '',
@@ -1352,6 +1731,26 @@ function QRPortalTab() {
     color: '#1e391f',
     bgColor: '#ffffff',
   });
+
+  // Merge store data with locally created QR codes
+  const qrCodes = useMemo(() => {
+    // Convert store data to QRCodeRecord format
+    const storeQrCodes: QRCodeRecord[] = (qrCodesData || []).map((qr) => ({
+      shortCode: qr.shortCode,
+      name: qr.name,
+      originalUrl: qr.originalUrl,
+      totalClicks: qr.totalClicks,
+      createdAt: qr.createdAt,
+      active: qr.active,
+      description: qr.description,
+    }));
+
+    // Merge with local codes (local codes first, then store codes not in local)
+    const localShortCodes = new Set(localQrCodes.map((qr) => qr.shortCode));
+    const uniqueStoreCodes = storeQrCodes.filter((qr) => !localShortCodes.has(qr.shortCode));
+
+    return [...localQrCodes, ...uniqueStoreCodes];
+  }, [qrCodesData, localQrCodes]);
 
   const generateQRCode = async () => {
     if (!formData.name || !formData.url) return;
@@ -1368,8 +1767,9 @@ function QRPortalTab() {
 
       setQrImage(qrDataUrl);
 
+      const shortCode = `qr_${Date.now().toString(36)}`;
       const newQR: QRCodeRecord = {
-        shortCode: `qr_${Date.now().toString(36)}`,
+        shortCode,
         name: formData.name,
         originalUrl: formData.url,
         totalClicks: 0,
@@ -1377,7 +1777,22 @@ function QRPortalTab() {
         active: true,
       };
 
-      setQrCodes((prev) => [newQR, ...prev]);
+      // Save to Aurora
+      try {
+        await fetch('/api/qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shortCode,
+            name: formData.name,
+            originalUrl: formData.url,
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to save QR code to database:', err);
+      }
+
+      setLocalQrCodes((prev) => [newQR, ...prev]);
       setFormData({ ...formData, name: '', url: '' });
     } catch (error) {
       console.error('Failed to generate QR code:', error);
@@ -1394,7 +1809,7 @@ function QRPortalTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <SectionLabel>QR Code Generator</SectionLabel>
           <SectionTitle>Create New QR Code</SectionTitle>
@@ -1490,20 +1905,20 @@ function QRPortalTab() {
       </div>
 
       {/* QR Code Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="p-4">
-          <p className="text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
-          <p className="text-2xl font-semibold font-serif">{qrCodes.length}</p>
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
+        <Card className="p-3 md:p-4">
+          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
+          <p className="text-lg md:text-2xl font-semibold font-serif">{qrCodes.length}</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm text-[var(--muted)] mb-1">Total Scans</p>
-          <p className="text-2xl font-semibold font-serif">
+        <Card className="p-3 md:p-4">
+          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total Scans</p>
+          <p className="text-lg md:text-2xl font-semibold font-serif">
             {qrCodes.reduce((sum, qr) => sum + qr.totalClicks, 0)}
           </p>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm text-[var(--muted)] mb-1">Active Codes</p>
-          <p className="text-2xl font-semibold font-serif">
+        <Card className="p-3 md:p-4">
+          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Active Codes</p>
+          <p className="text-lg md:text-2xl font-semibold font-serif">
             {qrCodes.filter((qr) => qr.active).length}
           </p>
         </Card>
@@ -1561,53 +1976,58 @@ function QRPortalTab() {
 // ============================================
 // MAIN DATA CENTER PAGE
 // ============================================
-export function DataCenterPage() {
-  // Tab configuration matching Streamlit app
+export const DataCenterPage = memo(function DataCenterPage() {
+  // Tab configuration - using render functions for lazy loading (only renders when tab is active)
   const tabs = [
     {
       id: 'sales',
       label: 'Sales Data',
-      content: <SalesDataTab />,
+      render: () => <SalesDataTab />,
     },
     {
       id: 'invoice',
       label: 'Invoice Data',
-      content: <InvoiceDataTab />,
+      render: () => <InvoiceDataTab />,
     },
     {
       id: 'customer',
       label: 'Customer Data',
-      content: <CustomerDataTab />,
+      render: () => <CustomerDataTab />,
     },
     {
       id: 'budtender',
       label: 'Budtender Performance',
-      content: <BudtenderPerformanceTab />,
+      render: () => <BudtenderPerformanceTab />,
     },
     {
       id: 'context',
       label: 'Define Context',
-      content: <DefineContextTab />,
+      render: () => <DefineContextTab />,
     },
     {
       id: 'brand-mapping',
       label: 'Brand Mapping',
-      content: <BrandMappingTab />,
+      render: () => <BrandMappingTab />,
     },
     {
       id: 'research',
       label: 'Industry Research',
-      content: <IndustryResearchTab />,
+      render: () => <IndustryResearchTab />,
     },
     {
       id: 'seo',
       label: 'SEO Analysis',
-      content: <SEOAnalysisTab />,
+      render: () => <SEOAnalysisTab />,
     },
     {
       id: 'qr',
       label: 'QR Portal',
-      content: <QRPortalTab />,
+      render: () => <QRPortalTab />,
+    },
+    {
+      id: 'health',
+      label: 'Data Health',
+      render: () => <DataHealthTab />,
     },
   ];
 
@@ -1617,4 +2037,4 @@ export function DataCenterPage() {
       <Tabs tabs={tabs} />
     </div>
   );
-}
+});
