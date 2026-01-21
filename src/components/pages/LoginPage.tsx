@@ -7,13 +7,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/app-store';
 
 export function LoginPage() {
-  const { signIn, confirmNewPassword, isLoading, error, needsNewPassword, isAuthenticated, user } = useAuth();
+  const { signIn, confirmNewPassword, isLoading, error, needsNewPassword, isAuthenticated, user, checkAuth } = useAuth();
   const { setUser, setCurrentOrganization } = useAppStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState('');
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Password validation helpers
   const passwordChecks = {
@@ -25,6 +26,13 @@ export function LoginPage() {
 
   const isPasswordValid = Object.values(passwordChecks).every(Boolean);
   const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
+
+  // Track when initial auth check is complete
+  useEffect(() => {
+    if (!isLoading) {
+      setIsCheckingAuth(false);
+    }
+  }, [isLoading]);
 
   // When authentication succeeds, update the app store
   useEffect(() => {
@@ -53,7 +61,13 @@ export function LoginPage() {
     try {
       await signIn(email, password);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Login failed. Please try again.';
+      // If user is already signed in, just refresh auth state to load them
+      if (errorMessage.includes('already a signed in user')) {
+        await checkAuth();
+        return;
+      }
+      setLocalError(errorMessage);
     }
   };
 
@@ -95,6 +109,25 @@ export function LoginPage() {
       <span>{label}</span>
     </div>
   );
+
+  // Show loading screen while checking existing auth
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[var(--paper)] flex items-center justify-center p-4">
+        <div className="noise-overlay"></div>
+        <div className="flex flex-col items-center">
+          <Image
+            src="/chapters-logo.svg"
+            alt="Chapters Logo"
+            width={64}
+            height={64}
+            className="mb-4 logo-dark-invert"
+          />
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+        </div>
+      </div>
+    );
+  }
 
   // New password form
   if (needsNewPassword) {
