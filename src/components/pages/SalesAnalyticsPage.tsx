@@ -13,7 +13,7 @@ import { CategoryPieChart, SegmentPieChart } from '@/components/charts/PieChart'
 import { useFilteredSalesData, useFilteredProductData, useAppStore, useNormalizedBrandDataCompat } from '@/store/app-store';
 import { format, subMonths } from 'date-fns';
 import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Percent, Calendar, User, Search, BarChart3, AlertCircle, Package, FileText, Tag } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { calculateCustomerSummary } from '@/lib/services/data-processor';
 
 // ============================================
@@ -1545,18 +1545,19 @@ function InvoiceAnalyticsTab() {
             <Card>
               <SectionLabel>Spend Distribution</SectionLabel>
               <SectionTitle>Spend by Product Category</SectionTitle>
-              <div className="h-[350px]">
+              <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
+                  <PieChart margin={{ bottom: 60 }}>
                     <Pie
                       data={typesPieData}
                       cx="50%"
-                      cy="50%"
+                      cy="40%"
                       labelLine={false}
-                      outerRadius={120}
+                      outerRadius={100}
+                      innerRadius={50}
                       fill="var(--accent)"
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                      label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
                     >
                       {typesPieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={INVOICE_PIE_COLORS[index % INVOICE_PIE_COLORS.length]} />
@@ -1569,6 +1570,16 @@ function InvoiceAnalyticsTab() {
                         borderRadius: '8px',
                       }}
                       formatter={(value) => [`$${typeof value === 'number' ? value.toLocaleString() : '0'}`, 'Spend']}
+                    />
+                    <Legend
+                      layout="horizontal"
+                      verticalAlign="bottom"
+                      align="center"
+                      wrapperStyle={{
+                        paddingTop: '16px',
+                        fontSize: '12px',
+                      }}
+                      formatter={(value) => <span style={{ color: '#333' }}>{value}</span>}
                     />
                   </PieChart>
                 </ResponsiveContainer>
