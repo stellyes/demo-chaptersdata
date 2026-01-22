@@ -10,7 +10,6 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropicClient } from './claude';
 import { webSearchService, SearchResult } from './web-search';
 import { CLAUDE_CONFIG } from '@/lib/config';
-import { logClaudeAction } from './billing';
 
 // Default org ID for autonomous learning (set via env var or use fallback)
 const DEFAULT_LEARNING_ORG_ID = process.env.DEFAULT_ORG_ID || 'chapters-primary';
@@ -226,19 +225,6 @@ export class DailyLearningService {
           digestId: digestRecord.id,
           estimatedCost: this.calculateCost(state.inputTokens, state.outputTokens),
         },
-      });
-
-      // Log billing for the completed daily learning job
-      logClaudeAction(
-        DEFAULT_LEARNING_ORG_ID,
-        'daily_learning',
-        `daily_learning_job_${state.jobId}`,
-        state.inputTokens,
-        state.outputTokens,
-        CLAUDE_CONFIG.defaultModel, // Using default model for overall billing
-        { jobId: state.jobId, phases: 5, questionsGenerated: questions.length, insightsDiscovered: correlatedInsights.length }
-      ).catch(err => {
-        console.error('[Billing] Failed to log daily learning billing:', err);
       });
 
       return { jobId: state.jobId, digest };

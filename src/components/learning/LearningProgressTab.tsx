@@ -586,9 +586,6 @@ export function LearningProgressTab() {
                   }`}>
                     {job.status}
                   </span>
-                  <p className="text-xs text-[var(--muted)] mt-1">
-                    ${job.estimatedCost.toFixed(2)}
-                  </p>
                 </div>
               </div>
             ))}

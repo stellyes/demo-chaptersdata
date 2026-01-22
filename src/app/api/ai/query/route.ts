@@ -5,12 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
 import { prisma } from '@/lib/prisma';
-import { buildDataContext, customQuery, DataContextOptions, PastAIReport, BillingContext } from '@/lib/services/claude';
-
-// Helper to extract orgId from request headers
-function getOrgIdFromRequest(request: NextRequest): string | null {
-  return request.headers.get('X-Org-Id') || request.headers.get('x-org-id');
-}
+import { buildDataContext, customQuery, DataContextOptions, PastAIReport } from '@/lib/services/claude';
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -238,18 +233,8 @@ export async function POST(request: NextRequest) {
       selectedResearchDocs
     );
 
-    // Get billing context from request header
-    const orgId = getOrgIdFromRequest(request);
-    const billingContext: BillingContext | undefined = orgId
-      ? { orgId, category: 'ai_analysis', actionName: 'custom_query' }
-      : undefined;
-
-    if (!orgId) {
-      console.warn('[Billing] No X-Org-Id header provided, skipping billing for custom query');
-    }
-
     // Execute the custom query
-    const analysis = await customQuery(prompt, dataContext, undefined, billingContext);
+    const analysis = await customQuery(prompt, dataContext);
 
     // Generate report metadata
     const reportId = `report-custom-${Date.now()}`;

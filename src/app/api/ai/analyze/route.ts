@@ -11,13 +11,7 @@ import {
   analyzeCategoryPerformance,
   analyzeCustomerData,
   generateBusinessInsights,
-  BillingContext,
 } from '@/lib/services/claude';
-
-// Helper to extract orgId from request headers
-function getOrgIdFromRequest(request: NextRequest): string | null {
-  return request.headers.get('X-Org-Id') || request.headers.get('x-org-id');
-}
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -122,21 +116,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get billing context from request header
-    const orgId = getOrgIdFromRequest(request);
-    const billingContext: BillingContext | undefined = orgId
-      ? { orgId, category: 'ai_analysis', actionName: `analyze_${type}` }
-      : undefined;
-
-    if (!orgId) {
-      console.warn('[Billing] No X-Org-Id header provided, skipping billing for AI analysis');
-    }
-
     let analysis: string;
 
     switch (type) {
       case 'sales':
-        analysis = await analyzeSalesTrends(data, billingContext);
+        analysis = await analyzeSalesTrends(data);
         break;
       case 'brands':
         if (!data.brandData || !Array.isArray(data.brandData) || data.brandData.length === 0) {
@@ -145,16 +129,16 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        analysis = await analyzeBrandPerformance(data.brandData, data.brandByCategory || {}, billingContext);
+        analysis = await analyzeBrandPerformance(data.brandData, data.brandByCategory || {});
         break;
       case 'categories':
-        analysis = await analyzeCategoryPerformance(data.categoryData, data.brandSummary, billingContext);
+        analysis = await analyzeCategoryPerformance(data.categoryData, data.brandSummary);
         break;
       case 'customers':
-        analysis = await analyzeCustomerData(data, billingContext);
+        analysis = await analyzeCustomerData(data);
         break;
       case 'insights':
-        analysis = await generateBusinessInsights(data, billingContext);
+        analysis = await generateBusinessInsights(data);
         break;
       default:
         return NextResponse.json(
