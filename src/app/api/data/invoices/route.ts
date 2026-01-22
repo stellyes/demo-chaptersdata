@@ -6,6 +6,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { gzipSync } from 'zlib';
+import { getGzipResponseHeaders } from '@/lib/cors';
 
 // Cache for invoice data
 interface InvoiceCacheEntry {
@@ -141,10 +142,7 @@ export async function GET(request: NextRequest) {
       const compressed = gzipSync(JSON.stringify(responseData));
       return new Response(compressed, {
         status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Encoding': 'gzip',
-        },
+        headers: getGzipResponseHeaders(request),
       });
     }
 

@@ -1516,7 +1516,7 @@ function InvoiceAnalyticsTab() {
               <SectionTitle>Top 10 Products by Units</SectionTitle>
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topProductsBarData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                  <BarChart data={topProductsBarData} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" horizontal={true} vertical={false} />
                     <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 11 }} />
                     <YAxis
@@ -1547,7 +1547,7 @@ function InvoiceAnalyticsTab() {
               <SectionTitle>Spend by Product Category</SectionTitle>
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ bottom: 60 }}>
+                  <PieChart margin={{ top: 0, right: 0, bottom: 60, left: 0 }}>
                     <Pie
                       data={typesPieData}
                       cx="50%"

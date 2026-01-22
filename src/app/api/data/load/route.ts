@@ -7,29 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { gzipSync } from 'zlib';
-
-// CORS headers helper
-function getCorsHeaders(request: NextRequest): Record<string, string> {
-  const origin = request.headers.get('origin');
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://chaptersdata.com',
-    'https://www.chaptersdata.com',
-  ];
-
-  // Check if origin is allowed (including Amplify preview URLs)
-  const isAllowed = origin && (
-    allowedOrigins.includes(origin) ||
-    /^https:\/\/.*\.amplifyapp\.com$/.test(origin)
-  );
-
-  return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : '',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept, Accept-Encoding',
-  };
-}
+import { getCorsHeaders, getGzipResponseHeaders } from '@/lib/cors';
 
 // In-memory cache for data
 interface CacheEntry {
@@ -326,8 +304,6 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const corsHeaders = getCorsHeaders(request);
-
     // Compress response if client supports gzip (helps with large payloads)
     if (supportsGzip) {
       const jsonString = JSON.stringify(responseData);
@@ -336,16 +312,14 @@ export async function GET(request: NextRequest) {
       return new Response(compressed, {
         status: 200,
         headers: {
-          'Content-Type': 'application/json',
-          'Content-Encoding': 'gzip',
+          ...getGzipResponseHeaders(request),
           'Cache-Control': 'private, max-age=300',
-          ...corsHeaders,
         },
       });
     }
 
     return NextResponse.json(responseData, {
-      headers: corsHeaders,
+      headers: getCorsHeaders(request),
     });
   } catch (error) {
     console.error('Data loading error:', error);
