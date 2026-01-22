@@ -8,6 +8,29 @@ import { prisma } from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { gzipSync } from 'zlib';
 
+// CORS headers helper
+function getCorsHeaders(request: NextRequest): Record<string, string> {
+  const origin = request.headers.get('origin');
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://chaptersdata.com',
+    'https://www.chaptersdata.com',
+  ];
+
+  // Check if origin is allowed (including Amplify preview URLs)
+  const isAllowed = origin && (
+    allowedOrigins.includes(origin) ||
+    /^https:\/\/.*\.amplifyapp\.com$/.test(origin)
+  );
+
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : '',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Accept, Accept-Encoding',
+  };
+}
+
 // In-memory cache for data
 interface CacheEntry {
   data: AllDataResponse;
@@ -303,6 +326,8 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    const corsHeaders = getCorsHeaders(request);
+
     // Compress response if client supports gzip (helps with large payloads)
     if (supportsGzip) {
       const jsonString = JSON.stringify(responseData);
@@ -314,19 +339,35 @@ export async function GET(request: NextRequest) {
           'Content-Type': 'application/json',
           'Content-Encoding': 'gzip',
           'Cache-Control': 'private, max-age=300',
+          ...corsHeaders,
         },
       });
     }
 
-    return NextResponse.json(responseData);
+    return NextResponse.json(responseData, {
+      headers: corsHeaders,
+    });
   } catch (error) {
     console.error('Data loading error:', error);
+    const corsHeaders = getCorsHeaders(request);
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load data',
       },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
+}
+
+// Handle preflight OPTIONS requests
+export async function OPTIONS(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request);
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...corsHeaders,
+      'Access-Control-Max-Age': '86400',
+    },
+  });
 }
