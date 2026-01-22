@@ -3,10 +3,12 @@ import type { NextRequest } from 'next/server';
 
 // Allowed origins for CORS
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3003',
   'https://chaptersdata.com',
   'https://www.chaptersdata.com',
+  // All subdomains of chaptersdata.com (e.g., bcsf.chaptersdata.com)
+  /^https:\/\/[a-z0-9-]+\.chaptersdata\.com$/,
   // Amplify preview URLs
   /^https:\/\/.*\.amplifyapp\.com$/,
 ];
