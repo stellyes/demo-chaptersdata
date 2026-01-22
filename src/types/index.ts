@@ -187,6 +187,7 @@ export interface User {
   username: string;
   role: 'admin' | 'analyst';
   userId?: string;
+  email?: string;
   organizations?: UserOrganization[];
   isGlobalAdmin?: boolean;
 }

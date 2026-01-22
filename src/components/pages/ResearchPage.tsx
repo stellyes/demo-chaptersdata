@@ -69,7 +69,7 @@ interface LocalDocument {
 
 export function ResearchPage() {
   // Get research data from the store (loaded from S3)
-  const { researchData, setResearchData, dataStatus } = useAppStore();
+  const { researchData, setResearchData, dataStatus, currentOrganization } = useAppStore();
 
   // Local state for newly uploaded documents (before page refresh loads them from S3)
   const [localDocuments, setLocalDocuments] = useState<LocalDocument[]>([]);
@@ -150,7 +150,10 @@ export function ResearchPage() {
       // Call AI analysis API
       const response = await fetch('/api/ai/research', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentOrganization?.orgId && { 'X-Org-Id': currentOrganization.orgId }),
+        },
         body: JSON.stringify({
           filename: file.name,
           content,

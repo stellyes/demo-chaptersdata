@@ -91,6 +91,7 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     qrCodesData,
     dataStatus,
     brandMappings,
+    currentOrganization,
   } = useAppStore();
 
   const [activeAnalysis, setActiveAnalysis] = useState<AnalysisType | null>(null);
@@ -241,7 +242,10 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
 
       const response = await fetch('/api/ai/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentOrganization?.orgId && { 'X-Org-Id': currentOrganization.orgId }),
+        },
         body: JSON.stringify({ type, data }),
       });
 
@@ -319,7 +323,10 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     try {
       const response = await fetch('/api/ai/query', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentOrganization?.orgId && { 'X-Org-Id': currentOrganization.orgId }),
+        },
         body: JSON.stringify({
           prompt: customPrompt,
           contextOptions,

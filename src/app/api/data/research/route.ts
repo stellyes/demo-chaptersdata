@@ -135,20 +135,27 @@ async function loadQRData(): Promise<QRCode[]> {
 
 // Load past AI recommendations from Aurora (AnalysisHistory)
 async function loadAIRecommendations(): Promise<AIRecommendation[]> {
-  console.log('Loading AI recommendations from Aurora...');
+  console.log('[Research API] Loading AI recommendations from Aurora...');
 
-  const analysisHistory = await prisma.analysisHistory.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
+  try {
+    const analysisHistory = await prisma.analysisHistory.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
 
-  return analysisHistory.map((analysis) => ({
-    id: analysis.id,
-    type: analysis.analysisType,
-    date: analysis.createdAt.toISOString(),
-    analysis: analysis.outputSummary || '',
-    summary: analysis.inputSummary || undefined,
-  }));
+    console.log(`[Research API] Found ${analysisHistory.length} AI recommendations in database`);
+
+    return analysisHistory.map((analysis) => ({
+      id: analysis.id,
+      type: analysis.analysisType,
+      date: analysis.createdAt.toISOString(),
+      analysis: analysis.outputSummary || '',
+      summary: analysis.inputSummary || undefined,
+    }));
+  } catch (error) {
+    console.error('[Research API] Error loading AI recommendations:', error);
+    return [];
+  }
 }
 
 export async function GET(request: NextRequest) {

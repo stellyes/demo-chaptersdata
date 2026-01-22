@@ -4,7 +4,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { analyzeResearchDocument } from '@/lib/services/claude';
+import { analyzeResearchDocument, BillingContext } from '@/lib/services/claude';
+
+// Helper to extract orgId from request headers
+function getOrgIdFromRequest(request: NextRequest): string | null {
+  return request.headers.get('X-Org-Id') || request.headers.get('x-org-id');
+}
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -81,8 +86,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get billing context from request header
+    const orgId = getOrgIdFromRequest(request);
+    const billingContext: BillingContext | undefined = orgId
+      ? { orgId, category: 'research', actionName: 'analyze_research_document' }
+      : undefined;
+
+    if (!orgId) {
+      console.warn('[Billing] No X-Org-Id header provided, skipping billing for research analysis');
+    }
+
     // Analyze the document using Claude
-    const analysis = await analyzeResearchDocument(content, filename);
+    const analysis = await analyzeResearchDocument(content, filename, billingContext);
 
     // Generate unique ID
     const docId = `research-${Date.now()}`;

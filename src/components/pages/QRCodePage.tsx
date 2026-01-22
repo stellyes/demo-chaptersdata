@@ -7,22 +7,15 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
-import { QrCode, Link, Download, BarChart, Trash2, RotateCcw } from 'lucide-react';
+import { QrCode, Link, Download, Loader2 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
-
-interface QRCodeRecord {
-  [key: string]: string | number | boolean;
-  shortCode: string;
-  name: string;
-  originalUrl: string;
-  totalClicks: number;
-  createdAt: string;
-  active: boolean;
-}
+import { useAppStore } from '@/store/app-store';
+import { QRCode } from '@/types';
 
 export function QRCodePage() {
-  const [qrCodes, setQrCodes] = useState<QRCodeRecord[]>([]);
+  const { qrCodesData, setQrCodesData } = useAppStore();
   const [qrImage, setQrImage] = useState<string>('');
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     url: '',
@@ -30,10 +23,18 @@ export function QRCodePage() {
     bgColor: '#ffffff',
   });
 
+  // Use store data with proper typing for DataTable
+  const qrCodes = qrCodesData.map(qr => ({
+    ...qr,
+    [Symbol.iterator]: undefined, // DataTable compatibility
+  })) as Array<QRCode & { [key: string]: string | number | boolean | undefined }>;
+
   const generateQRCode = async () => {
     if (!formData.name || !formData.url) return;
 
     try {
+      setSaving(true);
+
       // Generate QR code image
       const qrDataUrl = await QRCodeLib.toDataURL(formData.url, {
         width: 300,
@@ -46,20 +47,26 @@ export function QRCodePage() {
 
       setQrImage(qrDataUrl);
 
-      // Create record
-      const newQR: QRCodeRecord = {
-        shortCode: `qr_${Date.now().toString(36)}`,
-        name: formData.name,
-        originalUrl: formData.url,
-        totalClicks: 0,
-        createdAt: new Date().toISOString(),
-        active: true,
-      };
+      // Save to API
+      const response = await fetch('/api/qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          originalUrl: formData.url,
+        }),
+      });
 
-      setQrCodes((prev) => [newQR, ...prev]);
-      setFormData({ ...formData, name: '', url: '' });
+      const result = await response.json();
+      if (result.success && result.data) {
+        // Add to store
+        setQrCodesData([result.data, ...qrCodesData]);
+        setFormData({ ...formData, name: '', url: '' });
+      }
     } catch (error) {
       console.error('Failed to generate QR code:', error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -76,7 +83,7 @@ export function QRCodePage() {
       id: 'generate',
       label: 'Generate QR Code',
       render: () => (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <SectionLabel>QR Code Generator</SectionLabel>
             <SectionTitle>Create New QR Code</SectionTitle>
@@ -138,11 +145,20 @@ export function QRCodePage() {
 
               <button
                 onClick={generateQRCode}
-                disabled={!formData.name || !formData.url}
+                disabled={!formData.name || !formData.url || saving}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--ink)] text-[var(--paper)] rounded font-medium disabled:opacity-50"
               >
-                <QrCode className="w-5 h-5" />
-                Generate QR Code
+                {saving ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <QrCode className="w-5 h-5" />
+                    Generate QR Code
+                  </>
+                )}
               </button>
             </div>
           </Card>
@@ -182,7 +198,7 @@ export function QRCodePage() {
           <SectionLabel>Click Tracking</SectionLabel>
           <SectionTitle>QR Code Performance</SectionTitle>
 
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div className="p-4 bg-[var(--paper)] rounded-lg">
               <p className="text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
               <p className="text-2xl font-semibold font-serif">{qrCodes.length}</p>
@@ -190,7 +206,7 @@ export function QRCodePage() {
             <div className="p-4 bg-[var(--paper)] rounded-lg">
               <p className="text-sm text-[var(--muted)] mb-1">Total Scans</p>
               <p className="text-2xl font-semibold font-serif">
-                {qrCodes.reduce((sum, qr) => sum + qr.totalClicks, 0)}
+                {qrCodes.reduce((sum, qr) => sum + (qr.totalClicks || 0), 0)}
               </p>
             </div>
             <div className="p-4 bg-[var(--paper)] rounded-lg">

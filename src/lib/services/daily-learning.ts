@@ -10,18 +10,27 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropicClient } from './claude';
 import { webSearchService, SearchResult } from './web-search';
 import { CLAUDE_CONFIG } from '@/lib/config';
+import { logClaudeAction } from './billing';
+
+// Default org ID for autonomous learning (set via env var or use fallback)
+const DEFAULT_LEARNING_ORG_ID = process.env.DEFAULT_ORG_ID || 'chapters-primary';
 
 // Daily Learning Configuration
 export const DAILY_LEARNING_CONFIG = {
   maxSearchesPerDay: 8,
   maxPagesPerSearch: 5,
   phase1TokenBudget: 8000,
-  phase2TokenBudget: 6000,
+  phase2TokenBudget: 8000, // Increased to accommodate historical context
   phase3TokenBudget: 10000,
   phase4TokenBudget: 16000,
   phase5TokenBudget: 12000,
   questionsPerCycle: 10,
   maxWebResearchQuestions: 5,
+  // Progressive learning settings
+  maxPastQuestionsForContext: 20, // How many past questions to consider
+  maxPastInsightsForContext: 10, // How many past insights to include
+  questionRepeatCooldownDays: 7, // Don't repeat questions asked within this period
+  lowQualityThreshold: 0.4, // Questions below this quality may be re-asked
 };
 
 interface DailyLearningJobState {
@@ -74,6 +83,29 @@ interface CorrelatedInsight {
   confidence: number;
   actionItem?: string;
   category: string;
+}
+
+interface HistoricalLearningContext {
+  pastQuestions: Array<{
+    question: string;
+    category: string;
+    timesAsked: number;
+    lastAsked: Date | null;
+    answerQuality: number | null;
+    isActive: boolean;
+  }>;
+  pastInsights: Array<{
+    insight: string;
+    category: string;
+    confidence: number;
+    digestDate: Date;
+  }>;
+  questionsForToday: Array<{
+    question: string;
+    priority: number;
+    category: string;
+  }>;
+  recentlyAskedQuestions: string[]; // Questions asked within cooldown period (to avoid)
 }
 
 interface DailyDigestContent {
@@ -196,6 +228,19 @@ export class DailyLearningService {
         },
       });
 
+      // Log billing for the completed daily learning job
+      logClaudeAction(
+        DEFAULT_LEARNING_ORG_ID,
+        'daily_learning',
+        `daily_learning_job_${state.jobId}`,
+        state.inputTokens,
+        state.outputTokens,
+        CLAUDE_CONFIG.defaultModel, // Using default model for overall billing
+        { jobId: state.jobId, phases: 5, questionsGenerated: questions.length, insightsDiscovered: correlatedInsights.length }
+      ).catch(err => {
+        console.error('[Billing] Failed to log daily learning billing:', err);
+      });
+
       return { jobId: state.jobId, digest };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -266,14 +311,38 @@ Return JSON:
     state: DailyLearningJobState,
     dataReview: DataReviewResult
   ): Promise<GeneratedQuestion[]> {
+    // Fetch historical learning context for progressive question generation
+    const [historicalContext, lowQualityToRevisit] = await Promise.all([
+      this.getHistoricalLearningContext(),
+      this.getLowQualityQuestionsToRevisit(),
+    ]);
+
+    // Build progressive learning context section
+    const progressiveContext = this.buildProgressiveLearningPrompt(
+      historicalContext,
+      lowQualityToRevisit
+    );
+
     const prompt = `Generate ${DAILY_LEARNING_CONFIG.questionsPerCycle} analytical questions for cannabis dispensary analysis.
 
+## CURRENT DATA ANALYSIS
 Data Review: ${dataReview.summary}
 Concerns: ${dataReview.areasOfConcern.join(', ')}
 Opportunities: ${dataReview.areasOfOpportunity.join(', ')}
+Suggested Topics: ${dataReview.suggestedQuestionTopics.join(', ')}
+
+${progressiveContext}
+
+## INSTRUCTIONS
+1. PRIORITIZE questions suggested from previous learning cycles (questionsForToday) - include at least 2-3 of these if they're still relevant
+2. AVOID questions that are too similar to recently asked questions (within ${DAILY_LEARNING_CONFIG.questionRepeatCooldownDays} days)
+3. INCLUDE at least 1-2 questions that follow up on past insights to deepen understanding
+4. CONSIDER re-asking low-quality questions in a different way to get better answers
+5. MIX question types: some building on past learnings, some exploring new areas from current data
+6. Each question should be specific, actionable, and tied to business outcomes
 
 Return JSON array:
-[{ "question": "", "category": "sales|brands|customers|market|regulatory|operations", "priority": 1-10, "requiresWebResearch": boolean, "requiresInternalData": boolean }]`;
+[{ "question": "", "category": "sales|brands|customers|market|regulatory|operations", "priority": 1-10, "requiresWebResearch": boolean, "requiresInternalData": boolean, "context": "why this question matters based on learning history" }]`;
 
     const response = await this.client.messages.create({
       model: CLAUDE_CONFIG.haiku,
@@ -291,6 +360,7 @@ Return JSON array:
 
     const questions = JSON.parse(jsonMatch[0]) as GeneratedQuestion[];
 
+    // Update question tracking in database with enhanced metadata
     for (const q of questions) {
       const questionHash = this.hashString(q.question.toLowerCase());
       await prisma.learningQuestion.upsert({
@@ -303,12 +373,79 @@ Return JSON array:
           requiresWebResearch: q.requiresWebResearch,
           requiresInternalData: q.requiresInternalData,
           generatedBy: 'ai',
+          timesAsked: 1,
+          lastAsked: new Date(),
         },
-        update: { priority: q.priority, isActive: true },
+        update: {
+          priority: q.priority,
+          isActive: true,
+          timesAsked: { increment: 1 },
+          lastAsked: new Date(),
+        },
       });
     }
 
     return questions;
+  }
+
+  /**
+   * Builds the progressive learning section of the prompt with historical context
+   */
+  private buildProgressiveLearningPrompt(
+    context: HistoricalLearningContext,
+    lowQualityToRevisit: string[]
+  ): string {
+    const sections: string[] = [];
+
+    // Questions suggested from previous day's digest
+    if (context.questionsForToday.length > 0) {
+      sections.push(`## QUESTIONS SUGGESTED FROM PREVIOUS LEARNING CYCLE
+These questions were flagged as important to investigate today:
+${context.questionsForToday
+  .map((q, i) => `${i + 1}. [Priority ${q.priority}] ${q.question} (${q.category})`)
+  .join('\n')}`);
+    }
+
+    // Past insights to build upon
+    if (context.pastInsights.length > 0) {
+      sections.push(`## PAST INSIGHTS TO BUILD UPON
+Recent discoveries that may warrant deeper investigation:
+${context.pastInsights
+  .slice(0, 5)
+  .map((insight, i) => `${i + 1}. [${insight.category}] ${insight.insight} (confidence: ${(insight.confidence * 100).toFixed(0)}%)`)
+  .join('\n')}`);
+    }
+
+    // Questions to AVOID (recently asked with good quality)
+    if (context.recentlyAskedQuestions.length > 0) {
+      sections.push(`## QUESTIONS TO AVOID (recently asked within ${DAILY_LEARNING_CONFIG.questionRepeatCooldownDays} days)
+Do NOT generate questions too similar to these:
+${context.recentlyAskedQuestions.slice(0, 10).map((q, i) => `- ${q}`).join('\n')}`);
+    }
+
+    // Low quality questions to re-investigate differently
+    if (lowQualityToRevisit.length > 0) {
+      sections.push(`## QUESTIONS TO RE-INVESTIGATE (previous answers were low quality)
+Consider asking these in a different way or breaking them into smaller parts:
+${lowQualityToRevisit.map((q, i) => `- ${q}`).join('\n')}`);
+    }
+
+    // Historical question performance summary
+    if (context.pastQuestions.length > 0) {
+      const highPerformers = context.pastQuestions
+        .filter(q => q.answerQuality !== null && q.answerQuality >= 0.7)
+        .slice(0, 5);
+
+      if (highPerformers.length > 0) {
+        sections.push(`## HIGH-VALUE QUESTION PATTERNS (these yielded good insights)
+Categories and styles that have worked well:
+${highPerformers.map(q => `- [${q.category}] ${q.question.substring(0, 80)}...`).join('\n')}`);
+      }
+    }
+
+    return sections.length > 0
+      ? `## PROGRESSIVE LEARNING CONTEXT\n${sections.join('\n\n')}`
+      : '## PROGRESSIVE LEARNING CONTEXT\nNo historical learning data available - this appears to be the first learning cycle.';
   }
 
   private async phase3WebResearch(
@@ -353,12 +490,55 @@ Return JSON array:
           findings: analysis.findings,
           summary: analysis.summary,
         });
+
+        // Update question quality based on research results
+        await this.updateQuestionQuality(question.question, analysis);
       } catch (error) {
         console.error(`Error searching for question: ${question.question}`, error);
       }
     }
 
     return results;
+  }
+
+  /**
+   * Updates question quality score based on research results.
+   * This creates a feedback loop for progressive learning.
+   */
+  private async updateQuestionQuality(
+    questionText: string,
+    analysis: { findings: Array<{ relevance: number }>; summary: string }
+  ): Promise<void> {
+    const questionHash = this.hashString(questionText.toLowerCase());
+
+    // Calculate quality score based on:
+    // 1. Number of relevant findings
+    // 2. Average relevance score
+    // 3. Summary length (proxy for depth of answer)
+    const findingsCount = analysis.findings.length;
+    const avgRelevance = findingsCount > 0
+      ? analysis.findings.reduce((sum, f) => sum + f.relevance, 0) / findingsCount
+      : 0;
+    const summaryDepth = Math.min(analysis.summary.length / 500, 1); // Max 1.0 for 500+ chars
+
+    // Weighted quality score
+    const qualityScore = (
+      (findingsCount > 0 ? 0.3 : 0) + // Found any results
+      (avgRelevance * 0.4) + // Relevance quality
+      (summaryDepth * 0.3) // Depth of answer
+    );
+
+    try {
+      await prisma.learningQuestion.update({
+        where: { questionHash },
+        data: {
+          answerQuality: qualityScore,
+          lastAnswered: new Date(),
+        },
+      });
+    } catch {
+      // Question may not exist if it was new this cycle - that's okay
+    }
   }
 
   private async phase4Correlation(
@@ -641,6 +821,109 @@ Return ONLY valid JSON, no markdown or explanation.`;
       pagesAnalyzed: latestAudit._count.pages,
       lastAuditDate: latestAudit.completedAt?.toISOString().split('T')[0],
     };
+  }
+
+  /**
+   * Fetches historical learning context to inform progressive question generation.
+   * Includes past questions, insights, and suggested questions from previous digests.
+   */
+  private async getHistoricalLearningContext(): Promise<HistoricalLearningContext> {
+    const cooldownDate = new Date();
+    cooldownDate.setDate(cooldownDate.getDate() - DAILY_LEARNING_CONFIG.questionRepeatCooldownDays);
+
+    // Fetch past questions with their performance data
+    const pastQuestions = await prisma.learningQuestion.findMany({
+      where: { isActive: true },
+      orderBy: [
+        { answerQuality: 'desc' },
+        { timesAsked: 'asc' },
+      ],
+      take: DAILY_LEARNING_CONFIG.maxPastQuestionsForContext,
+      select: {
+        question: true,
+        category: true,
+        timesAsked: true,
+        lastAsked: true,
+        answerQuality: true,
+        isActive: true,
+      },
+    });
+
+    // Get questions asked recently (within cooldown) to avoid repetition
+    const recentlyAskedQuestions = await prisma.learningQuestion.findMany({
+      where: {
+        lastAsked: { gte: cooldownDate },
+        answerQuality: { gte: DAILY_LEARNING_CONFIG.lowQualityThreshold },
+      },
+      select: { question: true },
+    });
+
+    // Fetch past correlated insights from recent digests
+    const recentDigests = await prisma.dailyDigest.findMany({
+      orderBy: { digestDate: 'desc' },
+      take: 5,
+      select: {
+        digestDate: true,
+        correlatedInsights: true,
+        questionsForTomorrow: true,
+      },
+    });
+
+    // Extract insights from past digests
+    const pastInsights: HistoricalLearningContext['pastInsights'] = [];
+    for (const digest of recentDigests) {
+      const insights = digest.correlatedInsights as CorrelatedInsight[] | null;
+      if (insights && Array.isArray(insights)) {
+        for (const insight of insights.slice(0, 3)) { // Top 3 insights per digest
+          pastInsights.push({
+            insight: insight.internalObservation + ' - ' + insight.correlation,
+            category: insight.category,
+            confidence: insight.confidence,
+            digestDate: digest.digestDate,
+          });
+        }
+      }
+    }
+
+    // Get suggested questions from the most recent digest (questionsForTomorrow)
+    const questionsForToday: HistoricalLearningContext['questionsForToday'] = [];
+    if (recentDigests.length > 0) {
+      const latestDigest = recentDigests[0];
+      const suggestedQuestions = latestDigest.questionsForTomorrow as Array<{
+        question: string;
+        priority: number;
+        category: string;
+      }> | null;
+
+      if (suggestedQuestions && Array.isArray(suggestedQuestions)) {
+        questionsForToday.push(...suggestedQuestions);
+      }
+    }
+
+    return {
+      pastQuestions,
+      pastInsights: pastInsights.slice(0, DAILY_LEARNING_CONFIG.maxPastInsightsForContext),
+      questionsForToday,
+      recentlyAskedQuestions: recentlyAskedQuestions.map(q => q.question),
+    };
+  }
+
+  /**
+   * Identifies low-quality questions that should be re-investigated
+   */
+  private async getLowQualityQuestionsToRevisit(): Promise<string[]> {
+    const lowQualityQuestions = await prisma.learningQuestion.findMany({
+      where: {
+        isActive: true,
+        answerQuality: { lt: DAILY_LEARNING_CONFIG.lowQualityThreshold },
+        timesAsked: { gte: 1 },
+      },
+      orderBy: { answerQuality: 'asc' },
+      take: 3,
+      select: { question: true },
+    });
+
+    return lowQualityQuestions.map(q => q.question);
   }
 
   private async buildSearchQuery(question: GeneratedQuestion, state: DailyLearningJobState): Promise<string> {

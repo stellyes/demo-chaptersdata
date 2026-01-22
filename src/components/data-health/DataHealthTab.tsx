@@ -66,7 +66,7 @@ interface HealthCheckReport {
 export function DataHealthTab() {
   const salesData = useFilteredSalesData();
   const brandData = useNormalizedBrandDataCompat();
-  const { customerData, invoiceData, addNotification } = useAppStore();
+  const { customerData, invoiceData, addNotification, currentOrganization } = useAppStore();
 
   // Health check state
   const [healthCheckData, setHealthCheckData] = useState<HealthCheckReport | null>(null);
@@ -76,7 +76,11 @@ export function DataHealthTab() {
   // Fetch latest health check from API
   const fetchHealthCheck = async () => {
     try {
-      const response = await fetch('/api/ai/health-check');
+      const headers: Record<string, string> = {};
+      if (currentOrganization?.orgId) {
+        headers['X-Org-Id'] = currentOrganization.orgId;
+      }
+      const response = await fetch('/api/ai/health-check', { headers });
       const result = await response.json();
       if (result.success && result.data.report) {
         setHealthCheckData(result.data.report);
@@ -105,7 +109,10 @@ export function DataHealthTab() {
     try {
       const response = await fetch('/api/ai/health-check', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentOrganization?.orgId && { 'X-Org-Id': currentOrganization.orgId }),
+        },
         body: JSON.stringify({
           sales: salesData,
           brands: brandData,
@@ -187,7 +194,7 @@ export function DataHealthTab() {
     <div className="space-y-6">
       {/* Health Score Overview */}
       <Card>
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
               <Activity className="w-6 h-6 text-[var(--accent)]" />
@@ -203,7 +210,7 @@ export function DataHealthTab() {
           <button
             onClick={runHealthCheck}
             disabled={healthCheckLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-sm font-medium disabled:opacity-50"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 sm:py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-sm font-medium disabled:opacity-50"
           >
             {healthCheckLoading ? (
               <>

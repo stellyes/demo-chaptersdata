@@ -647,7 +647,7 @@ function BudtenderPerformanceTab() {
 
       {/* Filters and Actions */}
       <Card>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <SectionLabel>Employee Management</SectionLabel>
             <SectionTitle>Assign Permanent Employees to Stores</SectionTitle>
@@ -659,7 +659,7 @@ function BudtenderPerformanceTab() {
                   clearPermanentEmployees();
                 }
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--error)] border border-[var(--error)]/30 rounded hover:bg-[var(--error)]/10"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-sm text-[var(--error)] border border-[var(--error)]/30 rounded hover:bg-[var(--error)]/10 w-full sm:w-auto"
             >
               <Trash2 className="w-4 h-4" />
               Clear All Assignments
@@ -667,7 +667,7 @@ function BudtenderPerformanceTab() {
           )}
         </div>
 
-        <div className="flex gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
           {/* Search */}
           <div className="flex-1 relative">
             <Search className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -684,7 +684,7 @@ function BudtenderPerformanceTab() {
           <select
             value={filterStore}
             onChange={(e) => setFilterStore(e.target.value as StoreId | 'all')}
-            className="px-3 py-2 border border-[var(--border)] rounded text-sm"
+            className="w-full sm:w-auto px-3 py-2 border border-[var(--border)] rounded text-sm"
           >
             <option value="all">All Stores</option>
             {Object.values(STORES)
@@ -697,7 +697,7 @@ function BudtenderPerformanceTab() {
           </select>
 
           {/* Show unassigned toggle */}
-          <label className="flex items-center gap-2 px-3 py-2 border border-[var(--border)] rounded text-sm cursor-pointer">
+          <label className="flex items-center gap-2 px-3 py-2 border border-[var(--border)] rounded text-sm cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showOnlyUnassigned}
@@ -1135,20 +1135,20 @@ function BrandMappingTab() {
                 <div key={brandName} className="bg-[var(--paper)]">
                   <button
                     onClick={() => toggleExpand(brandName)}
-                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-[var(--hover)] transition-colors"
+                    className="w-full px-4 py-3 flex items-start justify-between hover:bg-[var(--hover)] transition-colors gap-2"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
                       <span className="font-medium">{brandName}</span>
-                      <span className="text-xs text-[var(--muted)] bg-[var(--hover)] px-2 py-0.5 rounded">
+                      <span className="text-xs text-[var(--muted)] bg-[var(--hover)] px-2 py-0.5 rounded whitespace-nowrap">
                         {aliasEntries.length} alias{aliasEntries.length !== 1 ? 'es' : ''}
                       </span>
                       {productTypes.map(type => (
-                        <span key={type} className="text-xs text-[var(--accent)] bg-[var(--accent)]/10 px-2 py-0.5 rounded">
+                        <span key={type} className="text-xs text-[var(--accent)] bg-[var(--accent)]/10 px-2 py-0.5 rounded whitespace-nowrap">
                           {type}
                         </span>
                       ))}
                     </div>
-                    <span className="text-[var(--muted)]">
+                    <span className="text-[var(--muted)] flex-shrink-0">
                       {isExpanded ? '−' : '+'}
                     </span>
                   </button>

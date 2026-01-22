@@ -11,7 +11,13 @@ import {
   analyzeCategoryPerformance,
   analyzeCustomerData,
   generateBusinessInsights,
+  BillingContext,
 } from '@/lib/services/claude';
+
+// Helper to extract orgId from request headers
+function getOrgIdFromRequest(request: NextRequest): string | null {
+  return request.headers.get('X-Org-Id') || request.headers.get('x-org-id');
+}
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -116,11 +122,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get billing context from request header
+    const orgId = getOrgIdFromRequest(request);
+    const billingContext: BillingContext | undefined = orgId
+      ? { orgId, category: 'ai_analysis', actionName: `analyze_${type}` }
+      : undefined;
+
+    if (!orgId) {
+      console.warn('[Billing] No X-Org-Id header provided, skipping billing for AI analysis');
+    }
+
     let analysis: string;
 
     switch (type) {
       case 'sales':
-        analysis = await analyzeSalesTrends(data);
+        analysis = await analyzeSalesTrends(data, billingContext);
         break;
       case 'brands':
         if (!data.brandData || !Array.isArray(data.brandData) || data.brandData.length === 0) {
@@ -129,16 +145,16 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        analysis = await analyzeBrandPerformance(data.brandData, data.brandByCategory || {});
+        analysis = await analyzeBrandPerformance(data.brandData, data.brandByCategory || {}, billingContext);
         break;
       case 'categories':
-        analysis = await analyzeCategoryPerformance(data.categoryData, data.brandSummary);
+        analysis = await analyzeCategoryPerformance(data.categoryData, data.brandSummary, billingContext);
         break;
       case 'customers':
-        analysis = await analyzeCustomerData(data);
+        analysis = await analyzeCustomerData(data, billingContext);
         break;
       case 'insights':
-        analysis = await generateBusinessInsights(data);
+        analysis = await generateBusinessInsights(data, billingContext);
         break;
       default:
         return NextResponse.json(
@@ -152,7 +168,7 @@ export async function POST(request: NextRequest) {
     const reportDate = new Date().toISOString();
     const reportSummary = getAnalysisTitle(type);
 
-    // Save to S3 and Aurora (don't block response on this)
+    // Save to S3 in background (non-critical)
     saveReportToS3({
       id: reportId,
       type,
@@ -160,11 +176,18 @@ export async function POST(request: NextRequest) {
       analysis,
       summary: reportSummary,
     });
-    saveReportToAurora({
-      type,
-      analysis,
-      summary: reportSummary,
-    });
+
+    // Save to Aurora - await this to ensure it completes for history
+    try {
+      await saveReportToAurora({
+        type,
+        analysis,
+        summary: reportSummary,
+      });
+      console.log(`[AI Analyze] Report saved to Aurora: ${type}`);
+    } catch (error) {
+      console.error(`[AI Analyze] Failed to save report to Aurora:`, error);
+    }
 
     return NextResponse.json({
       success: true,

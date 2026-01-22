@@ -70,17 +70,19 @@ export function useAuth() {
     try {
       const user = await getCurrentUser();
 
-      // Fetch session to get groups from the ID token
+      // Fetch session to get groups and email from the ID token
       let groups: string[] = [];
+      let email: string | undefined;
       try {
         const session = await fetchAuthSession();
         const idToken = session.tokens?.idToken;
         if (idToken) {
           const payload = idToken.payload;
           groups = (payload['cognito:groups'] as string[]) || [];
+          email = payload.email as string | undefined;
         }
       } catch {
-        // Failed to get groups, continue without them
+        // Failed to get token data, continue without them
       }
 
       const isGlobalAdmin = groups.includes('Admins');
@@ -96,6 +98,7 @@ export function useAuth() {
         user: {
           username: user.username,
           userId: user.userId,
+          email,
           groups,
           organizations,
           isGlobalAdmin,

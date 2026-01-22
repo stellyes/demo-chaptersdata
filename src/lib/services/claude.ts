@@ -4,6 +4,24 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { CLAUDE_CONFIG } from '@/lib/config';
+import { logClaudeAction, ActionCategory } from './billing';
+
+// Response type that includes token usage for billing
+export interface ClaudeResponseWithUsage {
+  text: string;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    model: string;
+  };
+}
+
+// Billing context for logging Claude API calls
+export interface BillingContext {
+  orgId: string;
+  category: ActionCategory;
+  actionName: string;
+}
 
 // Initialize Anthropic client (server-side only)
 let anthropicClient: Anthropic | null = null;
@@ -48,15 +66,75 @@ function setCachedResponse(key: string, response: string): void {
   responseCache.set(key, { response, timestamp: Date.now() });
 }
 
-// Generate AI response
-export async function generateResponse(
+/**
+ * Generate AI response with full usage data for billing
+ * This is the core function that captures token usage
+ */
+export async function generateResponseWithUsage(
   prompt: string,
   systemPrompt?: string,
   model: string = CLAUDE_CONFIG.defaultModel
+): Promise<ClaudeResponseWithUsage> {
+  const client = getAnthropicClient();
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: CLAUDE_CONFIG.maxTokens,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  const text = textContent?.type === 'text' ? textContent.text : '';
+
+  return {
+    text,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      model,
+    },
+  };
+}
+
+/**
+ * Generate AI response with automatic billing logging
+ * Use this when you have an orgId and want to track usage
+ */
+export async function generateResponseWithBilling(
+  prompt: string,
+  systemPrompt: string | undefined,
+  billingContext: BillingContext,
+  model: string = CLAUDE_CONFIG.defaultModel
+): Promise<string> {
+  const result = await generateResponseWithUsage(prompt, systemPrompt, model);
+
+  // Log to billing (fire-and-forget, don't block response)
+  logClaudeAction(
+    billingContext.orgId,
+    billingContext.category,
+    billingContext.actionName,
+    result.usage.inputTokens,
+    result.usage.outputTokens,
+    result.usage.model
+  ).catch(err => {
+    console.error('[Billing] Failed to log Claude action:', err);
+  });
+
+  return result.text;
+}
+
+// Generate AI response with optional billing
+export async function generateResponse(
+  prompt: string,
+  systemPrompt?: string,
+  model: string = CLAUDE_CONFIG.defaultModel,
+  billingContext?: BillingContext
 ): Promise<string> {
   const cacheKey = getCacheKey(prompt + (systemPrompt || ''), model);
   const cached = getCachedResponse(cacheKey);
   if (cached) {
+    // For cached responses, we don't log billing (no API call made)
     return cached;
   }
 
@@ -74,18 +152,35 @@ export async function generateResponse(
 
   setCachedResponse(cacheKey, result);
 
+  // Log billing if context provided (fire-and-forget)
+  if (billingContext) {
+    logClaudeAction(
+      billingContext.orgId,
+      billingContext.category,
+      billingContext.actionName,
+      response.usage.input_tokens,
+      response.usage.output_tokens,
+      model
+    ).catch(err => {
+      console.error('[Billing] Failed to log Claude action:', err);
+    });
+  }
+
   return result;
 }
 
 // Analyze sales trends
-export async function analyzeSalesTrends(salesSummary: {
-  totalRevenue: number;
-  totalTransactions: number;
-  avgOrderValue: number;
-  avgMargin: number;
-  storeComparison: Array<{ store: string; revenue: number; margin: number }>;
-  recentTrends: Array<{ date: string; revenue: number }>;
-}): Promise<string> {
+export async function analyzeSalesTrends(
+  salesSummary: {
+    totalRevenue: number;
+    totalTransactions: number;
+    avgOrderValue: number;
+    avgMargin: number;
+    storeComparison: Array<{ store: string; revenue: number; margin: number }>;
+    recentTrends: Array<{ date: string; revenue: number }>;
+  },
+  billingContext?: BillingContext
+): Promise<string> {
   const systemPrompt = `You are a retail analytics expert for cannabis dispensaries in San Francisco.
 Analyze the provided sales data and provide actionable insights. Focus on:
 1. Key observations about performance trends
@@ -100,13 +195,14 @@ ${JSON.stringify(salesSummary, null, 2)}
 
 Provide a concise analysis with specific, actionable recommendations.`;
 
-  return generateResponse(prompt, systemPrompt);
+  return generateResponse(prompt, systemPrompt, CLAUDE_CONFIG.defaultModel, billingContext);
 }
 
 // Analyze brand performance
 export async function analyzeBrandPerformance(
   brandData: Array<{ brand: string; netSales: number; margin: number; pctOfTotal: number }>,
-  brandByCategory: Record<string, Array<{ brand: string; netSales: number }>>
+  brandByCategory: Record<string, Array<{ brand: string; netSales: number }>>,
+  billingContext?: BillingContext
 ): Promise<string> {
   const systemPrompt = `You are a retail buying expert for cannabis dispensaries.
 Analyze brand performance data and provide recommendations for:
@@ -126,13 +222,14 @@ ${JSON.stringify(brandByCategory, null, 2)}
 
 Provide specific recommendations for inventory and buying decisions.`;
 
-  return generateResponse(prompt, systemPrompt);
+  return generateResponse(prompt, systemPrompt, CLAUDE_CONFIG.defaultModel, billingContext);
 }
 
 // Analyze category performance
 export async function analyzeCategoryPerformance(
   categoryData: Array<{ category: string; netSales: number; margin: number; pctOfTotal: number }>,
-  brandSummary: Array<{ brand: string; category: string; netSales: number }>
+  brandSummary: Array<{ brand: string; category: string; netSales: number }>,
+  billingContext?: BillingContext
 ): Promise<string> {
   const systemPrompt = `You are a retail category manager for cannabis dispensaries.
 Analyze category performance and provide recommendations for:
@@ -151,17 +248,20 @@ ${JSON.stringify(brandSummary.slice(0, 30), null, 2)}
 
 Provide specific recommendations for category management.`;
 
-  return generateResponse(prompt, systemPrompt);
+  return generateResponse(prompt, systemPrompt, CLAUDE_CONFIG.defaultModel, billingContext);
 }
 
 // Analyze customer analytics
-export async function analyzeCustomerData(customerSummary: {
-  totalCustomers: number;
-  newCustomers: number;
-  segmentBreakdown: Record<string, number>;
-  recencyBreakdown: Record<string, number>;
-  avgLifetimeValue: number;
-}): Promise<string> {
+export async function analyzeCustomerData(
+  customerSummary: {
+    totalCustomers: number;
+    newCustomers: number;
+    segmentBreakdown: Record<string, number>;
+    recencyBreakdown: Record<string, number>;
+    avgLifetimeValue: number;
+  },
+  billingContext?: BillingContext
+): Promise<string> {
   const systemPrompt = `You are a customer retention expert for cannabis retail.
 Analyze customer data and provide recommendations for:
 1. Customer retention strategies by segment
@@ -175,13 +275,14 @@ ${JSON.stringify(customerSummary, null, 2)}
 
 Provide specific recommendations for customer retention and growth.`;
 
-  return generateResponse(prompt, systemPrompt);
+  return generateResponse(prompt, systemPrompt, CLAUDE_CONFIG.defaultModel, billingContext);
 }
 
 // Analyze research document (uses Haiku for cost efficiency)
 export async function analyzeResearchDocument(
   content: string,
-  filename: string
+  filename: string,
+  billingContext?: BillingContext
 ): Promise<{
   summary: string;
   key_findings: Array<{
@@ -220,7 +321,7 @@ ${content.slice(0, 20000)}
 
 Extract key findings relevant to a San Francisco cannabis dispensary. Return ONLY valid JSON.`;
 
-  const response = await generateResponse(prompt, systemPrompt, CLAUDE_CONFIG.haiku);
+  const response = await generateResponse(prompt, systemPrompt, CLAUDE_CONFIG.haiku, billingContext);
 
   try {
     // Extract JSON from response
@@ -241,12 +342,15 @@ Extract key findings relevant to a San Francisco cannabis dispensary. Return ONL
 }
 
 // Generate comprehensive business insights
-export async function generateBusinessInsights(data: {
-  salesSummary?: Record<string, unknown>;
-  invoiceSummary?: Record<string, unknown>;
-  researchFindings?: string;
-  seoData?: Record<string, unknown>;
-}): Promise<string> {
+export async function generateBusinessInsights(
+  data: {
+    salesSummary?: Record<string, unknown>;
+    invoiceSummary?: Record<string, unknown>;
+    researchFindings?: string;
+    seoData?: Record<string, unknown>;
+  },
+  billingContext?: BillingContext
+): Promise<string> {
   const systemPrompt = `You are a cannabis retail business consultant.
 Provide comprehensive business insights combining all available data sources.
 Be specific and actionable in your recommendations.`;
@@ -267,7 +371,7 @@ ${data.seoData ? JSON.stringify(data.seoData, null, 2) : 'Not available'}
 
 Provide comprehensive, actionable insights for the business.`;
 
-  return generateResponse(prompt, systemPrompt);
+  return generateResponse(prompt, systemPrompt, CLAUDE_CONFIG.defaultModel, billingContext);
 }
 
 // ============================================
@@ -1163,7 +1267,8 @@ function buildInvoiceSummary(invoices: Array<Record<string, unknown>>): InvoiceS
 export async function customQuery(
   userPrompt: string,
   dataContext: string,
-  model: string = CLAUDE_CONFIG.defaultModel
+  model: string = CLAUDE_CONFIG.defaultModel,
+  billingContext?: BillingContext
 ): Promise<string> {
   const systemPrompt = `You are a cannabis retail business intelligence analyst for two San Francisco dispensaries: Barbary Coast and Grass Roots.
 
@@ -1191,5 +1296,21 @@ Guidelines:
   });
 
   const textContent = response.content.find(c => c.type === 'text');
-  return textContent?.type === 'text' ? textContent.text : '';
+  const text = textContent?.type === 'text' ? textContent.text : '';
+
+  // Log billing if context provided (fire-and-forget)
+  if (billingContext) {
+    logClaudeAction(
+      billingContext.orgId,
+      billingContext.category,
+      billingContext.actionName,
+      response.usage.input_tokens,
+      response.usage.output_tokens,
+      model
+    ).catch(err => {
+      console.error('[Billing] Failed to log Claude action:', err);
+    });
+  }
+
+  return text;
 }

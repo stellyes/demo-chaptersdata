@@ -11,7 +11,6 @@ import {
   Sun,
   Store,
   X,
-  Building2,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useAppStore, PageType } from '@/store/app-store';
@@ -19,6 +18,7 @@ import { STORES } from '@/lib/config';
 import { StoreId } from '@/types';
 import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useDisplayName } from '@/hooks/useDisplayName';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -56,24 +56,16 @@ export function Sidebar() {
     setUser,
     sidebarOpen,
     setSidebarOpen,
-    currentOrganization,
     setCurrentOrganization,
   } = useAppStore();
 
   const { signOut } = useAuth();
+  const { displayName } = useDisplayName(user?.userId);
 
   const handleLogout = async () => {
     await signOut();
     setUser(null);
     setCurrentOrganization(null);
-  };
-
-  const handleOrganizationChange = (orgId: string) => {
-    if (!user?.organizations) return;
-    const org = user.organizations.find(o => o.orgId === orgId);
-    if (org) {
-      setCurrentOrganization(org);
-    }
   };
 
   const handleNavClick = (page: PageType) => {
@@ -144,55 +136,6 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Organization Selector (for users with multiple organizations) */}
-      {user?.organizations && user.organizations.length > 1 && (
-        <div className="mb-4 sm:mb-6 shrink-0">
-          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
-            Organization
-          </label>
-          <div className="relative">
-            <Building2 className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
-            <select
-              value={currentOrganization?.orgId || ''}
-              onChange={(e) => handleOrganizationChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-1.5 sm:py-2 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--ink)] text-sm font-sans appearance-none cursor-pointer"
-            >
-              {user.organizations.map((org) => (
-                <option key={org.orgId} value={org.orgId}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
-
-      {/* Organization Display (for users with single organization) */}
-      {user?.organizations && user.organizations.length === 1 && (
-        <div className="mb-4 sm:mb-6 shrink-0">
-          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
-            Organization
-          </label>
-          <div className="flex items-center gap-2 px-3 py-2 rounded border border-[var(--border)] bg-[var(--white)]">
-            <Building2 className="w-4 h-4 text-[var(--accent)]" />
-            <span className="text-sm text-[var(--ink)]">{user.organizations[0].name}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Global Admin Badge */}
-      {user?.isGlobalAdmin && (
-        <div className="mb-4 sm:mb-6 shrink-0">
-          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
-            Organization
-          </label>
-          <div className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--accent)]/10 border border-[var(--accent)]/20">
-            <Building2 className="w-4 h-4 text-[var(--accent)]" />
-            <span className="text-sm font-medium text-[var(--accent)]">BCSF, Inc</span>
-          </div>
-        </div>
-      )}
-
       {/* Store Selector */}
       <div className="mb-4 sm:mb-6 shrink-0">
         <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
@@ -243,15 +186,21 @@ export function Sidebar() {
         <div className="pt-3 sm:pt-4 border-t border-[var(--border)]">
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[var(--accent-light)] flex items-center justify-center text-white font-semibold text-xs sm:text-sm shrink-0">
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
+              {(displayName || user?.username)?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--ink)] m-0 capitalize truncate">
-                {user?.username || 'Guest'}
+              <p className="text-sm font-medium text-[var(--ink)] m-0 truncate">
+                {displayName || user?.username || 'Guest'}
               </p>
               <p className="text-xs text-[var(--muted)] m-0 capitalize">{user?.role || 'User'}</p>
             </div>
-            <Settings className="w-5 h-5 text-[var(--muted)] cursor-pointer shrink-0" />
+            <button
+              onClick={() => handleNavClick('settings')}
+              className="p-1 rounded hover:bg-[var(--accent)]/10 transition-colors"
+              aria-label="Settings"
+            >
+              <Settings className="w-5 h-5 text-[var(--muted)] cursor-pointer shrink-0" />
+            </button>
           </div>
           <button
             onClick={handleLogout}

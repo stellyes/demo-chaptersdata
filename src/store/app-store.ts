@@ -71,7 +71,8 @@ export type PageType =
   | 'research'
   | 'seo'
   | 'invoices'
-  | 'qr-codes';
+  | 'qr-codes'
+  | 'settings';
 
 interface AppState {
   // Authentication
@@ -477,19 +478,29 @@ export const useAppStore = create<AppState>()(
       loadBudtenderAssignments: async () => {
         try {
           const response = await fetch('/api/data/budtender-assignments');
+          if (!response.ok) {
+            console.error('Failed to fetch budtender assignments:', response.status, response.statusText);
+            return;
+          }
           const result = await response.json();
           if (result.success && result.data?.assignments) {
             const auroraAssignments = result.data.assignments;
-            const localAssignments = useAppStore.getState().permanentEmployees;
+            const assignmentCount = Object.keys(auroraAssignments).length;
 
-            // If Aurora has data, use it (Aurora is source of truth)
-            if (Object.keys(auroraAssignments).length > 0) {
+            // Always use Aurora data as source of truth
+            if (assignmentCount > 0) {
+              console.log(`Loaded ${assignmentCount} budtender assignments from Aurora`);
               set({ permanentEmployees: auroraAssignments });
-            } else if (Object.keys(localAssignments).length > 0) {
-              // Aurora is empty but localStorage has data - sync to Aurora
-              console.log('Syncing localStorage assignments to Aurora...');
-              await useAppStore.getState().saveBudtenderAssignments();
+            } else {
+              // Aurora is empty - check if localStorage has data to sync
+              const localAssignments = useAppStore.getState().permanentEmployees;
+              if (Object.keys(localAssignments).length > 0) {
+                console.log('Syncing localStorage assignments to Aurora...');
+                await useAppStore.getState().saveBudtenderAssignments();
+              }
             }
+          } else {
+            console.error('Invalid response from budtender assignments API:', result);
           }
         } catch (error) {
           console.error('Error loading budtender assignments:', error);
@@ -600,8 +611,8 @@ export const useAppStore = create<AppState>()(
               isLoading: true,
             }));
 
-            // Load budtender assignments (overrides localStorage if newer)
-            useAppStore.getState().loadBudtenderAssignments();
+            // Load budtender assignments (overrides localStorage - Aurora is source of truth)
+            await useAppStore.getState().loadBudtenderAssignments();
 
             // Load customer data separately in background (large dataset ~30MB CSV)
             fetch('/api/data/customers?pageSize=50000')

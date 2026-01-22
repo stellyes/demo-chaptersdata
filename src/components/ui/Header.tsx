@@ -28,8 +28,11 @@ const SEARCHABLE_SECTIONS: SearchableSection[] = [
   { id: 'sales-budtenders', label: 'Sales Analytics > Budtender Analytics', page: 'sales', tabId: 'budtenders', keywords: ['budtender', 'budtenders', 'employee', 'staff', 'performance'] },
   { id: 'sales-invoices', label: 'Sales Analytics > Invoice Analytics', page: 'sales', tabId: 'invoices', keywords: ['invoice', 'invoices', 'purchasing', 'bought', 'purchase', 'spend', 'vendor', 'supplier', 'cost'] },
 
-  // Recommendations
-  { id: 'recommendations', label: 'Recommendations', page: 'recommendations', keywords: ['recommendations', 'ai', 'insights', 'suggestions', 'analysis'] },
+  // Recommendations tabs
+  { id: 'recommendations-ai', label: 'Recommendations > AI Analysis', page: 'recommendations', tabId: 'ai', keywords: ['ai', 'analysis', 'claude', 'recommendations', 'insights', 'suggestions'] },
+  { id: 'recommendations-custom', label: 'Recommendations > Custom Query', page: 'recommendations', tabId: 'custom', keywords: ['custom', 'query', 'question', 'ask', 'claude', 'prompt'] },
+  { id: 'recommendations-history', label: 'Recommendations > Past Reports', page: 'recommendations', tabId: 'history', keywords: ['history', 'past', 'reports', 'previous', 'recommendations', 'saved'] },
+  { id: 'recommendations-learning', label: 'Recommendations > Learning Progress', page: 'recommendations', tabId: 'learning', keywords: ['learning', 'progress', 'daily', 'digest', 'intelligence', 'brain'] },
 
   // Data Center tabs
   { id: 'data-sales', label: 'Data Center > Sales Data', page: 'data-center', tabId: 'sales', keywords: ['sales', 'data', 'upload', 'import'] },
@@ -89,7 +92,40 @@ export function Header({ title, subtitle }: HeaderProps) {
           {title}
         </h2>
       </div>
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 w-full sm:w-auto">
+        {/* Search - shown on all screen sizes, full width on mobile */}
+        <div className="relative w-full sm:w-auto order-first sm:order-none">
+          <Search className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search sections..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+            className="bg-[var(--white)] border border-[var(--border)] rounded pl-10 pr-4 py-2.5 text-sm text-[var(--ink)] w-full sm:w-48 md:w-64 font-sans"
+          />
+          {/* Search Results Dropdown */}
+          {searchFocused && searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--white)] border border-[var(--border)] rounded shadow-lg z-50 max-h-64 overflow-y-auto">
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  onClick={() => handleSearchResultClick(result)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-[var(--accent)]/5 transition-colors"
+                >
+                  <span className="text-[var(--ink)]">{result.label}</span>
+                  <ChevronRight className="w-4 h-4 text-[var(--muted)]" />
+                </button>
+              ))}
+            </div>
+          )}
+          {searchFocused && searchQuery && searchResults.length === 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--white)] border border-[var(--border)] rounded shadow-lg z-50 px-3 py-2 text-sm text-[var(--muted)]">
+              No results found
+            </div>
+          )}
+        </div>
         {/* Date Range Picker */}
         <div className="flex flex-wrap items-center gap-2 px-3 py-2 border border-[var(--border)] rounded bg-[var(--white)] w-full sm:w-auto">
           <Calendar className="w-4 h-4 text-[var(--muted)]" />
@@ -118,39 +154,6 @@ export function Header({ title, subtitle }: HeaderProps) {
             }
             className="border-none text-sm text-[var(--ink)] bg-transparent min-w-0 flex-1 sm:flex-none"
           />
-        </div>
-        {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search sections..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-            className="bg-[var(--white)] border border-[var(--border)] rounded pl-10 pr-4 py-2.5 text-sm text-[var(--ink)] w-48 md:w-64 font-sans"
-          />
-          {/* Search Results Dropdown */}
-          {searchFocused && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--white)] border border-[var(--border)] rounded shadow-lg z-50 max-h-64 overflow-y-auto">
-              {searchResults.map((result) => (
-                <button
-                  key={result.id}
-                  onClick={() => handleSearchResultClick(result)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-[var(--accent)]/5 transition-colors"
-                >
-                  <span className="text-[var(--ink)]">{result.label}</span>
-                  <ChevronRight className="w-4 h-4 text-[var(--muted)]" />
-                </button>
-              ))}
-            </div>
-          )}
-          {searchFocused && searchQuery && searchResults.length === 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--white)] border border-[var(--border)] rounded shadow-lg z-50 px-3 py-2 text-sm text-[var(--muted)]">
-              No results found
-            </div>
-          )}
         </div>
         {/* Notifications - hidden on mobile since it's in the mobile header */}
         <div className="relative hidden lg:block">

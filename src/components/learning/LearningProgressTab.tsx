@@ -70,7 +70,7 @@ interface CurrentJobStatus {
 }
 
 export function LearningProgressTab() {
-  const { hideLoadingOverlay } = useAppStore();
+  const { hideLoadingOverlay, currentOrganization, addNotification } = useAppStore();
   const [latestDigest, setLatestDigest] = useState<DailyDigest | null>(null);
   const [latestJob, setLatestJob] = useState<{ id: string; status: string; completedAt: string | null } | null>(null);
   const [jobHistory, setJobHistory] = useState<LearningJob[]>([]);
@@ -78,6 +78,7 @@ export function LearningProgressTab() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['summary', 'actions']));
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Load data on mount
   useEffect(() => {
@@ -87,11 +88,15 @@ export function LearningProgressTab() {
 
   const loadData = async () => {
     setLoading(true);
+    const headers: Record<string, string> = {};
+    if (currentOrganization?.orgId) {
+      headers['X-Org-Id'] = currentOrganization.orgId;
+    }
     try {
       const [digestRes, historyRes, statusRes] = await Promise.all([
-        fetch('/api/ai/learning/digest'),
-        fetch('/api/ai/learning/history'),
-        fetch('/api/ai/learning/status'),
+        fetch('/api/ai/learning/digest', { headers }),
+        fetch('/api/ai/learning/history', { headers }),
+        fetch('/api/ai/learning/status', { headers }),
       ]);
 
       const [digestData, historyData, statusData] = await Promise.all([
@@ -120,26 +125,106 @@ export function LearningProgressTab() {
     }
   };
 
+  // Poll for job completion
+  const startPolling = () => {
+    if (pollingInterval) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (currentOrganization?.orgId) {
+          headers['X-Org-Id'] = currentOrganization.orgId;
+        }
+
+        const statusRes = await fetch('/api/ai/learning/status', { headers });
+        const statusData = await statusRes.json();
+
+        if (statusData.success) {
+          setCurrentStatus(statusData.data);
+
+          // If job completed or failed, stop polling and reload data
+          if (!statusData.data.isRunning) {
+            clearInterval(interval);
+            setPollingInterval(null);
+            setRunning(false);
+
+            // Show completion notification
+            addNotification({
+              type: 'success',
+              title: 'Learning Complete',
+              message: 'Daily intelligence digest has been updated.',
+              actionLabel: 'View Results',
+              actionPage: 'recommendations',
+              actionTab: 'learning',
+            });
+
+            // Reload data to show new digest
+            await loadData();
+          }
+        }
+      } catch (error) {
+        console.error('Error polling learning status:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    setPollingInterval(interval);
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
+
   const triggerLearning = async (skipWebResearch: boolean = false) => {
     setRunning(true);
+
+    const runType = skipWebResearch ? 'Quick' : 'Full';
+
+    // Show start notification immediately
+    addNotification({
+      type: 'info',
+      title: `${runType} Learning Started`,
+      message: skipWebResearch
+        ? 'Analyzing your data without web research...'
+        : 'Running full analysis with web research...',
+    });
+
     try {
       const response = await fetch('/api/ai/learning/run', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentOrganization?.orgId && { 'X-Org-Id': currentOrganization.orgId }),
+        },
         body: JSON.stringify({ skipWebResearch }),
       });
 
       const result = await response.json();
       if (result.success) {
+        // Start polling for completion
+        startPolling();
+        // Reload status immediately to show progress
         await loadData();
       } else {
-        alert(result.error || 'Failed to run learning');
+        setRunning(false);
+        addNotification({
+          type: 'error',
+          title: 'Learning Failed',
+          message: result.error || 'Failed to start learning job',
+        });
       }
     } catch (error) {
       console.error('Failed to trigger learning:', error);
-      alert('Failed to trigger learning');
-    } finally {
       setRunning(false);
+      addNotification({
+        type: 'error',
+        title: 'Learning Failed',
+        message: 'Failed to start learning job. Please try again.',
+      });
     }
   };
 
@@ -195,7 +280,7 @@ export function LearningProgressTab() {
     <div className="space-y-6">
       {/* Status Header */}
       <Card>
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-4">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
               <Brain className="w-6 h-6 text-[var(--accent)]" />
@@ -208,11 +293,11 @@ export function LearningProgressTab() {
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={() => triggerLearning(true)}
               disabled={running || currentStatus.isRunning}
-              className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded text-sm font-medium hover:bg-[var(--paper)] disabled:opacity-50"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 sm:py-2 border border-[var(--border)] rounded text-sm font-medium hover:bg-[var(--paper)] disabled:opacity-50"
             >
               <PlayCircle className="w-4 h-4" />
               Quick Run
@@ -220,7 +305,7 @@ export function LearningProgressTab() {
             <button
               onClick={() => triggerLearning(false)}
               disabled={running || currentStatus.isRunning}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-sm font-medium disabled:opacity-50"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 sm:py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-sm font-medium disabled:opacity-50"
             >
               {running || currentStatus.isRunning ? (
                 <>
@@ -330,11 +415,11 @@ export function LearningProgressTab() {
                 <div className="mt-4 space-y-3">
                   {latestDigest.priorityActions.map((action, i) => (
                     <div key={i} className="p-4 bg-[var(--paper)] rounded-lg border-l-4 border-l-amber-500">
+                      <span className="inline-block px-2 py-0.5 mb-2 bg-[var(--accent)]/10 text-[var(--accent)] text-xs rounded">{action.category}</span>
                       <p className="font-medium text-[var(--ink)]">{action.action}</p>
-                      <div className="flex gap-4 mt-2 text-xs text-[var(--muted)]">
+                      <div className="flex flex-col sm:flex-row sm:gap-4 gap-1 mt-2 text-xs text-[var(--muted)]">
                         <span>Timeframe: {action.timeframe}</span>
                         <span>Impact: {action.impact}</span>
-                        <span className="px-2 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded">{action.category}</span>
                       </div>
                     </div>
                   ))}
@@ -359,8 +444,8 @@ export function LearningProgressTab() {
               {expandedSections.has('quickwins') && (
                 <div className="mt-4 space-y-2">
                   {latestDigest.quickWins.map((win, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
-                      <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                    <div key={i} className="flex items-start gap-3 p-3 bg-[var(--success)]/10 rounded-lg">
+                      <CheckCircle className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-[var(--ink)]">{win.action}</p>
                         <p className="text-xs text-[var(--muted)]">Effort: {win.effort} | Impact: {win.impact}</p>

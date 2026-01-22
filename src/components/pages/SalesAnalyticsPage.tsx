@@ -993,7 +993,7 @@ function BudtenderAnalyticsTab() {
       name: string;
       store: string;
       totalSales: number;
-      totalBrands: number;
+      totalTransactions: number;
       totalCustomers: number;
       totalUnits: number;
       marginSum: number;
@@ -1007,7 +1007,7 @@ function BudtenderAnalyticsTab() {
           name: record.employee_name,
           store: record.store,
           totalSales: 0,
-          totalBrands: 0,
+          totalTransactions: 0,
           totalCustomers: 0,
           totalUnits: 0,
           marginSum: 0,
@@ -1015,7 +1015,7 @@ function BudtenderAnalyticsTab() {
         };
       }
       byEmployee[key].totalSales += record.net_sales;
-      byEmployee[key].totalBrands += 1; // Each record is a unique brand sold by this employee
+      byEmployee[key].totalTransactions += record.tickets_count; // Use actual transaction count
       byEmployee[key].totalCustomers += record.customers_count;
       byEmployee[key].totalUnits += record.units_sold;
       byEmployee[key].marginSum += record.gross_margin_pct;
@@ -1026,8 +1026,8 @@ function BudtenderAnalyticsTab() {
       .map(e => ({
         ...e,
         avgMargin: e.dayCount > 0 ? e.marginSum / e.dayCount : 0,
-        avgSalesPerBrand: e.totalBrands > 0 ? e.totalSales / e.totalBrands : 0,
-        avgUnitsPerBrand: e.totalBrands > 0 ? e.totalUnits / e.totalBrands : 0,
+        avgOrderValue: e.totalTransactions > 0 ? e.totalSales / e.totalTransactions : 0,
+        avgUnitsPerTransaction: e.totalTransactions > 0 ? e.totalUnits / e.totalTransactions : 0,
       }))
       .sort((a, b) => b.totalSales - a.totalSales);
   }, [filteredBudtenders]);
@@ -1035,7 +1035,7 @@ function BudtenderAnalyticsTab() {
   // Top performers
   const topBySales = budtenderSummary.slice(0, 10);
   const topByMargin = [...budtenderSummary].sort((a, b) => b.avgMargin - a.avgMargin).slice(0, 10);
-  const topByBrands = [...budtenderSummary].sort((a, b) => b.totalBrands - a.totalBrands).slice(0, 10);
+  const topByTransactions = [...budtenderSummary].sort((a, b) => b.totalTransactions - a.totalTransactions).slice(0, 10);
 
   if (budtenderData.length === 0) {
     return (
@@ -1159,9 +1159,9 @@ function BudtenderAnalyticsTab() {
               <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
                 <ShoppingCart className="w-5 h-5 text-[var(--accent)] flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-[var(--muted)] truncate">Brands Sold</p>
+                  <p className="text-xs text-[var(--muted)] truncate">Transactions</p>
                   <p className="text-lg md:text-xl font-semibold font-serif">
-                    {budtenderSummary.reduce((sum, b) => sum + b.totalBrands, 0).toLocaleString()}
+                    {budtenderSummary.reduce((sum, b) => sum + b.totalTransactions, 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -1221,9 +1221,9 @@ function BudtenderAnalyticsTab() {
 
             <Card>
               <SectionLabel>Volume Leaders</SectionLabel>
-              <SectionTitle>Top by Brands Sold</SectionTitle>
+              <SectionTitle>Top by Transactions</SectionTitle>
               <div className="space-y-2">
-                {topByBrands.slice(0, 5).map((b, i) => (
+                {topByTransactions.slice(0, 5).map((b, i) => (
                   <div key={i} className="flex items-center justify-between p-2 bg-[var(--paper)] rounded">
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 flex items-center justify-center bg-[var(--warning)] text-white rounded-full text-xs font-bold">
@@ -1231,7 +1231,7 @@ function BudtenderAnalyticsTab() {
                       </span>
                       <span className="font-medium text-sm">{b.name}</span>
                     </div>
-                    <span className="font-semibold text-sm">{b.totalBrands.toLocaleString()}</span>
+                    <span className="font-semibold text-sm">{b.totalTransactions.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -1250,10 +1250,10 @@ function BudtenderAnalyticsTab() {
               { key: 'name', label: 'Name', sortable: true },
               { key: 'store', label: 'Store', sortable: true },
               { key: 'totalSales', label: 'Total Sales', sortable: true, align: 'right', render: (v) => `$${Number(v).toLocaleString()}` },
-              { key: 'totalBrands', label: 'Brands Sold', sortable: true, align: 'right', render: (v) => Number(v).toLocaleString() },
-              { key: 'avgSalesPerBrand', label: 'Avg $/Brand', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(0)}` },
+              { key: 'totalTransactions', label: 'Transactions', sortable: true, align: 'right', render: (v) => Number(v).toLocaleString() },
+              { key: 'avgOrderValue', label: 'Avg Order', sortable: true, align: 'right', render: (v) => `$${Number(v).toFixed(0)}` },
               { key: 'avgMargin', label: 'Avg Margin', sortable: true, align: 'right', render: (v) => `${Number(v).toFixed(1)}%` },
-              { key: 'avgUnitsPerBrand', label: 'Units/Brand', sortable: true, align: 'right', render: (v) => Number(v).toFixed(1) },
+              { key: 'avgUnitsPerTransaction', label: 'Units/Trans', sortable: true, align: 'right', render: (v) => Number(v).toFixed(1) },
             ]}
             pageSize={20}
             exportable
