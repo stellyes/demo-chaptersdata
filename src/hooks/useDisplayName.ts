@@ -16,32 +16,36 @@ export function useDisplayName(userId: string | undefined) {
       return;
     }
 
+    const controller = new AbortController();
+    let timeoutId: NodeJS.Timeout | undefined;
+
     const fetchDisplayName = async () => {
       let storedName: string | null = null;
 
       // First, try to fetch from API/server
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        try {
-          const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          if (response.ok) {
-            const data = await response.json();
-            const profile = data.profile;
-            if (profile?.displayName && typeof profile.displayName === 'string') {
-              storedName = profile.displayName as string;
-              // Cache locally
-              localStorage.setItem(`${DISPLAY_NAME_KEY}_${userId}`, storedName as string);
-            }
+        timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+          const data = await response.json();
+          const profile = data.profile;
+          if (profile?.displayName && typeof profile.displayName === 'string') {
+            storedName = profile.displayName as string;
+            // Cache locally
+            localStorage.setItem(`${DISPLAY_NAME_KEY}_${userId}`, storedName as string);
           }
-        } finally {
-          clearTimeout(timeoutId);
         }
       } catch (error) {
+        // Ignore abort errors - they're expected on unmount or timeout
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error('Failed to fetch display name from API:', error);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
 
       // Fallback to localStorage if API didn't have it
@@ -76,6 +80,12 @@ export function useDisplayName(userId: string | undefined) {
     };
 
     fetchDisplayName();
+
+    // Cleanup: abort any pending requests on unmount
+    return () => {
+      controller.abort();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [userId]);
 
   const saveDisplayName = useCallback(async (name: string) => {

@@ -41,44 +41,48 @@ export function useProfile(userId: string | undefined) {
       return;
     }
 
+    const controller = new AbortController();
+    let timeoutId: NodeJS.Timeout | undefined;
+
     const loadProfile = async () => {
       // First, try to load from API/server
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        try {
-          const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          if (response.ok) {
-            const data = await response.json();
-            const serverProfile = data.profile;
-            if (serverProfile) {
-              const profileData: ProfileData = {
-                displayName: serverProfile.displayName || '',
-                organizationName: serverProfile.organizationName || '',
-                organizationType: serverProfile.organizationType || '',
-                licenseNumber: serverProfile.licenseNumber || '',
-                address: serverProfile.address || '',
-                city: serverProfile.city || '',
-                state: serverProfile.state || '',
-                zipCode: serverProfile.zipCode || '',
-                phone: serverProfile.phone || '',
-              };
-              setProfile(profileData);
-              setSavedProfile(profileData);
-              // Also update localStorage for offline access
-              localStorage.setItem(`${PROFILE_KEY}_${userId}`, JSON.stringify(profileData));
-              setIsLoading(false);
-              return;
-            }
+        timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+          const data = await response.json();
+          const serverProfile = data.profile;
+          if (serverProfile) {
+            const profileData: ProfileData = {
+              displayName: serverProfile.displayName || '',
+              organizationName: serverProfile.organizationName || '',
+              organizationType: serverProfile.organizationType || '',
+              licenseNumber: serverProfile.licenseNumber || '',
+              address: serverProfile.address || '',
+              city: serverProfile.city || '',
+              state: serverProfile.state || '',
+              zipCode: serverProfile.zipCode || '',
+              phone: serverProfile.phone || '',
+            };
+            setProfile(profileData);
+            setSavedProfile(profileData);
+            // Also update localStorage for offline access
+            localStorage.setItem(`${PROFILE_KEY}_${userId}`, JSON.stringify(profileData));
+            setIsLoading(false);
+            return;
           }
-        } finally {
-          clearTimeout(timeoutId);
         }
       } catch (error) {
+        // Ignore abort errors - they're expected on unmount or timeout
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error('Failed to fetch profile from API:', error);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
 
       // Fallback to localStorage (also handles migration from old format)
@@ -108,6 +112,12 @@ export function useProfile(userId: string | undefined) {
     };
 
     loadProfile();
+
+    // Cleanup: abort any pending requests on unmount
+    return () => {
+      controller.abort();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [userId]);
 
   const updateField = useCallback(<K extends keyof ProfileData>(field: K, value: ProfileData[K]) => {
