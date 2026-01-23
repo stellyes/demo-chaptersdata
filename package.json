@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -p 3001",
     "lint": "eslint"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
+    "@prisma/client": "^5.22.0",
     "@aws-sdk/client-dynamodb": "^3.967.0",
     "@aws-sdk/client-s3": "^3.966.0",
     "@aws-sdk/lib-dynamodb": "^3.966.0",
@@ -30,7 +31,6 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
-    "@prisma/client": "^5.22.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/typography": "^0.5.19",
     "@types/crypto-js": "^4.2.2",
