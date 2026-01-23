@@ -11,6 +11,7 @@ import {
   Sun,
   Store,
   X,
+  Building2,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useAppStore, PageType } from '@/store/app-store';
@@ -56,6 +57,7 @@ export function Sidebar() {
     setUser,
     sidebarOpen,
     setSidebarOpen,
+    currentOrganization,
     setCurrentOrganization,
   } = useAppStore();
 
@@ -66,6 +68,14 @@ export function Sidebar() {
     await signOut();
     setUser(null);
     setCurrentOrganization(null);
+  };
+
+  const handleOrganizationChange = (orgId: string) => {
+    if (!user?.organizations) return;
+    const org = user.organizations.find(o => o.orgId === orgId);
+    if (org) {
+      setCurrentOrganization(org);
+    }
   };
 
   const handleNavClick = (page: PageType) => {
@@ -135,6 +145,55 @@ export function Sidebar() {
           <p className="text-[0.5rem] sm:text-[0.55rem] text-[var(--muted)] m-0 mt-0.5 leading-none">Data & Marketing Consulting, LLC</p>
         </div>
       </div>
+
+      {/* Organization Selector (for users with multiple organizations) */}
+      {user?.organizations && user.organizations.length > 1 && (
+        <div className="mb-4 sm:mb-6 shrink-0">
+          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
+            Organization
+          </label>
+          <div className="relative">
+            <Building2 className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+            <select
+              value={currentOrganization?.orgId || ''}
+              onChange={(e) => handleOrganizationChange(e.target.value)}
+              className="w-full pl-10 pr-4 py-1.5 sm:py-2 rounded border border-[var(--border)] bg-[var(--white)] text-[var(--ink)] text-sm font-sans appearance-none cursor-pointer"
+            >
+              {user.organizations.map((org) => (
+                <option key={org.orgId} value={org.orgId}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Organization Display (for users with single organization) */}
+      {user?.organizations && user.organizations.length === 1 && (
+        <div className="mb-4 sm:mb-6 shrink-0">
+          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
+            Organization
+          </label>
+          <div className="flex items-center gap-2 px-3 py-2 rounded border border-[var(--border)] bg-[var(--white)]">
+            <Building2 className="w-4 h-4 text-[var(--accent)]" />
+            <span className="text-sm text-[var(--ink)]">{user.organizations[0].name}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Global Admin Badge */}
+      {user?.isGlobalAdmin && (
+        <div className="mb-4 sm:mb-6 shrink-0">
+          <label className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-1.5 sm:mb-2 block">
+            Organization
+          </label>
+          <div className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--accent)]/10 border border-[var(--accent)]/20">
+            <Building2 className="w-4 h-4 text-[var(--accent)]" />
+            <span className="text-sm font-medium text-[var(--accent)]">BCSF, Inc</span>
+          </div>
+        </div>
+      )}
 
       {/* Store Selector */}
       <div className="mb-4 sm:mb-6 shrink-0">
