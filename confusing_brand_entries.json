@@ -1,0 +1,33 @@
+[
+  {
+    "lineItemId": "fb039375-1898-4b07-b43b-ecb37b1f35f6",
+    "invoiceId": "a0af283a-166e-403e-a81a-252b27d32236",
+    "originalBrandName": "UNKNOWN",
+    "reason": "No matching brand alias found"
+  },
+  {
+    "lineItemId": "0e8bc47a-c3cf-43ee-8f02-3f62cce96b2f",
+    "invoiceId": "8362be14-3c89-4c19-8c29-a472a759dbfe",
+    "originalBrandName": "(1)",
+    "reason": "No matching brand alias found",
+    "suggestions": [
+      "1",
+      "Ash & Ember"
+    ]
+  },
+  {
+    "lineItemId": "b03ff7f5-e824-4e4a-8e42-2a0cf310439c",
+    "invoiceId": "ba6c34ea-3770-4ed9-9e18-9b71d5b5beda",
+    "originalBrandName": "$0.01",
+    "reason": "No matching brand alias found",
+    "suggestions": [
+      "1"
+    ]
+  },
+  {
+    "lineItemId": "7f599566-5173-4f5a-ae07-0521cfcd5b4d",
+    "invoiceId": "5a3b6c8d-2334-4b12-bcdb-4da7b6d9e8e0",
+    "originalBrandName": "1",
+    "reason": "Empty or too short brand name"
+  }
+]
