@@ -248,13 +248,16 @@ export class DailyLearningService {
 
   private async phase1DataReview(state: DailyLearningJobState): Promise<DataReviewResult> {
     // Load all data sources in parallel
-    const [salesData, brandData, customerData, invoiceData, qrData, seoData] = await Promise.all([
+    const [salesData, brandData, customerData, invoiceData, qrData, seoData, budtenderData, productData, researchData] = await Promise.all([
       this.loadRecentSalesData(),
       this.loadRecentBrandData(),
       this.loadRecentCustomerData(),
       this.loadRecentInvoiceData(),
       this.loadQrCodeData(),
       this.loadSeoAuditData(),
+      this.loadBudtenderData(),
+      this.loadProductData(),
+      this.loadResearchData(),
     ]);
 
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
@@ -263,6 +266,9 @@ SALES DATA: ${JSON.stringify(salesData, null, 2)}
 BRAND DATA: ${JSON.stringify(brandData, null, 2)}
 CUSTOMER DATA: ${JSON.stringify(customerData, null, 2)}
 INVOICE/PURCHASING DATA: ${JSON.stringify(invoiceData, null, 2)}
+BUDTENDER PERFORMANCE: ${JSON.stringify(budtenderData, null, 2)}
+PRODUCT CATEGORY DATA: ${JSON.stringify(productData, null, 2)}
+MARKET RESEARCH: ${JSON.stringify(researchData, null, 2)}
 QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
 WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
 
@@ -696,11 +702,51 @@ Return ONLY valid JSON, no markdown or explanation.`;
       include: { brand: true },
     });
 
+    // Load vendor-brand relationships (which vendors supply which brands)
+    const vendorBrands = await prisma.vendorBrand.findMany({
+      orderBy: { invoiceCount: 'desc' },
+      take: 30,
+      include: {
+        vendor: true,
+        brand: true,
+      },
+    });
+
+    // Group by vendor to show which brands each vendor supplies
+    const vendorBrandMap: Record<string, { brands: string[]; totalInvoices: number; totalUnits: number }> = {};
+    for (const vb of vendorBrands) {
+      const vendorName = vb.vendor.canonicalName;
+      if (!vendorBrandMap[vendorName]) {
+        vendorBrandMap[vendorName] = { brands: [], totalInvoices: 0, totalUnits: 0 };
+      }
+      vendorBrandMap[vendorName].brands.push(vb.brand.canonicalName);
+      vendorBrandMap[vendorName].totalInvoices += vb.invoiceCount;
+      vendorBrandMap[vendorName].totalUnits += vb.totalUnits;
+    }
+
+    // Group by brand to show which vendors supply each brand
+    const brandVendorMap: Record<string, string[]> = {};
+    for (const vb of vendorBrands) {
+      const brandName = vb.brand.canonicalName;
+      if (!brandVendorMap[brandName]) {
+        brandVendorMap[brandName] = [];
+      }
+      brandVendorMap[brandName].push(vb.vendor.canonicalName);
+    }
+
     return {
       topBrands: brandRecords.map(b => ({
         name: b.brand?.canonicalName || b.originalBrandName,
         netSales: parseFloat(b.netSales.toString()),
+        suppliers: brandVendorMap[b.brand?.canonicalName || ''] || [],
       })),
+      vendorBrandRelationships: Object.entries(vendorBrandMap).map(([vendor, data]) => ({
+        vendor,
+        brands: data.brands,
+        totalInvoices: data.totalInvoices,
+        totalUnits: data.totalUnits,
+      })),
+      totalVendorBrandLinks: vendorBrands.length,
     };
   }
 
@@ -726,16 +772,34 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const invoices = await prisma.invoice.findMany({
       where: { invoiceDate: { gte: thirtyDaysAgo } },
-      include: { vendor: true, lineItems: true },
+      include: {
+        vendor: true,
+        lineItems: {
+          include: { brand: true },
+        },
+      },
       orderBy: { invoiceDate: 'desc' },
       take: 50,
     });
 
     const totalCost = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalCost.toString()), 0);
     const vendorCounts: Record<string, number> = {};
+    const brandCounts: Record<string, { count: number; cost: number; units: number }> = {};
+
     invoices.forEach(inv => {
       const vendorName = inv.vendor?.canonicalName || inv.originalVendorName || 'Unknown';
       vendorCounts[vendorName] = (vendorCounts[vendorName] || 0) + 1;
+
+      // Track brands purchased
+      inv.lineItems.forEach(item => {
+        const brandName = item.brand?.canonicalName || item.originalBrandName || 'Unknown';
+        if (!brandCounts[brandName]) {
+          brandCounts[brandName] = { count: 0, cost: 0, units: 0 };
+        }
+        brandCounts[brandName].count++;
+        brandCounts[brandName].cost += parseFloat(item.totalCost.toString());
+        brandCounts[brandName].units += item.skuUnits;
+      });
     });
 
     const topVendors = Object.entries(vendorCounts)
@@ -743,11 +807,24 @@ Return ONLY valid JSON, no markdown or explanation.`;
       .slice(0, 5)
       .map(([name, count]) => ({ name, invoiceCount: count }));
 
+    const topBrandsPurchased = Object.entries(brandCounts)
+      .sort(([, a], [, b]) => b.cost - a.cost)
+      .slice(0, 10)
+      .map(([name, data]) => ({
+        name,
+        lineItems: data.count,
+        totalCost: data.cost.toFixed(2),
+        units: data.units,
+      }));
+
     return {
       recentInvoiceCount: invoices.length,
       totalPurchasingCost30d: totalCost.toFixed(2),
       topVendors,
+      topBrandsPurchased,
       lineItemsCount: invoices.reduce((sum, inv) => sum + inv.lineItems.length, 0),
+      lineItemsWithBrand: invoices.reduce((sum, inv) =>
+        sum + inv.lineItems.filter(li => li.brandId !== null).length, 0),
     };
   }
 
@@ -806,6 +883,178 @@ Return ONLY valid JSON, no markdown or explanation.`;
       criticalIssues: summary.criticalIssues || 0,
       pagesAnalyzed: latestAudit._count.pages,
       lastAuditDate: latestAudit.completedAt?.toISOString().split('T')[0],
+    };
+  }
+
+  private async loadBudtenderData(): Promise<Record<string, unknown>> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const budtenderRecords = await prisma.budtenderRecord.findMany({
+      where: { date: { gte: thirtyDaysAgo } },
+      orderBy: { date: 'desc' },
+    });
+
+    if (budtenderRecords.length === 0) {
+      return { dataAvailable: false };
+    }
+
+    // Aggregate by employee
+    const employeeStats: Record<string, {
+      netSales: number;
+      tickets: number;
+      customers: number;
+      units: number;
+      days: number;
+    }> = {};
+
+    for (const record of budtenderRecords) {
+      const name = record.employeeName;
+      if (!employeeStats[name]) {
+        employeeStats[name] = { netSales: 0, tickets: 0, customers: 0, units: 0, days: 0 };
+      }
+      employeeStats[name].netSales += Number(record.netSales);
+      employeeStats[name].tickets += record.ticketsCount;
+      employeeStats[name].customers += record.customersCount;
+      employeeStats[name].units += record.unitsSold;
+      employeeStats[name].days++;
+    }
+
+    // Rank by performance
+    const rankedBudtenders = Object.entries(employeeStats)
+      .map(([name, stats]) => ({
+        name,
+        totalNetSales: stats.netSales.toFixed(2),
+        avgDailySales: (stats.netSales / Math.max(stats.days, 1)).toFixed(2),
+        totalTickets: stats.tickets,
+        avgTicketValue: stats.tickets > 0 ? (stats.netSales / stats.tickets).toFixed(2) : '0.00',
+        daysWorked: stats.days,
+      }))
+      .sort((a, b) => parseFloat(b.totalNetSales) - parseFloat(a.totalNetSales));
+
+    return {
+      dataAvailable: true,
+      periodDays: 30,
+      totalBudtenders: rankedBudtenders.length,
+      topPerformers: rankedBudtenders.slice(0, 5),
+      bottomPerformers: rankedBudtenders.slice(-3),
+      averageTicketValue: (
+        rankedBudtenders.reduce((sum, b) => sum + parseFloat(b.avgTicketValue), 0) /
+        Math.max(rankedBudtenders.length, 1)
+      ).toFixed(2),
+    };
+  }
+
+  private async loadProductData(): Promise<Record<string, unknown>> {
+    // Get product category performance data
+    const productRecords = await prisma.productRecord.findMany({
+      orderBy: { netSales: 'desc' },
+    });
+
+    if (productRecords.length === 0) {
+      return { dataAvailable: false };
+    }
+
+    // Aggregate by product type
+    const productStats: Record<string, {
+      netSales: number;
+      marginPct: number;
+      count: number;
+    }> = {};
+
+    for (const record of productRecords) {
+      const type = record.productType;
+      if (!productStats[type]) {
+        productStats[type] = { netSales: 0, marginPct: 0, count: 0 };
+      }
+      productStats[type].netSales += Number(record.netSales);
+      productStats[type].marginPct += Number(record.grossMarginPct);
+      productStats[type].count++;
+    }
+
+    const totalSales = Object.values(productStats).reduce((sum, s) => sum + s.netSales, 0);
+
+    const productCategories = Object.entries(productStats)
+      .map(([type, stats]) => ({
+        productType: type,
+        netSales: stats.netSales.toFixed(2),
+        percentOfTotal: ((stats.netSales / Math.max(totalSales, 1)) * 100).toFixed(1) + '%',
+        avgMargin: (stats.marginPct / Math.max(stats.count, 1)).toFixed(1) + '%',
+      }))
+      .sort((a, b) => parseFloat(b.netSales) - parseFloat(a.netSales));
+
+    return {
+      dataAvailable: true,
+      productCategories,
+      topCategory: productCategories[0]?.productType || 'Unknown',
+      categoryCount: productCategories.length,
+    };
+  }
+
+  private async loadResearchData(): Promise<Record<string, unknown>> {
+    // Load research documents and their key findings
+    const researchDocs = await prisma.researchDocument.findMany({
+      orderBy: { analyzedAt: 'desc' },
+      take: 20,
+      include: {
+        findings: {
+          where: { relevance: 'high' },
+          orderBy: { actionRequired: 'desc' },
+          take: 5,
+        },
+      },
+    });
+
+    if (researchDocs.length === 0) {
+      return { dataAvailable: false };
+    }
+
+    // Group findings by category
+    const findingsByCategory: Record<string, Array<{ finding: string; action?: string | null }>> = {};
+
+    for (const doc of researchDocs) {
+      for (const finding of doc.findings) {
+        if (!findingsByCategory[finding.category]) {
+          findingsByCategory[finding.category] = [];
+        }
+        findingsByCategory[finding.category].push({
+          finding: finding.finding,
+          action: finding.recommendedAction,
+        });
+      }
+    }
+
+    // Get action items requiring attention
+    const actionItems = await prisma.researchFinding.findMany({
+      where: {
+        actionRequired: true,
+        relevance: 'high',
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: { document: true },
+    });
+
+    return {
+      dataAvailable: true,
+      totalDocuments: researchDocs.length,
+      recentDocuments: researchDocs.slice(0, 5).map(d => ({
+        category: d.category,
+        summary: d.summary.substring(0, 200) + '...',
+        relevance: d.relevanceScore,
+        analyzedAt: d.analyzedAt.toISOString().split('T')[0],
+      })),
+      findingsByCategory: Object.entries(findingsByCategory).map(([category, findings]) => ({
+        category,
+        findingsCount: findings.length,
+        topFindings: findings.slice(0, 3),
+      })),
+      actionItemsCount: actionItems.length,
+      priorityActions: actionItems.slice(0, 5).map(a => ({
+        finding: a.finding.substring(0, 150) + '...',
+        action: a.recommendedAction?.substring(0, 100) + '...',
+        category: a.category,
+      })),
     };
   }
 

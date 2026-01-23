@@ -61,6 +61,7 @@ model Storefront {
 model UserMapping {
   id           String       @id @default(uuid())
   userId       String       @map("user_id")
+  userEmail    String?      @map("user_email")
   orgId        String       @map("org_id")
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   role         String       @default("member")
@@ -90,6 +91,38 @@ model UserProfile {
 }
 
 // ============================================
+// CLIENT BILLING INVOICES
+// Invoices sent TO clients for services
+// ============================================
+
+model ClientInvoice {
+  id             String    @id @default(uuid())
+  invoiceNumber  String    @unique @map("invoice_number")
+  orgId          String    @map("org_id")
+
+  amount         Decimal   @db.Decimal(10, 2)
+  amountPaid     Decimal   @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  status         String    @default("unpaid") // unpaid, partial, paid
+
+  description    String?
+  dueDate        DateTime  @map("due_date")
+
+  // PDF attachment stored in S3
+  pdfKey         String?   @map("pdf_key")
+  pdfUrl         String?   @map("pdf_url")
+  pdfFileName    String?   @map("pdf_file_name")
+
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  paidAt         DateTime? @map("paid_at")
+
+  @@index([orgId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("client_invoices")
+}
+
+// ============================================
 // VENDOR NORMALIZATION
 // Maps ~130 canonical vendors with ~800 aliases
 // ============================================
@@ -100,6 +133,7 @@ model Vendor {
   createdAt     DateTime      @default(now()) @map("created_at")
   aliases       VendorAlias[]
   invoices      Invoice[]
+  vendorBrands  VendorBrand[]
 
   @@map("vendors")
 }
@@ -112,6 +146,27 @@ model VendorAlias {
 
   @@index([aliasName])
   @@map("vendor_aliases")
+}
+
+// Junction table linking Vendors to the Brands they distribute
+model VendorBrand {
+  id             String         @id @default(uuid())
+  vendorId       String         @map("vendor_id")
+  vendor         Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  brandId        String         @map("brand_id")
+  brand          CanonicalBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  invoiceCount   Int            @default(0) @map("invoice_count")
+  totalUnits     Int            @default(0) @map("total_units")
+  totalCost      Decimal        @default(0) @map("total_cost") @db.Decimal(12, 2)
+  firstSeenAt    DateTime?      @map("first_seen_at")
+  lastSeenAt     DateTime?      @map("last_seen_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@unique([vendorId, brandId])
+  @@index([vendorId])
+  @@index([brandId])
+  @@map("vendor_brands")
 }
 
 // ============================================
@@ -127,6 +182,7 @@ model CanonicalBrand {
   aliases       BrandAlias[]
   brandRecords  BrandRecord[]
   lineItems     InvoiceLineItem[]
+  vendorBrands  VendorBrand[]
 
   @@map("canonical_brands")
 }
@@ -813,4 +869,46 @@ model SeoAuditPage {
   @@unique([auditId, url])
   @@index([auditId])
   @@map("seo_audit_pages")
+}
+
+// ============================================
+// RESEARCH DOCUMENTS
+// Manually uploaded market research analyzed by AI
+// ============================================
+
+model ResearchDocument {
+  id              String   @id @default(uuid())
+  filename        String
+  category        String   // Product Innovation, Market Trends, Regulatory, Competition, etc.
+  sourceUrl       String?  @map("source_url")
+  summary         String   @db.Text
+  relevanceScore  String   @map("relevance_score") // high, medium, low
+  dateMentioned   DateTime? @map("date_mentioned") @db.Date
+  analyzedAt      DateTime @map("analyzed_at")
+  s3Key           String?  @map("s3_key")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  findings        ResearchFinding[]
+
+  @@index([category])
+  @@index([analyzedAt])
+  @@index([relevanceScore])
+  @@map("research_documents")
+}
+
+model ResearchFinding {
+  id                String           @id @default(uuid())
+  documentId        String           @map("document_id")
+  document          ResearchDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  finding           String           @db.Text
+  relevance         String           // high, medium, low
+  category          String           // products, market, competition, regulatory
+  actionRequired    Boolean          @default(false) @map("action_required")
+  recommendedAction String?          @map("recommended_action") @db.Text
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  @@index([documentId])
+  @@index([category])
+  @@index([relevance])
+  @@map("research_findings")
 }

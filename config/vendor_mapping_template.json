@@ -1,0 +1,3930 @@
+{
+  "_instructions": "Edit canonicalName to set the preferred vendor name. Add/remove aliases as needed. Delete entire vendor objects to exclude them from import.",
+  "_generated": "2026-01-22T20:25:46.436Z",
+  "vendors": [
+    {
+      "canonicalName": "UNKNOWN",
+      "aliases": [],
+      "invoiceCount": 3669
+    },
+    {
+      "canonicalName": "NABITWO, LLC A&B",
+      "aliases": [],
+      "invoiceCount": 643
+    },
+    {
+      "canonicalName": "KIVA SALES & SERVICE",
+      "aliases": [
+        "KIVA SALES & SERVICE, INC."
+      ],
+      "invoiceCount": 638
+    },
+    {
+      "canonicalName": "BARBARY COAST",
+      "aliases": [],
+      "invoiceCount": 454
+    },
+    {
+      "canonicalName": "INTEGRAL INNOVATIONS",
+      "aliases": [
+        "INTEGRAL INNOVATIONS, LLC"
+      ],
+      "invoiceCount": 300
+    },
+    {
+      "canonicalName": "NABITWO, LLC",
+      "aliases": [],
+      "invoiceCount": 258
+    },
+    {
+      "canonicalName": "HERBL, INC",
+      "aliases": [
+        "HERBL INC"
+      ],
+      "invoiceCount": 203
+    },
+    {
+      "canonicalName": "GOLD DROP",
+      "aliases": [],
+      "invoiceCount": 154
+    },
+    {
+      "canonicalName": "NORTHWEST CONFECTIONS CALIFORNIA, LLC",
+      "aliases": [],
+      "invoiceCount": 153
+    },
+    {
+      "canonicalName": "GOLDEN STATE RECYCLING COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 138
+    },
+    {
+      "canonicalName": "CALYX BRANDS",
+      "aliases": [],
+      "invoiceCount": 133
+    },
+    {
+      "canonicalName": "BIG PETE'S",
+      "aliases": [
+        "BIG PETE'S LLC",
+        "BIG PETES"
+      ],
+      "invoiceCount": 133
+    },
+    {
+      "canonicalName": "GREENFIELD ORGANIX",
+      "aliases": [],
+      "invoiceCount": 130
+    },
+    {
+      "canonicalName": "KIND HOUSE, INC.",
+      "aliases": [],
+      "invoiceCount": 115
+    },
+    {
+      "canonicalName": "NABIONE INC",
+      "aliases": [
+        "NABIONE, INC."
+      ],
+      "invoiceCount": 110
+    },
+    {
+      "canonicalName": "UPNORTH DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 101
+    },
+    {
+      "canonicalName": "RIVER DISTRIBUTING CO., LLC",
+      "aliases": [],
+      "invoiceCount": 99
+    },
+    {
+      "canonicalName": "HESHIES LLC OAKLAND,CA.94621",
+      "aliases": [],
+      "invoiceCount": 90
+    },
+    {
+      "canonicalName": "DT CALIFORNIA, LLC",
+      "aliases": [],
+      "invoiceCount": 86
+    },
+    {
+      "canonicalName": "NORTHWEST CONFECTIONS CALIFORNIA, LCC",
+      "aliases": [],
+      "invoiceCount": 84
+    },
+    {
+      "canonicalName": "PUNCH MEDIA, LLC",
+      "aliases": [],
+      "invoiceCount": 81
+    },
+    {
+      "canonicalName": "INTEGRAL INNOVATIONS, LLC CA 93940",
+      "aliases": [],
+      "invoiceCount": 77
+    },
+    {
+      "canonicalName": "ACCENTIAN INC.",
+      "aliases": [
+        "ACCENTIAN"
+      ],
+      "invoiceCount": 70
+    },
+    {
+      "canonicalName": "GOLDEN GATE GEN INC CA 94124",
+      "aliases": [],
+      "invoiceCount": 53
+    },
+    {
+      "canonicalName": "CYPRESS MANUFACTURING CO",
+      "aliases": [
+        "CYPRESS MANUFACTURING CO."
+      ],
+      "invoiceCount": 49
+    },
+    {
+      "canonicalName": "FLUIDS MANUFACTURING, INC.",
+      "aliases": [],
+      "invoiceCount": 47
+    },
+    {
+      "canonicalName": "PRIVATE GROWER",
+      "aliases": [],
+      "invoiceCount": 46
+    },
+    {
+      "canonicalName": "TRUSTY TRANSPORTATION AND DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 41
+    },
+    {
+      "canonicalName": "UPNORTH HUMBOLDT",
+      "aliases": [],
+      "invoiceCount": 39
+    },
+    {
+      "canonicalName": "BARBARY COAST c10-0000127",
+      "aliases": [],
+      "invoiceCount": 39
+    },
+    {
+      "canonicalName": "GB2, LLC",
+      "aliases": [
+        "GB2 LLC"
+      ],
+      "invoiceCount": 39
+    },
+    {
+      "canonicalName": "BARLOW PRINTING, LLC",
+      "aliases": [],
+      "invoiceCount": 38
+    },
+    {
+      "canonicalName": "THE LITTLE COTTAGE CAREGIVERS LLC LLC",
+      "aliases": [],
+      "invoiceCount": 38
+    },
+    {
+      "canonicalName": "VANGUARD",
+      "aliases": [],
+      "invoiceCount": 35
+    },
+    {
+      "canonicalName": "MEDICONE",
+      "aliases": [],
+      "invoiceCount": 35
+    },
+    {
+      "canonicalName": "ARTISAN CANNA CIGAR",
+      "aliases": [],
+      "invoiceCount": 33
+    },
+    {
+      "canonicalName": "LEGION OF BLOOM",
+      "aliases": [],
+      "invoiceCount": 33
+    },
+    {
+      "canonicalName": "SOTA EXTRACTS, INC. CA 954046328",
+      "aliases": [],
+      "invoiceCount": 33
+    },
+    {
+      "canonicalName": "OZ DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 32
+    },
+    {
+      "canonicalName": "FOUR STAR DISTRIBUTION AND DELIVERY, LLC",
+      "aliases": [
+        "FOUR STAR DISTRIBUTION AND DELIVERY LLC"
+      ],
+      "invoiceCount": 32
+    },
+    {
+      "canonicalName": "KOROVA",
+      "aliases": [],
+      "invoiceCount": 31
+    },
+    {
+      "canonicalName": "YERBA BUENA LOGISTICS SERVICES",
+      "aliases": [],
+      "invoiceCount": 31
+    },
+    {
+      "canonicalName": "GRIZZLY PEAK FARMS, LLC",
+      "aliases": [],
+      "invoiceCount": 31
+    },
+    {
+      "canonicalName": "KUSHY PUNCH",
+      "aliases": [],
+      "invoiceCount": 31
+    },
+    {
+      "canonicalName": "AIRWAY INDUSTRIES INC. c11-0001652",
+      "aliases": [
+        "AIRWAY INDUSTRIES INC C11-0001652"
+      ],
+      "invoiceCount": 31
+    },
+    {
+      "canonicalName": "INDUSTRIAL COURT L11, LLC",
+      "aliases": [],
+      "invoiceCount": 30
+    },
+    {
+      "canonicalName": "FLOW KANA",
+      "aliases": [],
+      "invoiceCount": 30
+    },
+    {
+      "canonicalName": "STRONG AGRONOMY MANAGEMENT, INC. CA 95076",
+      "aliases": [],
+      "invoiceCount": 30
+    },
+    {
+      "canonicalName": "KIVA SALES & SERVICE CA 946212013",
+      "aliases": [],
+      "invoiceCount": 30
+    },
+    {
+      "canonicalName": "EMERALD BAY WELLNESS",
+      "aliases": [],
+      "invoiceCount": 29
+    },
+    {
+      "canonicalName": "MED FOR AMERICA INC.",
+      "aliases": [],
+      "invoiceCount": 29
+    },
+    {
+      "canonicalName": "HIGHSTAR DISTRIBUTION LLC C11-0001899-lic",
+      "aliases": [],
+      "invoiceCount": 29
+    },
+    {
+      "canonicalName": "YOUR HIGHNESS",
+      "aliases": [],
+      "invoiceCount": 28
+    },
+    {
+      "canonicalName": "CREME DE CANNA COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 28
+    },
+    {
+      "canonicalName": "ADIRA DISTRIBUTION",
+      "aliases": [
+        "ADIRA DISTRIBUTION INC"
+      ],
+      "invoiceCount": 28
+    },
+    {
+      "canonicalName": "JETTY EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 27
+    },
+    {
+      "canonicalName": "HUMBOLDT GROWERS NETWORK",
+      "aliases": [
+        "HUMBOLDT GROWERS NETWORK INC"
+      ],
+      "invoiceCount": 26
+    },
+    {
+      "canonicalName": "GOLDEN GATE GEN INC",
+      "aliases": [],
+      "invoiceCount": 24
+    },
+    {
+      "canonicalName": "SECURE HAULING LLC",
+      "aliases": [],
+      "invoiceCount": 24
+    },
+    {
+      "canonicalName": "CI DISTRIBUTION LLC",
+      "aliases": [],
+      "invoiceCount": 24
+    },
+    {
+      "canonicalName": "FIELDS PERFORMANCE INC.",
+      "aliases": [
+        "FIELDS PERFORMANCE INC"
+      ],
+      "invoiceCount": 24
+    },
+    {
+      "canonicalName": "SUNDERSTORM BAY LLC",
+      "aliases": [],
+      "invoiceCount": 23
+    },
+    {
+      "canonicalName": "FORDOAK OPERATIONS LLC",
+      "aliases": [],
+      "invoiceCount": 23
+    },
+    {
+      "canonicalName": "HERBL INC INC",
+      "aliases": [
+        "HERBL, INC INC"
+      ],
+      "invoiceCount": 23
+    },
+    {
+      "canonicalName": "B2B SIGNS AND PRINTS",
+      "aliases": [],
+      "invoiceCount": 22
+    },
+    {
+      "canonicalName": "PURE XTRACTS",
+      "aliases": [],
+      "invoiceCount": 22
+    },
+    {
+      "canonicalName": "LBS DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 22
+    },
+    {
+      "canonicalName": "HESHIES, LLC CA 94621",
+      "aliases": [],
+      "invoiceCount": 21
+    },
+    {
+      "canonicalName": "GREENFIELD ORGANIX DBA LOUDPACK",
+      "aliases": [],
+      "invoiceCount": 21
+    },
+    {
+      "canonicalName": "KANAPLYA LLC",
+      "aliases": [],
+      "invoiceCount": 21
+    },
+    {
+      "canonicalName": "ELEVATION WELLNESS CENTER, INC",
+      "aliases": [
+        "ELEVATION WELLNESS CENTER INC."
+      ],
+      "invoiceCount": 21
+    },
+    {
+      "canonicalName": "CONNECTED MANAGEMENT LLC",
+      "aliases": [],
+      "invoiceCount": 20
+    },
+    {
+      "canonicalName": "BEEZLE EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 20
+    },
+    {
+      "canonicalName": "CAVIAR GOLD",
+      "aliases": [],
+      "invoiceCount": 20
+    },
+    {
+      "canonicalName": "HERBL, INC DBA HERBL DISTRIBUTION SOLUTIONS",
+      "aliases": [],
+      "invoiceCount": 19
+    },
+    {
+      "canonicalName": "GUILD EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 19
+    },
+    {
+      "canonicalName": "BAY AREA PIPE PLUS WHOLES",
+      "aliases": [],
+      "invoiceCount": 19
+    },
+    {
+      "canonicalName": "BARGAIN LINE WHOLESALE",
+      "aliases": [],
+      "invoiceCount": 19
+    },
+    {
+      "canonicalName": "HUMBOLDT GROWERS NETWORK INC INC",
+      "aliases": [],
+      "invoiceCount": 18
+    },
+    {
+      "canonicalName": "MICHAEL TOTH ANGELES",
+      "aliases": [],
+      "invoiceCount": 18
+    },
+    {
+      "canonicalName": "FOUR STAR DISTRIBUTION & DELIVERY",
+      "aliases": [],
+      "invoiceCount": 18
+    },
+    {
+      "canonicalName": "OAKLAND DISTRIBUTING COMPANY",
+      "aliases": [
+        "OAKLAND DISTRIBUTING CO"
+      ],
+      "invoiceCount": 18
+    },
+    {
+      "canonicalName": "SONOMA PACIFIC DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 17
+    },
+    {
+      "canonicalName": "IRRATIONAL RACCOON, LLC",
+      "aliases": [],
+      "invoiceCount": 16
+    },
+    {
+      "canonicalName": "CHOOSE LOVE",
+      "aliases": [],
+      "invoiceCount": 16
+    },
+    {
+      "canonicalName": "MASTER BANGO",
+      "aliases": [],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "YERBA BUENA LOGISTICS",
+      "aliases": [],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "CLEARVIEW MANAGEMENT SOLUTIONS, LLC",
+      "aliases": [],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "EVENT HORIZON TECHNOLOGIES, INC. INC",
+      "aliases": [],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "VBR DHS MANAGEMENT, LLC. SPRING, CA 92240",
+      "aliases": [],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "BELO, INC.",
+      "aliases": [
+        "BELO INC."
+      ],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "E&J DISTRIBUTORS, LLC",
+      "aliases": [
+        "E&J DISTRIBUTORS, LLC."
+      ],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "LUCKY FAMILY BRANDS, INC.",
+      "aliases": [
+        "LUCKY FAMILY BRANDS INC."
+      ],
+      "invoiceCount": 15
+    },
+    {
+      "canonicalName": "HGDCO INC",
+      "aliases": [],
+      "invoiceCount": 14
+    },
+    {
+      "canonicalName": "KIVA SALES & SERVICE OAKLAND CA 946212013",
+      "aliases": [],
+      "invoiceCount": 14
+    },
+    {
+      "canonicalName": "BLOOM FARMS",
+      "aliases": [],
+      "invoiceCount": 14
+    },
+    {
+      "canonicalName": "GP OPERATIONS, INC",
+      "aliases": [
+        "GP OPERATIONS INC."
+      ],
+      "invoiceCount": 14
+    },
+    {
+      "canonicalName": "NABITWO, LLC SUITE A&B",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "MICHAEL TOTH",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "RIVERVIEW FARMS",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "MHEKA, LLC",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "SISU EXTRACTION LLC",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "UPNORTH DISTRIBUTION c11-0000061-lic",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "BUD TECHNOLOGY",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "KIVA",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "THE DISTILLATE COMPANY LLC",
+      "aliases": [],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "NEW AGE COMPASSION CARE CENTER, INC.",
+      "aliases": [
+        "NEW AGE COMPASSION CARE CENTER"
+      ],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "MARY'S TECH CA, INC.",
+      "aliases": [
+        "MARY'S TECH. CA INC"
+      ],
+      "invoiceCount": 13
+    },
+    {
+      "canonicalName": "YERBA BUENA LOGISTICS SERVICES, LLC. LLC",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "P&S VENTURES",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "KIVA DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "TERPX",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "NMC ORGANIZATION",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "PURE VAPE INC",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "HUMBOLDT SUN GROWERS GUILD",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "MARY'S MEDICINALS CA",
+      "aliases": [],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "PACIFIC RESERVE NURSERY LLC",
+      "aliases": [
+        "PACIFIC RESERVE NURSERY, LLC"
+      ],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "TOP HAT DERBY, INC",
+      "aliases": [
+        "TOP HAT DERBY, LLC",
+        "TOP HAT DERBY, INC."
+      ],
+      "invoiceCount": 12
+    },
+    {
+      "canonicalName": "BEEZLE",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "ISLETON CANNABIS COMPANY C12-0000157-lic",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "HERBL DISTRIBUTION SOLUTIONS",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "UP HERE MEDICINALS",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "BIG PETE'S TREATS",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "VERTICAL BLISS - DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "MOTHER HUMBOLDT",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "INTEGRAL INNOVATIONS CA 93940",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "GREENFIELD ORGANIX 4TH ST.",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "GF DISTRIBUTION LLC SPRINGS, CA 92240",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "KDM HOLDINGS",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "BREEZ CA LLC",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "THE TEAM HANDED CORPORATION",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "GXM INC",
+      "aliases": [],
+      "invoiceCount": 11
+    },
+    {
+      "canonicalName": "LOYAL DISTRIBUTION DBA BLOOM FARMS",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "HIGHRIZE",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "RVR WELLNESS",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "HIGHLAND PARK PATIENT COLLECTIVE INC. INC",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "ATWATER COMMERCE LLC",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "GCM MANAGEMENT SERVICES, INC INC",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "NASHA",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "CAPITOL COCOA INC",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "BIG PETE'S LLC CA 95062",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "ALKHEMIST DM LLC c11-0001456-lic",
+      "aliases": [],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "RIVER DISTRIBUTING CO",
+      "aliases": [
+        "RIVER DISTRIBUTING CO."
+      ],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "GSFCA, LLC",
+      "aliases": [
+        "GSFCA LLC"
+      ],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "MOTA, INC.",
+      "aliases": [
+        "MOTA, INC"
+      ],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "BEN BUTLER c11-0000398",
+      "aliases": [
+        "BEN BUTLER C11-0000398"
+      ],
+      "invoiceCount": 10
+    },
+    {
+      "canonicalName": "PT KOR INC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "RC GLOBAL, INC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "INTEGRAL INNOVATIONS, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "PROOF OPERATIONS INC.",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "CONSCIOUS MINDZ CANNABIS COMPANY LLC LLC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "PROMONTORY HOLDINGS LLC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "BUENA VISTA",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "HESHIES, LLC OAKLAND, CA 94621",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "PHC FACILITIES, INC.",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "KIVA SALES",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "WCC MGMT, LLC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "PSV NORCAL",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "THE HIVE LABORATORY",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "HMC PARTNERS LLC C11-0001848",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "FIRE STICKS",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "RIVER DISTRIBUTING CO., LLC LLC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "LIQUID SHADE INC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "CALIFORNIA LOYAL INC. DBA BLOOM FARMS DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "INTEGRATIVE PARTNERS INC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "EVENT HORIZON TECHNOLOGIES",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "POUNDTOWN SHM LLC",
+      "aliases": [],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "BOUTIQUE UNLIMITED DISTRIBUTION, LLC LLC",
+      "aliases": [
+        "BOUTIQUE UNLIMITED DISTRIBUTION LLC LLC"
+      ],
+      "invoiceCount": 9
+    },
+    {
+      "canonicalName": "CALYX",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "HIGHSTAR DISTRIBUTION LLC",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "NABIONE, INC. DBA NABIS",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "GCM MANAGEMENT SERVICES, INC CA 95828",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "INFLOR, LLC",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "MENDOCINO",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "APEX SOLUTIONS",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "KIND HOUSE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "CREME DE CANNA",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "DELIVERMD",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "CALIFORNIA LOYAL, INC.",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "SEED 2 SOUL, LLC",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "CONSCIOUS MINDZ CANNABIS COMPANY LLC",
+      "aliases": [],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "HIGHLAND PARK PATIENT COLLECTIVE",
+      "aliases": [
+        "HIGHLAND PARK PATIENT COLLECTIVE INC."
+      ],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "CANN DISTRIBUTORS, INC.",
+      "aliases": [
+        "CANN DISTRIBUTORS INC."
+      ],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "PAX LABS",
+      "aliases": [
+        "PAX LABS, INC"
+      ],
+      "invoiceCount": 8
+    },
+    {
+      "canonicalName": "BLKBRD OCA, LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "KIFFEN LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "ECHSEN INDUSTRIES, LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "BARBARY COAST COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "SHIMMINS CONSULTING CORPORATION",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "FILIGREEN DISTRO",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "SEVEN CITIES BEVERAGE COMPANY",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "HORIZON LGG LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "RAW GARDEN",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "BEGK INC. DBA GOLDEN BARN",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "GREENVIEW MEDICAL, LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "LOB LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "GREEN LIGHT DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "SYNERGY",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "BCSF, INC. C10-0000127-lic",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "RISE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "SONOMA CHO LLC ROSA, CA 954031973",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "PRIMECO SMOKE SHOP WHOLESALE",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "AUREUS LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "NABIS",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "AMETRINE WELLNESS DBA JETTY EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "NABIONE INC INC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "2JC, LLC",
+      "aliases": [],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "STURDIVANT VENTURES LLC",
+      "aliases": [
+        "STURDIVANT VENTURES"
+      ],
+      "invoiceCount": 7
+    },
+    {
+      "canonicalName": "420-3, LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "TARHILL",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "PM OAK LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "URBAN THERAPIES DISTRIBUTION, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "UMMA LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "NABITWO, LLC ST. SUITE A&B",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "LEFT COAST LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "BLACKBIRD SANTA ROSA DISTRIBUTOR",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "THE MEDICINE WOMAN GROUP, LLC CALIFORNAI",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "CANDY STRIPE CONFECTIONS",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "OAK2FRUITLAND, LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "MIRTH PROVISIONS",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "ALTA SUPPLY",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "LOB MANUFACTURING",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "FORDOAKOPERATIONS LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "HMC PARTNERS LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "ISLETON CANNABIS COMPANY SACRAMENTO",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "PHINEST DISTRIBUTION COMPANY, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "ADVESA",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "CHOCOWASKA",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "DE CIRCA '96, INC.",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "EMERALD SUN MANUFACTURING, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "LVLUP DISTRIBUTION , LLC",
+      "aliases": [
+        "LVLUP DISTRIBUTION LLC"
+      ],
+      "invoiceCount": 6
+    },
+    {
+      "canonicalName": "FOUNTAIN OF WELLBEING",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "GREENSTONE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "GREEN DAWG",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "UP NORTH",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "RUMPWAX",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "OM EDIBLES",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "TRILLI, LLC",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "CONSCIOUS VITALITY CORP.",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "EEL RIVER",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "BUD TECHNOLOGY C11-0001413-lic",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "NCM CORP.",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "FALCON",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "CALIFORNIA ARTISANAL MEDICINE",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "NUG",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "GF DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "WUNDERFRUIT",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "CALVAPE",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "VERTICAL BLISS, INC.",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "HERITAGE HOLDING OF CA",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "WAYV",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "LOVING & LEGALLY",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "FIELDS PERFORMANCE INC CA 95828",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "HAPPY STICKS",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "LUVBUDS, LLC.",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "CRAFTED CANOPY CO. LLC CA 908151761",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "HERBAN INDUSTRIES CA LLC",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "SF BAY LGSY LLC",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "STOKES",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "CALIGOLD",
+      "aliases": [],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "C.C.M.C. INC.",
+      "aliases": [
+        "C.C.M.C INC."
+      ],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "PACIFIC ORGANICS WELLNESS INC INC",
+      "aliases": [
+        "PACIFIC ORGANICS & WELLNESS INC. INC"
+      ],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "SUBLIME MACHINING INC.",
+      "aliases": [
+        "SUBLIME MACHINING INC",
+        "SUBLIME MACHINING"
+      ],
+      "invoiceCount": 5
+    },
+    {
+      "canonicalName": "SD PANTRY INC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "LEVEL BLENDS",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "EMPRESS EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "SECRET GARDENS",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "WEST COAST HERB LLC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "IMPORT",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "SUBLIME",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "KIND HOUSE, INC. INC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "ELEVATION WELLNESS CA",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "CALIVA (BRISBANE)",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "NEW AGE COMPASSION CARE CENTER ANGELES, CA 90037",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "EMERALD BAY WELLNESS c11-0000655-lic",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "WESTSIDE CAREGIVERS CLUB, INC.",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "MOTHER HUMBOLDT'S, INC C11-0000125",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "CALIVA [SAN JOSE]",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "FOUNTAIN OF WELLBEING A COOPERATIVE CORP",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "GON INC LANDING, CA 95039",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "NEW AGE COMPASSION CARE CENTER, INC. INC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "KUDA BROS DISTRO LLC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "CALIVA CAMISJ2, INC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "JBTB HOLDINGS",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "CMS SERVICE PARTNERS, INC.",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "NABITWO, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "BOMBSHELLS",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "PAYNE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "V O LEASING CORP. CA",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "LEVEL",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "HIMALAYA",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "MEDIZEN",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "SENSI CHEW",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "GREENSTONE DISTRIBUTION (NMC ORGANIZATION)",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "RUKLI, INC.",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "SENSI PRODUCTS",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "CANN DISTRIBUTOR INC.",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "CALIFORNIA STATE DISTRIBUTION PO BOX 456 CLACKAMAS, OR",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "GOLD SEAL",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "BROTHERLY LOVE ORGANICS",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "KORBEN LABS LLC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "DC EDEN WILLITS,CA 95490",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "HIGH GRADE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "A&A",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "DR. KERKLAAN",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "UPNORTH DISTRIBUTION CA 95521944",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "LOST COAST",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "CRAFTED CANOPY CO. LLC CA90815",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "GREENLINE ORGANIC NURSERY",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "MARY J",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "EFW HEALTH",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "PRIMECO WHOLESALE, INC. FRANCISCO,CA.94080",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "NT VENTURES",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "SHELF LIFE DISTRIBUTING",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "MDUF, LLC",
+      "aliases": [],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "JINGUBANG INC.",
+      "aliases": [
+        "JINGUBANG"
+      ],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "BIRD VALLEY ORGANICS, INC.",
+      "aliases": [
+        "BIRD VALLEY ORGANICS INC."
+      ],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "P&B LABS HUMBOLDT, LLC",
+      "aliases": [
+        "P&B LABS HUMBOLDT"
+      ],
+      "invoiceCount": 4
+    },
+    {
+      "canonicalName": "TOTALEAF INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "GREEN ROCKET DESIGN & TECHNOLOGY CORP. CORP",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "GREEN SPACE HOLDINGS, LLC.",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "SYNERGY CANNABIS",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "WISH",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "MARIJUANA PACKAGING.COM",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "KCP CORP",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "HAPISAP CORPORATION CA 95822",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "CALIVA",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "FIRST CLASS CONCENTRATES",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "CHARLIE MIKE INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "GREEN PEAK FARMS",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "ECHSEN INDUSTRIES c11-0000436-lic",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "POINT BAY DISTRIBUTORS, LLC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BEGK, INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "KANNA",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BEGK, INC C11-0000561",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "HAPPY DISTRIBUTION CENTER INC INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "MINDFUL CANNA",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "HAUTE SUPPLY LLC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "INDUS",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "STRONG AGRONOMY MANAGEMENT, INC. INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BIG TREE INDUSTRIES, LLC.",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "SOTA EXTRACTS, INC. ROSA, CA 954046328",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "ASV EQ1, LLC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "WESTSIDE CAREGIVERS CLUB, INC c12-0000266-lic",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BRODEO, INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BLACK OAK GALLERY",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BREEZ",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "LIQUID SHADE INC CA 950762065",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "EMERALD ESSENCE",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "GOLD COAST ENTERPRISES",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "HIGH RIZE",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "LIFTED LOGISTICS",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "LVLUP DISTRIBUTION LLC c11-0001422-lic",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "XTRACTA DISTRIBUTION, LLC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "MARIJUANA PACKAGING",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "CONNECTED CANNABIS CO.",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "WWCMC INC.",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "THE TEAM HANDED CORPORATION c11-0000768-lic",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BLACKBIRD DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "STRONG AGRONOMY MANAGEMENT, INC.",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "GON INC CA 95039",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "PRANA",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "CURA CA LLC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "FILIGREEN DISTRO/IRRATIONAL RACCOON LLC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "UPWAY LLC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "DRAGON FLOWER FARM",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "LEGENDS EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "HMBLDT",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "GROUP",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "FENIX LOGISTICS INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "BLOOM FARM DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "COSTCO",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "SHERBINSKIS",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "DRAGONFISH FARMS",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "HERBAN CORPORATION",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "INDUSTRY STANDARD GROUP, INC. INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "OM",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "ADIRA DISTRIBUTION INC INC",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "HUMBOLDT'S FINEST",
+      "aliases": [],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "EMERALD GROUP, LLC",
+      "aliases": [
+        "EMERALD GROUP LLC"
+      ],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "CANNAPLEX REGULATORY COMPLIANCE, LLC",
+      "aliases": [
+        "CANNAPLEX REGULATORY COMPLIANCE"
+      ],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "TED'S BUDZ, LLC",
+      "aliases": [
+        "TEDS BUDZ"
+      ],
+      "invoiceCount": 3
+    },
+    {
+      "canonicalName": "STRONG AGRONOMY MANAGEMENT, INC. CA 950769713",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CASE FARMS COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "HAPISAP CORPORATION",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "ASV EQ 1 LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "MONTEREY TILTH FARM",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "HMC PARTNERS LLC CA 94124",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "BCSF, INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "LIGHTNING BUG BRANDING",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "IBS DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "FLOWER",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "A&A GLOBAL IMPORTS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "MOON VALLEY ORGANICS, INC c12-0000314",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "FIRE KING",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "PACIFIC EXPEDITORS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "JDI FARMS - CULTIVATION",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "NORCAL CANNABIS COMPANY",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "?",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "BRONX EXTRACTS LLC CA 95959",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "GANJA GOLD",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "LOST COAST BOTANICALS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "HIGHER GROUND",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "PAPA & BARKLEY",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "WALNUT LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "BMPK, INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SWAMI SELECT",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "TERP PRESERVATION SOCIETY",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "FILIGREEN",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "JUPITER RESEARCH LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "BIG MOON SKY",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CROWN GENETICS LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "HELIOS (HYPEEREON CORPORATION)",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SHAWNIE",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "NEW AGE COMPASSION CARE CENTER LOS ANGELES, CA 90037",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CYPRESS MANUFACTURING CA",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "RESTAURANT DEPOT",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "P&B LABS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "GOLD COAST DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "WAVE RIDER NURSERY LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "RICH",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "GREENFIELD DISTRIBUTION INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "QVI INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CAPITAL CITY HEALTHCARE LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CLEARVIEW MANAGEMENT SOLUTIONS, LLC c11-0000187-lic",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "LB ATLANTIS, LLC BEACH, CA",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "APHRODITE CONSULTING INC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "BRONX EXTRACTS LLC CITY CA 95959",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "GRANDIFLORA GENETICS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "ROOSTER",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SUBLIME MACHINING INC INC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "ET FARMS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "PURE CA, LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "GUMMI CARES",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "E&J DISTRIBUTORS, LLC. LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "VAPE XHALE",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "LMG LOGISTICS INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SOUTHWEST CAREGIVERS INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "FARMER MAX",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SEASIDE CRAFTERS LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "PLATINUM DISTRIBUTION INC. SACRAMENTO,CA. 95826",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SPS WHOLESALE",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "KIVA SALES & SERVICE OAKLAND CA",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "DOGWOOD INDUSTRIES",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "DV8 DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "P & S VENTURES",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "ALKHEMIST DM LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "HAPPY DISTRIBUTION CENTER INC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SMOAKLAND DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "HUMBOLDT FARMS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "LOST PARADISE ORGANICS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CALIFORNIA CHROMATOGRAPHY, LLC c11-0001704",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "PLATINUM DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SPECIAL BRANCH LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "GRASS ROOTS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "PRODUCER OWNERS OF THE EMERALD TRIANGLE LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CALIFORNIA CHROMATOGRAPHY, LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "DOSIST",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "COASTAL BUSINESS DISTRIBUTION, LLC. BEACH,CA. 93433-3126",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "PRINTFUL",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "MARCOS, CA 92078",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "LEEF",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "DOS ZAPATOS , INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "ABC COMMERCE LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "MOTHER HUMBOLDT'S",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "ACE CREATIONS, LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "TIM WEBER",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "TONE",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "JAPOW, LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "EEL RIVER ORGANICS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "NGUEY LAY",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "TOP SHELF LLC CA 958152738",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CA 92126",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "SKYGRADES",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "DR. DABBER",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "TAR HILL CANNABIS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "AMERICANNA",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "MAYA",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "NECTAR",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "OAKLAND EQUITY COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "THE BURKE GROUP",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "RADIANT FARM, INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CRAFTON SELECT, LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "GRIZZLY PEAK FARMS, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "NORCAL ALLIANCE DISTRIBUTION, INC OAKLAND,CA 94621",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "DABBENPORT EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "HOLLISTER HOLISTICS",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CONNECTED TRANSPORTATION PARTNERS INC.",
+      "aliases": [],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "CANNABLE ORGANICS, INC.",
+      "aliases": [
+        "CANNABLE ORGANICS, INC"
+      ],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "RELENTLESS ENTERPRISES",
+      "aliases": [
+        "RELENTLESS ENTERPRISES, INC."
+      ],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "MEADOW DISTRIBUTION",
+      "aliases": [
+        "MEADOW DISTRIBUTION INC"
+      ],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "WOODROCK, INC. c11-0000927",
+      "aliases": [
+        "WOODROCK, INC C11-0000927"
+      ],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "MVN, PRODUCTIONS, LLC",
+      "aliases": [
+        "MVN PRODUCTIONS, LLC"
+      ],
+      "invoiceCount": 2
+    },
+    {
+      "canonicalName": "12/12 MANAGEMENT LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HIFE FARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ARMCO II, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "THE NUG",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "WHOOPI & MAYA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LAB TESTED GROVER BEACH",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HIGH LINE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "EDEN INFUSIONS LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "12/12 DISTRO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SWEETWATER PHARMS CA 954039035",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BIG PETE'S LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MDUF, LLC OAKLAND, CA 946015114",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DCSM IV",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "UPNORTH DISTRIBUTION ARCATA, CA 95521944",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "POWERHOUSE DISTRIBUTION, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "EFW DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BAR",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "THE CYPRESS GROUP",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "POT CHEF",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "X VENTURES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "AFICIONADO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PEAK INDUSTRIES INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "REDWOOD REMEDIES, LCC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HERITAGE MENDOCINO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MOHALA FARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "REDWOOD ROOTS DISTRIBUTION, LLC. LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "WAVE RIDER NURSERY LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BRODEO, INC. COUNTY: SANTA CRUZ",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ILLA CANNA, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "KELLY RIDGE FARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ENDLESS HORIZONS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MSR SUPPLY LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DELTA DISTRIBUTION INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GB2 LLC CA 95407",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SEASIDE CRAFTERS LLC OAKLAND,CA 94606",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "COMPASSIONATE HEART DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CI DISTRIBUTION LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALI GREENZ LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALYX BRANDS CA 94621-2102",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GOLDEN GATE GEN INC INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MAC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SACRAMENTO CONFIDENTIAL DELIVERY INC INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALIFORNIA ORGANIC TREATMENT CENTER, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NMC ORGANIZATION / GREENSTONE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "COMPASSIONATE HEART MUTUAL BENEFIT ASSOCIATION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "EPIC PROS ENTERPRISES, INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NCM GROWTH CORP",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GOLDEN STATE FARM",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PACIFIC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BROADWAY ALLIANCE, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GLOWING BUDDHA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ORANGE-U-GLAD",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SNOWTILL89",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GBH DISTRIBUTORS LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "KMR DELIVERY",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "TENZIN",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "RADIANT FARM INC ROSA, CA 95403",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LENITIV LABS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREEN RIVER GARDENS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PACIFIC ORGANICS & WELLNESS INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "UTOPIA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREENLEAF PROCCESSORS, INC INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ERB SF",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALIFORNIA BUDCO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "JAHNETICS DELIVERY",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LOUD PACK EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BACKBONE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DRAGON FISH FARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "RADIANT FARM INC SUITE F, SANTA ROSA, CA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PM OAK LLC OAKLAND, CA 946014902",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "IC OAK INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "WATERWAY GROUP OF OAKLAND, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NOBLE HEADSPACE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ZEN CA, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MICHAEL TOTH LOS ANGELES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ATWATER COMMERCE LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BANGO DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GRINDERS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREENLINE DELIVERY LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GARDEN SOCIETY (OLD RIVER ROAD)",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BROADWAY ALLIANCE ANGELES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GMX INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FROSTY",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HERBL INC C11-0000975",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GOLD COAST ENTERPRISES CA 934333029",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BRAND NEW CONCEPTS, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CLEANLINE MANAGEMENT LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VEDA DISTRIBUTION, LLC SPRINGS, CA 92240",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BMP",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HIGH GRADE VENTURES CA 958281027",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALI DREAMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "METTA DISTRIBUTION AND TRANSPORTATION, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HERBAN INDUSTRIES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VIOLET FARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DMMM & T, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GSW CREATIVE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LIV EMERALD LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BLACK MAMBA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VERT LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "TRUPHARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NABITWO, LLC C11-0001274-",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DAVID PRIVATE GROWER",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ICOAK INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CHOP CHOP FARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "THE BLUE BUS COLLECTIVE c11-0001794",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "INFUSED EDIBLES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VISTA PRIME MANAGEMENT",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GOLD LEAF DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SONOMA CHO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MISHKA DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DOMPEN",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SOL DISTRO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CAMBALUC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "INTEGRAL INNOVATIONS, LLC OAKS, CA 93940",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CANDY STRIPE CONCENTRATES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SUMMIT MANUFACTURING, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CITY COMPASSIONATE CAREGIVERS, INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DBM INDUSTRIES, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "OAKLAND EQUITY COLLECTIVE CA 94621",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ORANGE U GLAD",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "UP NORTH MEDICINALS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "INDUS HOLDING CO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PURPLE MOUNTAIN MANUFACTURING DBA ATLAS EDIBL",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "INDUSTRIAL COURT L11, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CYP",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NC4 SYSTEMS, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SUNDERSTORM BAY LLC CA 94608",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DT CALIFORNIA, LLC CA 95367",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SIERRA BAGS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SFOG",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DOC GREEN'S LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NICK",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "KORBEN LABS, LLC SACRAMENTO,CA 95815",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NORTHWEST CONFECTIONS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CITY COMPASSIONATE CAREGIVERS, INC INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PACEX",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HMC PARTNERS LLC FRANCISCO, CA 94124",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SOMATIK",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ECD INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "JODY",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "OASIS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HC VENTURES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BAS DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "IRRATIONAL RACCOON LLC CA 94124",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DRD LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SEVENTH WAVE LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PM OAK LLC CA 946014902",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FORD FARMS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PURE EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NATURES LAB",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALIBUENO",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GOODNESS 4 LIFE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HARDCAR",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HASHMAN",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SILO, INC. SPRINGS, CA 92262",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREEN OVER GARDENS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ALL POINTS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ANDY",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "KIVAS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "EL DORADO EXTRACTS, LLC CALIFORNIA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "TEMPLE EXTRACTS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ZLIXIR",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LEAF",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NEXT GREEN WAVE, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CLEANLINE MANAGEMENT LLC COUNTY: LOS ANGELES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LA VIDA VERDE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BUBBLEMAN",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CONNECTED MANAGEMENT LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GOLDEN WE, LLC CA 94621",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VALLEY HEALTH CENTER COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PROMONTORY HOLDINGS LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CUSTOM INK",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FLORX DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SWEETWATER PHARMS ROSA CA 954039035",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DOC GREENS LLC BERKELEY, CA 947101312",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "TEMPLE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SEASIDE CRAFTERS LLC c11-0001676-lic",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SANTA CRUZ OCEAN GROWN",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GOLDEN WE, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "IC C",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VETSLEAF",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "APHRODITE CONSULTING INC c11-0001399",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HUMBOLDT LEGENDS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NC3 SYSTEMS INC, DBA CALIVA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREEN DRAGON CAREGIVERS INC INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "TRUE CLASSIC PRODUCTION, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HAUTE SUPPLY LLC FRANCISCO, CA 941241043",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PENINSULA DISTRIBUTION SOLUTIONS, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SUMMIT",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FRENCHY CANNOLI",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "IC COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LEGACY GARDEN INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "YMCM LLC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LYFTED FARMS, INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SILO, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HAUS MADE INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SAGE CREST ONE DISTRIBUTION LLC CA 91311",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "WEST CLIFF PROVISIONS, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ULTIMATE WELLNESS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALYX BRANDS OAKLAND CA 94621-2102",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "THE NATURAL WAY OF L.A.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "THE BLUE BUS COLLECTIVE LLC C110001794",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SKY GRADES",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SAN JOSE WELLNESS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PAX",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREENFIELD ORGANIX C2 CA, 93927",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HAGA",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "EMERALD SUN MANUFACTURING LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HIGHLY CONCENTRATED",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "JUICY FRUIT",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BUDDER",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SUNSET CONNECT",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "INDUS DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FIRE CUT LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PURPLE STAR MD COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SUNSTONE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BUMBLE BEE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "THE MEDICINE WOMAN GROUP, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ENTERPRISES LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NEW AGE COMPASSION CARE CENTER BLVD. LOS ANGELES, CA 90037",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SEED TO LEAF INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HAGGALICIOUS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FRESH OG",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BLOOM",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "PAC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ELEVATION WELLNESS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CANNA NETWORK ENTERPRISE INC. INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FLUIDS MANUFACTURING, INC. INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "DANK",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "RANA DISTRIBUTION SACRAMENTO CA 95823",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HUMBOLDTOLOGY",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VOYAGE DISTRIBUTION, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BOUTIQUE UNLIMITED DISTRIBUTION LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BUTTER BRAND",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "WCC MGMT, LLC LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SUNRISE GARDENS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "NATIVE SEED",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FENIX LOGISTICS INC INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VESSEL BRAND INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREENLEAF PROCESSORS, INC. INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "RIVER COLLECTIVE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SENSE DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BABYLON BURNING SCREEN PRINTING",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "RANA DISTRIBUTION D",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GREENLINE ORGANIC NURSERY LANDING, CA, 95039",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "EFW HEALTH / ECHO DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "HUMMINGBIRD VERDE, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BAGS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "FULL SPECTRUM",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BLESSED EXTRACTS LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "TOHNIC DISTRIBUTION LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "EH TECH INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "BRIZA BOTANICALS / EQUILIBRIUM SEEDS",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "RC GLOBAL, INC ROSA, CA 954031969",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "APEX",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "POWER HOUSE DISTRIBUTION, LLC CITY, CA 959593264",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "LB ATLANTIS, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "RADIANT FARM INC SANTA ROSA, CA 95403",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ENHANCED ENERGIES, INC.",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "G",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "INTE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "ASV EQ 1 LLC CA 946211836",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CANN DISTRIBUTORS INC. INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MARKVISION BIOTECH INC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SG DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CA 95403",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "GAS HOUSE",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "SUPREME INK",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "VISTA DISTRIBUTION",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "MALIBU GOLD, LLC",
+      "aliases": [],
+      "invoiceCount": 1
+    },
+    {
+      "canonicalName": "CALIFORNIA CANNABINOIDS",
+      "aliases": [],
+      "invoiceCount": 1
+    }
+  ]
+}
