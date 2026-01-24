@@ -614,27 +614,50 @@ export const useAppStore = create<AppState>()(
             // Load budtender assignments (overrides localStorage - Aurora is source of truth)
             await useAppStore.getState().loadBudtenderAssignments();
 
-            // Load customer data separately in background (large dataset ~30MB CSV)
-            fetch('/api/data/customers?pageSize=50000')
-              .then(res => res.json())
-              .then(customerResult => {
-                if (customerResult.success) {
-                  set((state) => ({
-                    customerData: customerResult.data || [],
-                    dataStatus: {
-                      ...state.dataStatus,
-                      customers: {
-                        loaded: (customerResult.data?.length || 0) > 0,
-                        count: customerResult.pagination?.totalCount || customerResult.data?.length || 0,
-                        lastUpdated: new Date().toISOString(),
+            // Load customer data in pages (large dataset - 93k+ records)
+            const loadCustomerPages = async () => {
+              const pageSize = 10000;
+              let allCustomers: CustomerRecord[] = [];
+              let page = 1;
+              let hasMore = true;
+
+              while (hasMore) {
+                try {
+                  const res = await fetch(`/api/data/customers?page=${page}&pageSize=${pageSize}`);
+                  const result = await res.json();
+
+                  if (result.success && result.data) {
+                    allCustomers = [...allCustomers, ...result.data];
+                    hasMore = result.pagination?.hasMore || false;
+                    page++;
+
+                    // Update store with partial data as it loads
+                    set((state) => ({
+                      customerData: allCustomers,
+                      dataStatus: {
+                        ...state.dataStatus,
+                        customers: {
+                          loaded: true,
+                          count: result.pagination?.totalCount || allCustomers.length,
+                          lastUpdated: new Date().toISOString(),
+                        },
                       },
-                    },
-                  }));
+                    }));
+                  } else {
+                    hasMore = false;
+                  }
+                } catch (err) {
+                  console.error(`Error loading customer page ${page}:`, err);
+                  hasMore = false;
                 }
-              })
-              .catch(err => {
-                console.error('Error loading customer data:', err);
-              });
+              }
+
+              console.log(`Loaded ${allCustomers.length} customers in ${page - 1} pages`);
+            };
+
+            loadCustomerPages().catch(err => {
+              console.error('Error loading customer data:', err);
+            });
 
             // Load invoice data separately in background
             fetch('/api/data/invoices')
