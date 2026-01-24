@@ -648,10 +648,22 @@ model CollectedUrl {
   sourceQuery     String?   @map("source_query") @db.Text
   sourceJobId     String?   @map("source_job_id")
 
+  // Content analysis results (populated by content-fetcher service)
+  summaryText       String?   @map("summary_text") @db.Text
+  keyPoints         String[]  @map("key_points")
+  mentionedEntities String[]  @map("mentioned_entities") // brands, companies, regulations mentioned
+
+  // Trust and quality scoring
+  trustScore        Float?    @map("trust_score") // 0-1 based on domain reputation
+  contentQuality    String?   @map("content_quality") // high, medium, low, garbage
+  lastVerified      DateTime? @map("last_verified")
+  verificationCount Int       @default(0) @map("verification_count")
+
   @@index([urlHash])
   @@index([domain])
   @@index([createdAt])
   @@index([isAnalyzed])
+  @@index([trustScore])
   @@map("collected_urls")
 }
 
@@ -677,9 +689,28 @@ model LearningQuestion {
   answerQuality   Float?    @map("answer_quality")
   isActive        Boolean   @default(true) @map("is_active")
 
+  // Question Threading - enables investigation chains
+  parentQuestionId  String?            @map("parent_question_id")
+  parentQuestion    LearningQuestion?  @relation("QuestionThread", fields: [parentQuestionId], references: [id])
+  followUpQuestions LearningQuestion[] @relation("QuestionThread")
+  threadId          String?            @map("thread_id")
+  threadDepth       Int                @default(0) @map("thread_depth")
+  threadStatus      String             @default("open") @map("thread_status") // open, answered, needs_followup, closed
+
+  // Answer tracking for partial answer detection
+  answerSummary     String?   @map("answer_summary") @db.Text
+  partialAnswer     Boolean   @default(false) @map("partial_answer")
+  followUpReason    String?   @map("follow_up_reason") @db.Text
+
+  // Monthly strategic report sourcing
+  sourceMonthlyReportId String? @map("source_monthly_report_id")
+
   @@index([category])
   @@index([priority])
   @@index([isActive])
+  @@index([parentQuestionId])
+  @@index([threadId])
+  @@index([threadStatus])
   @@map("learning_questions")
 }
 
@@ -911,4 +942,123 @@ model ResearchFinding {
   @@index([category])
   @@index([relevance])
   @@map("research_findings")
+}
+
+// ============================================
+// DOMAIN TRUST REGISTRY
+// Tracks reputation of web domains for research quality
+// ============================================
+
+model DomainTrustRegistry {
+  id              String   @id @default(uuid())
+  domain          String   @unique
+  trustScore      Float    @default(0.5) @map("trust_score") // 0-1 scale
+  category        String   // news, government, trade, blog, academic, unknown
+  isAuthoritative Boolean  @default(false) @map("is_authoritative")
+  urlsCollected   Int      @default(0) @map("urls_collected")
+  avgContentQuality Float? @map("avg_content_quality")
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([trustScore])
+  @@index([category])
+  @@map("domain_trust_registry")
+}
+
+// ============================================
+// RSS FEED INGESTION
+// External feeds for industry news and updates
+// ============================================
+
+model ExternalFeed {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  feedUrl         String   @map("feed_url")
+  feedType        String   @default("rss") @map("feed_type") // rss, atom, json
+  category        String   // regulatory, market, industry, competitor
+  description     String?  @db.Text
+  isActive        Boolean  @default(true) @map("is_active")
+  lastFetched     DateTime? @map("last_fetched")
+  lastSuccessful  DateTime? @map("last_successful")
+  fetchFrequency  Int      @default(86400) @map("fetch_frequency") // seconds between fetches
+  itemsCount      Int      @default(0) @map("items_count")
+  errorCount      Int      @default(0) @map("error_count")
+  lastError       String?  @map("last_error")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  items           ExternalFeedItem[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("external_feeds")
+}
+
+model ExternalFeedItem {
+  id              String       @id @default(uuid())
+  feedId          String       @map("feed_id")
+  feed            ExternalFeed @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  guid            String       @unique // Unique identifier from feed
+  title           String
+  link            String
+  publishedAt     DateTime     @map("published_at")
+  summary         String?      @db.Text
+  content         String?      @db.Text
+  author          String?
+
+  isProcessed     Boolean      @default(false) @map("is_processed")
+  relevanceScore  Float?       @map("relevance_score")
+  categories      String[]
+  analyzedCategories String[]  @map("analyzed_categories")
+  businessImpact  String?      @map("business_impact") @db.Text
+  keyEntities     String[]     @map("key_entities")
+  extractedInsights String[]   @map("extracted_insights")
+
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  @@index([feedId])
+  @@index([publishedAt])
+  @@index([isProcessed])
+  @@index([relevanceScore])
+  @@map("external_feed_items")
+}
+
+// ============================================
+// REGULATORY CALENDAR
+// Tracks important regulatory dates and deadlines
+// ============================================
+
+model RegulatoryEvent {
+  id              String   @id @default(uuid())
+  title           String
+  description     String   @db.Text
+  eventType       String   @map("event_type") // deadline, hearing, effective_date, comment_period, license_renewal
+  eventDate       DateTime @map("event_date")
+  endDate         DateTime? @map("end_date") // For events with duration (comment periods)
+
+  jurisdiction    String   // CA, SF, Federal, County
+  agency          String   // DCC, FDA, SF_Planning, etc.
+
+  sourceUrl       String?  @map("source_url")
+  sourceDocument  String?  @map("source_document")
+
+  impactLevel     String   @default("medium") @map("impact_level") // critical, high, medium, low
+  impactAreas     String[] @map("impact_areas") // licensing, compliance, operations, etc.
+
+  reminderSent    Boolean  @default(false) @map("reminder_sent")
+  reminderDays    Int      @default(7) @map("reminder_days") // Days before event to send reminder
+
+  isActive        Boolean  @default(true) @map("is_active")
+  notes           String?  @db.Text
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([eventDate])
+  @@index([eventType])
+  @@index([jurisdiction])
+  @@index([impactLevel])
+  @@index([isActive])
+  @@map("regulatory_events")
 }

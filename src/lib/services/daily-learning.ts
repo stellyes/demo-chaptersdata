@@ -9,6 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@/lib/prisma';
 import { getAnthropicClient } from './claude';
 import { webSearchService, SearchResult } from './web-search';
+import { saveInsights, InsightInput } from './knowledge-base';
 import { CLAUDE_CONFIG } from '@/lib/config';
 
 // Default org ID for autonomous learning (set via env var or use fallback)
@@ -19,15 +20,19 @@ export const DAILY_LEARNING_CONFIG = {
   maxSearchesPerDay: 8,
   maxPagesPerSearch: 5,
   phase1TokenBudget: 8000,
-  phase2TokenBudget: 8000, // Increased to accommodate historical context
+  phase2TokenBudget: 10000, // Increased for expanded historical context
   phase3TokenBudget: 10000,
   phase4TokenBudget: 16000,
   phase5TokenBudget: 12000,
   questionsPerCycle: 10,
   maxWebResearchQuestions: 5,
   // Progressive learning settings
-  maxPastQuestionsForContext: 20, // How many past questions to consider
-  maxPastInsightsForContext: 10, // How many past insights to include
+  maxPastQuestionsForContext: 50, // Expanded from 20 for deeper historical context
+  maxPastInsightsForContext: 25, // Expanded from 10 for richer context
+  maxPastDigestsForContext: 14, // 2 weeks of digests for trend analysis
+  maxIndustryHighlightsForContext: 10, // NEW: Include industry news from past digests
+  maxRegulatoryUpdatesForContext: 10, // NEW: Include regulatory updates from past digests
+  maxCollectedUrlsForContext: 15, // NEW: Include analyzed web research URLs
   questionRepeatCooldownDays: 7, // Don't repeat questions asked within this period
   lowQualityThreshold: 0.4, // Questions below this quality may be re-asked
 };
@@ -105,6 +110,40 @@ interface HistoricalLearningContext {
     category: string;
   }>;
   recentlyAskedQuestions: string[]; // Questions asked within cooldown period (to avoid)
+  // NEW: Industry and regulatory context from past digests
+  industryHighlights: Array<{
+    headline: string;
+    source: string;
+    relevance: string;
+    actionItem?: string;
+    digestDate: Date;
+  }>;
+  regulatoryUpdates: Array<{
+    update: string;
+    source: string;
+    impactLevel: string;
+    deadline?: string;
+    digestDate: Date;
+  }>;
+  // NEW: Web research memory
+  collectedUrls: Array<{
+    title: string;
+    url: string;
+    snippet: string;
+    domain: string;
+    sourceQuery: string | null;
+    relevanceScore: number;
+    categories: string[];
+  }>;
+  // NEW: Monthly strategic context
+  monthlyStrategicQuestions: Array<{
+    question: string;
+    priority: number;
+  }>;
+  strategicPriorities: Array<{
+    priority: string;
+    timeline?: string;
+  }>;
 }
 
 interface DailyDigestContent {
@@ -210,6 +249,10 @@ export class DailyLearningService {
         where: { digestId: digestRecord.id, id: { not: state.jobId } },
         data: { digestId: null },
       });
+
+      // NEW: Extract and save insights to BusinessInsight table for persistent knowledge
+      const savedInsightsCount = await this.extractAndSaveInsights(digest, state.jobId);
+      console.log(`Saved ${savedInsightsCount} insights to knowledge base`);
 
       await prisma.dailyLearningJob.update({
         where: { id: state.jobId },
@@ -389,6 +432,17 @@ Return JSON array:
   ): string {
     const sections: string[] = [];
 
+    // Monthly strategic questions (highest priority - from strategic analysis)
+    if (context.monthlyStrategicQuestions.length > 0) {
+      sections.push(`## STRATEGIC QUESTIONS FROM MONTHLY ANALYSIS
+These questions were identified as strategically important for deep investigation:
+${context.monthlyStrategicQuestions
+  .slice(0, 5)
+  .map((q, i) => `${i + 1}. [Strategic Priority ${q.priority}] ${q.question}`)
+  .join('\n')}
+IMPORTANT: At least 1-2 questions should address these strategic concerns.`);
+    }
+
     // Questions suggested from previous day's digest
     if (context.questionsForToday.length > 0) {
       sections.push(`## QUESTIONS SUGGESTED FROM PREVIOUS LEARNING CYCLE
@@ -403,8 +457,47 @@ ${context.questionsForToday
       sections.push(`## PAST INSIGHTS TO BUILD UPON
 Recent discoveries that may warrant deeper investigation:
 ${context.pastInsights
-  .slice(0, 5)
+  .slice(0, 8)
   .map((insight, i) => `${i + 1}. [${insight.category}] ${insight.insight} (confidence: ${(insight.confidence * 100).toFixed(0)}%)`)
+  .join('\n')}`);
+    }
+
+    // Industry highlights - external knowledge we've gathered
+    if (context.industryHighlights.length > 0) {
+      sections.push(`## INDUSTRY KNOWLEDGE FROM PREVIOUS RESEARCH
+Recent industry developments we've tracked (use to inform questions):
+${context.industryHighlights
+  .slice(0, 6)
+  .map((h, i) => `${i + 1}. ${h.headline} (Source: ${h.source})${h.actionItem ? ` - Action: ${h.actionItem}` : ''}`)
+  .join('\n')}`);
+    }
+
+    // Regulatory updates - compliance and legal context
+    if (context.regulatoryUpdates.length > 0) {
+      sections.push(`## REGULATORY CONTEXT
+Active regulatory updates to consider (may need follow-up questions):
+${context.regulatoryUpdates
+  .slice(0, 5)
+  .map((r, i) => `${i + 1}. [${r.impactLevel.toUpperCase()}] ${r.update} (Source: ${r.source})${r.deadline ? ` Deadline: ${r.deadline}` : ''}`)
+  .join('\n')}`);
+    }
+
+    // Web research memory - sources we've already researched
+    if (context.collectedUrls.length > 0) {
+      sections.push(`## WEB RESEARCH MEMORY
+Sources we've already researched (reference when relevant, avoid redundant searches):
+${context.collectedUrls
+  .slice(0, 8)
+  .map((u, i) => `${i + 1}. [${u.domain}] ${u.title || 'Untitled'} - "${u.snippet?.substring(0, 100)}..."`)
+  .join('\n')}`);
+    }
+
+    // Strategic priorities from monthly analysis
+    if (context.strategicPriorities.length > 0) {
+      sections.push(`## CURRENT STRATEGIC PRIORITIES
+Business priorities that should inform question generation:
+${context.strategicPriorities
+  .map((p, i) => `${i + 1}. ${p.priority}${p.timeline ? ` (Timeline: ${p.timeline})` : ''}`)
   .join('\n')}`);
     }
 
@@ -438,6 +531,227 @@ ${highPerformers.map(q => `- [${q.category}] ${q.question.substring(0, 80)}...`)
     return sections.length > 0
       ? `## PROGRESSIVE LEARNING CONTEXT\n${sections.join('\n\n')}`
       : '## PROGRESSIVE LEARNING CONTEXT\nNo historical learning data available - this appears to be the first learning cycle.';
+  }
+
+  // ============================================
+  // QUESTION THREADING METHODS
+  // Enable investigation chains and follow-up questions
+  // ============================================
+
+  /**
+   * Analyzes web research results to determine if the answer is partial
+   * and identifies aspects that need further investigation.
+   */
+  private async identifyPartialAnswer(
+    question: string,
+    researchResults: WebResearchResult,
+    state: DailyLearningJobState
+  ): Promise<{
+    isPartial: boolean;
+    answerSummary: string;
+    unansweredAspects: string[];
+    suggestedFollowUps: string[];
+    confidence: number;
+  }> {
+    const prompt = `Analyze if this research fully answers the question.
+
+QUESTION: ${question}
+
+RESEARCH FINDINGS:
+${researchResults.findings.slice(0, 8).map((f, i) =>
+  `${i + 1}. ${f.title}\n   ${f.snippet}\n   Key points: ${f.keyPoints.join('; ')}`
+).join('\n\n')}
+
+RESEARCH SUMMARY: ${researchResults.summary}
+
+Analyze:
+1. Does this research provide a complete answer to the question?
+2. What aspects of the question remain unanswered or unclear?
+3. What follow-up questions would help get a more complete answer?
+
+Return JSON:
+{
+  "isPartial": boolean,
+  "answerSummary": "2-3 sentence summary of what we learned",
+  "unansweredAspects": ["aspect 1", "aspect 2"],
+  "suggestedFollowUps": ["follow-up question 1", "follow-up question 2"],
+  "confidence": 0.0-1.0
+}
+
+Return ONLY valid JSON.`;
+
+    try {
+      const response = await this.client.messages.create({
+        model: CLAUDE_CONFIG.haiku,
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      state.inputTokens += response.usage.input_tokens;
+      state.outputTokens += response.usage.output_tokens;
+
+      const textContent = response.content.find(c => c.type === 'text');
+      const text = textContent?.type === 'text' ? textContent.text : '{}';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          isPartial: parsed.isPartial ?? false,
+          answerSummary: parsed.answerSummary ?? researchResults.summary,
+          unansweredAspects: parsed.unansweredAspects ?? [],
+          suggestedFollowUps: parsed.suggestedFollowUps ?? [],
+          confidence: parsed.confidence ?? 0.5,
+        };
+      }
+    } catch (error) {
+      console.error('Error identifying partial answer:', error);
+    }
+
+    return {
+      isPartial: false,
+      answerSummary: researchResults.summary,
+      unansweredAspects: [],
+      suggestedFollowUps: [],
+      confidence: 0.5,
+    };
+  }
+
+  /**
+   * Creates a follow-up question linked to a parent question.
+   * Used to build investigation chains for deeper research.
+   */
+  private async createFollowUpQuestion(
+    parentQuestionId: string,
+    followUpText: string,
+    reason: string,
+    category: string
+  ): Promise<string | null> {
+    const { createHash } = await import('crypto');
+    const questionHash = createHash('sha256')
+      .update(followUpText.toLowerCase().trim())
+      .digest('hex');
+
+    // Get parent question to determine thread info
+    const parent = await prisma.learningQuestion.findUnique({
+      where: { id: parentQuestionId },
+      select: { threadId: true, threadDepth: true },
+    });
+
+    if (!parent) return null;
+
+    const threadId = parent.threadId || parentQuestionId;
+    const threadDepth = (parent.threadDepth || 0) + 1;
+
+    try {
+      const question = await prisma.learningQuestion.upsert({
+        where: { questionHash },
+        create: {
+          question: followUpText,
+          questionHash,
+          category,
+          priority: 8, // High priority for follow-ups
+          requiresWebResearch: true,
+          requiresInternalData: true,
+          generatedBy: 'follow_up',
+          parentQuestionId,
+          threadId,
+          threadDepth,
+          followUpReason: reason,
+          timesAsked: 1,
+          lastAsked: new Date(),
+        },
+        update: {
+          priority: 8,
+          isActive: true,
+          timesAsked: { increment: 1 },
+          lastAsked: new Date(),
+        },
+      });
+
+      // Update parent question status
+      await prisma.learningQuestion.update({
+        where: { id: parentQuestionId },
+        data: {
+          threadStatus: 'needs_followup',
+          threadId: threadId,
+        },
+      });
+
+      return question.id;
+    } catch (error) {
+      console.error('Error creating follow-up question:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Gets active investigation threads that need follow-up.
+   */
+  private async getActiveInvestigationThreads(): Promise<Array<{
+    threadId: string;
+    rootQuestion: string;
+    currentDepth: number;
+    lastQuestion: string;
+    status: string;
+    unansweredAspects: string[];
+  }>> {
+    // Get questions that are part of active threads needing follow-up
+    const activeThreads = await prisma.learningQuestion.findMany({
+      where: {
+        isActive: true,
+        threadStatus: 'needs_followup',
+        threadDepth: { lte: 3 }, // Max depth of 3 to prevent infinite chains
+      },
+      orderBy: { lastAsked: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        question: true,
+        threadId: true,
+        threadDepth: true,
+        threadStatus: true,
+        answerSummary: true,
+        followUpReason: true,
+        parentQuestion: {
+          select: { question: true },
+        },
+      },
+    });
+
+    return activeThreads.map(t => ({
+      threadId: t.threadId || t.id,
+      rootQuestion: t.parentQuestion?.question || t.question,
+      currentDepth: t.threadDepth,
+      lastQuestion: t.question,
+      status: t.threadStatus,
+      unansweredAspects: t.followUpReason ? [t.followUpReason] : [],
+    }));
+  }
+
+  /**
+   * Updates a question with answer information after research.
+   */
+  private async updateQuestionWithAnswer(
+    questionHash: string,
+    answerSummary: string,
+    isPartial: boolean,
+    confidence: number
+  ): Promise<void> {
+    try {
+      await prisma.learningQuestion.update({
+        where: { questionHash },
+        data: {
+          answerSummary,
+          partialAnswer: isPartial,
+          answerQuality: confidence,
+          lastAnswered: new Date(),
+          threadStatus: isPartial ? 'needs_followup' : 'answered',
+        },
+      });
+    } catch (error) {
+      console.error('Error updating question with answer:', error);
+    }
   }
 
   private async phase3WebResearch(
@@ -476,15 +790,58 @@ ${highPerformers.map(q => `- [${q.category}] ${q.question.substring(0, 80)}...`)
 
         const analysis = await this.analyzeSearchResults(state, question.question, searchResponse.newResults.slice(0, 15));
 
-        results.push({
+        const result: WebResearchResult = {
           question: question.question,
           searchQuery,
           findings: analysis.findings,
           summary: analysis.summary,
-        });
+        };
+
+        results.push(result);
 
         // Update question quality based on research results
         await this.updateQuestionQuality(question.question, analysis);
+
+        // NEW: Detect partial answers and create follow-up questions
+        if (analysis.findings.length > 0) {
+          const partialAnalysis = await this.identifyPartialAnswer(
+            question.question,
+            result,
+            state
+          );
+
+          // Get question hash for database updates
+          const questionHash = this.hashString(question.question.toLowerCase());
+
+          // Update question with answer details
+          await this.updateQuestionWithAnswer(
+            questionHash,
+            partialAnalysis.answerSummary,
+            partialAnalysis.isPartial,
+            partialAnalysis.confidence
+          );
+
+          // Create follow-up questions if answer is partial
+          if (partialAnalysis.isPartial && partialAnalysis.suggestedFollowUps.length > 0) {
+            const parentQuestion = await prisma.learningQuestion.findUnique({
+              where: { questionHash },
+              select: { id: true },
+            });
+
+            if (parentQuestion) {
+              // Create top 2 follow-up questions (to avoid explosion)
+              for (const followUp of partialAnalysis.suggestedFollowUps.slice(0, 2)) {
+                await this.createFollowUpQuestion(
+                  parentQuestion.id,
+                  followUp,
+                  partialAnalysis.unansweredAspects.join('; '),
+                  question.category
+                );
+              }
+              console.log(`Created ${Math.min(2, partialAnalysis.suggestedFollowUps.length)} follow-up questions for partial answer`);
+            }
+          }
+        }
       } catch (error) {
         console.error(`Error searching for question: ${question.question}`, error);
       }
@@ -1060,7 +1417,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
   /**
    * Fetches historical learning context to inform progressive question generation.
-   * Includes past questions, insights, and suggested questions from previous digests.
+   * Includes past questions, insights, industry highlights, regulatory updates,
+   * collected URLs, and monthly strategic context for comprehensive learning.
    */
   private async getHistoricalLearningContext(): Promise<HistoricalLearningContext> {
     const cooldownDate = new Date();
@@ -1093,14 +1451,16 @@ Return ONLY valid JSON, no markdown or explanation.`;
       select: { question: true },
     });
 
-    // Fetch past correlated insights from recent digests
+    // Fetch past digests with expanded fields for industry/regulatory context
     const recentDigests = await prisma.dailyDigest.findMany({
       orderBy: { digestDate: 'desc' },
-      take: 5,
+      take: DAILY_LEARNING_CONFIG.maxPastDigestsForContext,
       select: {
         digestDate: true,
         correlatedInsights: true,
         questionsForTomorrow: true,
+        industryHighlights: true,
+        regulatoryUpdates: true,
       },
     });
 
@@ -1135,11 +1495,126 @@ Return ONLY valid JSON, no markdown or explanation.`;
       }
     }
 
+    // NEW: Extract industry highlights from past digests
+    const industryHighlights: HistoricalLearningContext['industryHighlights'] = [];
+    for (const digest of recentDigests) {
+      const highlights = digest.industryHighlights as Array<{
+        headline: string;
+        source: string;
+        relevance: string;
+        actionItem?: string;
+      }> | null;
+      if (highlights && Array.isArray(highlights)) {
+        for (const h of highlights.slice(0, 2)) { // Top 2 per digest
+          industryHighlights.push({
+            ...h,
+            digestDate: digest.digestDate,
+          });
+        }
+      }
+    }
+
+    // NEW: Extract regulatory updates from past digests
+    const regulatoryUpdates: HistoricalLearningContext['regulatoryUpdates'] = [];
+    for (const digest of recentDigests) {
+      const updates = digest.regulatoryUpdates as Array<{
+        update: string;
+        source: string;
+        impactLevel: string;
+        deadline?: string;
+      }> | null;
+      if (updates && Array.isArray(updates)) {
+        for (const u of updates) { // All regulatory updates (important to track)
+          regulatoryUpdates.push({
+            ...u,
+            digestDate: digest.digestDate,
+          });
+        }
+      }
+    }
+
+    // NEW: Fetch collected URLs with high relevance for web research memory
+    const collectedUrls = await prisma.collectedUrl.findMany({
+      where: {
+        relevanceScore: { gte: 0.6 },
+      },
+      orderBy: [
+        { relevanceScore: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      take: DAILY_LEARNING_CONFIG.maxCollectedUrlsForContext,
+      select: {
+        title: true,
+        url: true,
+        snippet: true,
+        domain: true,
+        sourceQuery: true,
+        relevanceScore: true,
+        categories: true,
+      },
+    });
+
+    // NEW: Fetch monthly strategic context
+    const { monthlyStrategicQuestions, strategicPriorities } = await this.getMonthlyStrategicContext();
+
     return {
       pastQuestions,
       pastInsights: pastInsights.slice(0, DAILY_LEARNING_CONFIG.maxPastInsightsForContext),
       questionsForToday,
       recentlyAskedQuestions: recentlyAskedQuestions.map(q => q.question),
+      industryHighlights: industryHighlights.slice(0, DAILY_LEARNING_CONFIG.maxIndustryHighlightsForContext),
+      regulatoryUpdates: regulatoryUpdates.slice(0, DAILY_LEARNING_CONFIG.maxRegulatoryUpdatesForContext),
+      collectedUrls: collectedUrls.map(u => ({
+        title: u.title || '',
+        url: u.url,
+        snippet: u.snippet || '',
+        domain: u.domain,
+        sourceQuery: u.sourceQuery,
+        relevanceScore: u.relevanceScore,
+        categories: u.categories,
+      })),
+      monthlyStrategicQuestions,
+      strategicPriorities,
+    };
+  }
+
+  /**
+   * Fetches strategic context from the most recent monthly analysis.
+   * Enables monthly insights to inform daily learning.
+   */
+  private async getMonthlyStrategicContext(): Promise<{
+    monthlyStrategicQuestions: HistoricalLearningContext['monthlyStrategicQuestions'];
+    strategicPriorities: HistoricalLearningContext['strategicPriorities'];
+  }> {
+    const latestReport = await prisma.monthlyStrategicReport.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        keyQuestionsNext: true,
+        strategicPriorities: true,
+      },
+    });
+
+    if (!latestReport) {
+      return { monthlyStrategicQuestions: [], strategicPriorities: [] };
+    }
+
+    const keyQuestions = latestReport.keyQuestionsNext as Array<{
+      question: string;
+      priority: number;
+    }> | null;
+
+    const priorities = latestReport.strategicPriorities as Array<{
+      priority: string;
+      timeline?: string;
+      rationale?: string;
+    }> | null;
+
+    return {
+      monthlyStrategicQuestions: keyQuestions || [],
+      strategicPriorities: (priorities || []).slice(0, 5).map(p => ({
+        priority: p.priority,
+        timeline: p.timeline,
+      })),
     };
   }
 
@@ -1290,6 +1765,107 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
         progress,
       },
     };
+  }
+
+  /**
+   * Extracts insights from the daily digest and saves them to the BusinessInsight table.
+   * This enables persistent knowledge that accumulates over time.
+   */
+  private async extractAndSaveInsights(
+    digest: DailyDigestContent,
+    jobId: string
+  ): Promise<number> {
+    const insightsToSave: InsightInput[] = [];
+    const source = `daily-learning-${jobId}`;
+
+    // Extract from high-confidence correlated insights
+    for (const ci of digest.correlatedInsights) {
+      if (ci.confidence >= 0.7) {
+        insightsToSave.push({
+          category: ci.category || 'general',
+          subcategory: 'correlated_insight',
+          insight: `${ci.internalObservation} - ${ci.correlation}: ${ci.externalEvidence}`,
+          confidence: ci.confidence >= 0.85 ? 'high' : 'medium',
+          source,
+          sourceData: ci.actionItem || undefined,
+          expiresAt: this.calculateExpirationDate(ci.category || 'general'),
+        });
+      }
+    }
+
+    // Extract from market trends
+    for (const trend of digest.marketTrends) {
+      insightsToSave.push({
+        category: 'market',
+        subcategory: 'trend',
+        insight: `${trend.trend}: ${trend.implication}`,
+        confidence: 'medium',
+        source,
+        sourceData: trend.evidence,
+        expiresAt: this.calculateExpirationDate('market'),
+      });
+    }
+
+    // Extract from high-impact regulatory updates
+    for (const reg of digest.regulatoryUpdates) {
+      if (reg.impactLevel === 'high') {
+        insightsToSave.push({
+          category: 'regulatory',
+          subcategory: 'update',
+          insight: reg.update,
+          confidence: 'high',
+          source: reg.source || source,
+          expiresAt: reg.deadline ? new Date(reg.deadline) : this.calculateExpirationDate('regulatory'),
+        });
+      }
+    }
+
+    // Extract from priority actions (high confidence items only)
+    for (const action of digest.priorityActions.slice(0, 3)) {
+      insightsToSave.push({
+        category: action.category || 'operations',
+        subcategory: 'action_item',
+        insight: `${action.action} (Impact: ${action.impact}, Timeframe: ${action.timeframe})`,
+        confidence: 'medium',
+        source,
+        expiresAt: this.calculateExpirationDate(action.category || 'operations'),
+      });
+    }
+
+    if (insightsToSave.length === 0) {
+      return 0;
+    }
+
+    return await saveInsights(insightsToSave);
+  }
+
+  /**
+   * Calculates the expiration date for insights based on their category.
+   * Different insight types have different relevance windows.
+   */
+  private calculateExpirationDate(category: string): Date {
+    const now = new Date();
+    switch (category.toLowerCase()) {
+      case 'regulatory':
+        // Regulatory insights stay relevant for 6 months
+        return new Date(now.setMonth(now.getMonth() + 6));
+      case 'market':
+        // Market insights valid for 3 months
+        return new Date(now.setMonth(now.getMonth() + 3));
+      case 'sales':
+        // Sales insights valid for 1 month
+        return new Date(now.setMonth(now.getMonth() + 1));
+      case 'brands':
+      case 'products':
+        // Brand/product insights valid for 2 months
+        return new Date(now.setMonth(now.getMonth() + 2));
+      case 'customers':
+        // Customer insights valid for 2 months
+        return new Date(now.setMonth(now.getMonth() + 2));
+      default:
+        // Default: 3 months
+        return new Date(now.setMonth(now.getMonth() + 3));
+    }
   }
 }
 
