@@ -1,5 +1,6 @@
 // ============================================
 // CUSTOM AI QUERY API ROUTE
+// Loads data server-side to avoid payload size limits
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -172,34 +173,177 @@ async function saveReportToAurora(report: {
   }
 }
 
-// Brand mapping type (from S3 config/brand_product_mapping.json)
-interface BrandMappingData {
-  [canonicalBrand: string]: {
-    aliases: { [aliasName: string]: string }; // alias -> product_type
+// Load data from Aurora based on context options
+async function loadDataFromAurora(contextOptions: DataContextOptions) {
+  const data: {
+    sales: Array<Record<string, unknown>>;
+    brands: Array<Record<string, unknown>>;
+    products: Array<Record<string, unknown>>;
+    customers: Array<Record<string, unknown>>;
+    invoices: Array<Record<string, unknown>>;
+    research: Array<{ id: string; summary: string; key_findings: string[]; category: string; date: string; source?: string }>;
+    seo: Array<{ site: string; score: number; priorities: string[]; quickWins: string[] }>;
+    qrCodes: Array<{ name: string; totalClicks: number; shortCode: string }>;
+    brandMappings: Record<string, { aliases: Record<string, string> }>;
+  } = {
+    sales: [],
+    brands: [],
+    products: [],
+    customers: [],
+    invoices: [],
+    research: [],
+    seo: [],
+    qrCodes: [],
+    brandMappings: {},
   };
+
+  // Load data in parallel based on what's requested
+  const loadPromises: Promise<void>[] = [];
+
+  if (contextOptions.includeSales) {
+    loadPromises.push(
+      prisma.salesRecord.findMany({
+        orderBy: { date: 'desc' },
+        take: 365, // Last year of daily data
+      }).then(records => {
+        data.sales = records.map(r => ({
+          date: r.date.toISOString().split('T')[0],
+          store: r.storeName || r.storeId,
+          store_id: r.storeId,
+          net_sales: Number(r.netSales),
+          gross_margin_pct: Number(r.grossMarginPct),
+          tickets_count: r.ticketsCount,
+          customers_count: r.customersCount,
+          avg_order_value: Number(r.avgOrderValue),
+        }));
+      })
+    );
+  }
+
+  if (contextOptions.includeBrands) {
+    loadPromises.push(
+      prisma.brandRecord.findMany({
+        orderBy: { netSales: 'desc' },
+        take: 100, // Top 100 brands
+        include: { brand: true },
+      }).then(records => {
+        data.brands = records.map(r => ({
+          brand: r.brand?.canonicalName || r.originalBrandName,
+          net_sales: Number(r.netSales),
+          gross_margin_pct: Number(r.grossMarginPct),
+          pct_of_total_net_sales: Number(r.pctOfTotalNetSales),
+          store_id: r.storeId,
+        }));
+      })
+    );
+  }
+
+  if (contextOptions.includeProducts) {
+    loadPromises.push(
+      prisma.productRecord.findMany({
+        orderBy: { netSales: 'desc' },
+        take: 50,
+      }).then(records => {
+        data.products = records.map(r => ({
+          product_type: r.productType,
+          net_sales: Number(r.netSales),
+          gross_margin_pct: Number(r.grossMarginPct),
+          pct_of_total_net_sales: Number(r.pctOfTotalNetSales),
+          store_id: r.storeId,
+        }));
+      })
+    );
+  }
+
+  if (contextOptions.includeCustomers) {
+    loadPromises.push(
+      prisma.customer.findMany({
+        orderBy: { lifetimeNetSales: 'desc' },
+        take: 500, // Top 500 customers by lifetime value
+      }).then(records => {
+        data.customers = records.map(c => ({
+          customer_id: c.customerId,
+          store_name: c.storeName,
+          lifetime_net_sales: Number(c.lifetimeNetSales),
+          lifetime_visits: c.lifetimeVisits,
+          customer_segment: c.customerSegment,
+          recency_segment: c.recencySegment,
+        }));
+      })
+    );
+  }
+
+  if (contextOptions.includeInvoices) {
+    loadPromises.push(
+      prisma.invoiceLineItem.findMany({
+        orderBy: { invoice: { invoiceDate: 'desc' } },
+        take: 500, // Recent invoice line items
+        include: {
+          invoice: { include: { vendor: true } },
+          brand: true,
+        },
+      }).then(records => {
+        data.invoices = records.map(item => ({
+          vendor: item.invoice.vendor?.canonicalName || item.invoice.originalVendorName || 'Unknown',
+          brand: item.brand?.canonicalName || item.originalBrandName,
+          product_type: item.productType || 'Unknown',
+          total_cost: Number(item.totalCost),
+          units: item.skuUnits,
+          invoice_date: item.invoice.invoiceDate?.toISOString().split('T')[0],
+        }));
+      })
+    );
+  }
+
+  if (contextOptions.includeResearch) {
+    loadPromises.push(
+      prisma.researchDocument.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: { findings: true },
+      }).then(records => {
+        data.research = records.map(r => ({
+          id: r.id,
+          summary: r.summary || '',
+          key_findings: r.findings.map(f => f.finding),
+          category: r.category,
+          date: r.createdAt.toISOString().split('T')[0],
+          source: r.sourceUrl || undefined,
+        }));
+      })
+    );
+  }
+
+  // Always load brand mappings for context
+  loadPromises.push(
+    prisma.canonicalBrand.findMany({
+      include: { aliases: true },
+    }).then(brands => {
+      for (const brand of brands) {
+        const aliases: Record<string, string> = {};
+        for (const alias of brand.aliases) {
+          aliases[alias.aliasName] = alias.productType || '';
+        }
+        data.brandMappings[brand.canonicalName] = { aliases };
+      }
+    })
+  );
+
+  await Promise.all(loadPromises);
+
+  return data;
 }
 
 interface RequestBody {
   prompt: string;
   contextOptions: DataContextOptions;
-  data: {
-    sales?: Array<Record<string, unknown>>;
-    brands?: Array<Record<string, unknown>>;
-    products?: Array<Record<string, unknown>>;
-    customers?: Array<Record<string, unknown>>;
-    invoices?: Array<Record<string, unknown>>;
-    research?: Array<{ id: string; summary: string; key_findings: string[]; category: string; date: string; source?: string }>;
-    seo?: Array<{ site: string; score: number; priorities: string[]; quickWins: string[] }>;
-    qrCodes?: Array<{ name: string; totalClicks: number; shortCode: string }>;
-    brandMappings?: BrandMappingData;
-  };
   selectedResearchIds?: string[];
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { prompt, contextOptions, data, selectedResearchIds } = body;
+    const { prompt, contextOptions, selectedResearchIds } = body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -207,6 +351,13 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    console.log('[AI Query] Loading data from Aurora based on context options...');
+
+    // Load data server-side based on context options
+    const data = await loadDataFromAurora(contextOptions);
+
+    console.log(`[AI Query] Loaded: ${data.sales.length} sales, ${data.brands.length} brands, ${data.customers.length} customers`);
 
     // Get selected research documents for full detail
     let selectedResearchDocs: Array<{ id: string; summary: string; key_findings: string[]; category: string; source?: string }> | undefined;
@@ -274,14 +425,14 @@ export async function POST(request: NextRequest) {
           summary: prompt.slice(0, 200) + (prompt.length > 200 ? '...' : ''),
         },
         contextUsed: {
-          sales: contextOptions.includeSales && (data.sales?.length || 0) > 0,
-          brands: contextOptions.includeBrands && (data.brands?.length || 0) > 0,
-          products: contextOptions.includeProducts && (data.products?.length || 0) > 0,
-          customers: contextOptions.includeCustomers && (data.customers?.length || 0) > 0,
-          invoices: contextOptions.includeInvoices && (data.invoices?.length || 0) > 0,
-          research: contextOptions.includeResearch && (data.research?.length || 0) > 0,
-          seo: contextOptions.includeSeo && (data.seo?.length || 0) > 0,
-          qrCodes: contextOptions.includeQrCodes && (data.qrCodes?.length || 0) > 0,
+          sales: contextOptions.includeSales && data.sales.length > 0,
+          brands: contextOptions.includeBrands && data.brands.length > 0,
+          products: contextOptions.includeProducts && data.products.length > 0,
+          customers: contextOptions.includeCustomers && data.customers.length > 0,
+          invoices: contextOptions.includeInvoices && data.invoices.length > 0,
+          research: contextOptions.includeResearch && data.research.length > 0,
+          seo: false, // SEO not loaded from Aurora yet
+          qrCodes: false, // QR codes not loaded from Aurora yet
           selectedResearch: selectedResearchDocs?.length || 0,
           healthCheck: healthCheck !== null,
         },
@@ -290,7 +441,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Custom AI query error:', error);
     return NextResponse.json(
-      { success: false, error: 'Custom query failed' },
+      { success: false, error: error instanceof Error ? error.message : 'Custom query failed' },
       { status: 500 }
     );
   }

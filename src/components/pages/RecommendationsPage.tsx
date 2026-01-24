@@ -321,6 +321,7 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     });
 
     try {
+      // Server loads data directly from Aurora - we just send the prompt and options
       const response = await fetch('/api/ai/query', {
         method: 'POST',
         headers: {
@@ -330,17 +331,6 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
         body: JSON.stringify({
           prompt: customPrompt,
           contextOptions,
-          data: {
-            sales: contextOptions.includeSales ? salesData : [],
-            brands: contextOptions.includeBrands ? brandData : [],
-            brandMappings: contextOptions.includeBrandMappings ? brandMappings : null,
-            products: contextOptions.includeProducts ? productData : [],
-            customers: contextOptions.includeCustomers ? customerData : [],
-            invoices: contextOptions.includeInvoices ? invoiceData : [],
-            research: contextOptions.includeResearch ? researchData : [],
-            seo: contextOptions.includeSeo ? seoData : [],
-            qrCodes: contextOptions.includeQrCodes ? qrCodesData : [],
-          },
           selectedResearchIds,
         }),
       });

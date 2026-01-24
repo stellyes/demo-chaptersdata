@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { DarkModeProvider } from "@/components/providers/DarkModeProvider";
@@ -20,6 +20,28 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "Chapters Analytics | Retail Intelligence Dashboard",
   description: "AI-powered analytics dashboard for cannabis retail operations",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Chapters",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: "/icon-512.png",
+    apple: "/icon-512.png",
+  },
+  themeColor: "#1A1A1A",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#1A1A1A",
 };
 
 export default function RootLayout({
