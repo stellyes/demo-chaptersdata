@@ -42,6 +42,7 @@ export function LoginPage() {
         username: user.username,
         role: user.isGlobalAdmin ? 'admin' as const : 'analyst' as const,
         userId: user.userId,
+        email: user.email,
         organizations: user.organizations || [],
         isGlobalAdmin: user.isGlobalAdmin,
       };

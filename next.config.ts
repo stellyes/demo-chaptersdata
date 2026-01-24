@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@aws-sdk/client-s3', '@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb'],
   // Enable compression for responses
   compress: true,
+  // Increase API body size limit for large data payloads
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
 };
 
 export default nextConfig;

@@ -345,6 +345,12 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
         }),
       });
 
+      // Check for non-OK responses before parsing JSON
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`Server error (${response.status}): ${errorText || 'Request failed'}`);
+      }
+
       const result = await response.json();
 
       if (result.success) {
