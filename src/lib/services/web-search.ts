@@ -100,6 +100,11 @@ export class WebSearchService {
   private readonly MAX_PAGES_PER_SEARCH = 5;
   private readonly RESULTS_PER_PAGE = 10;
 
+  // In-memory cache for collected URL hashes to prevent N+1 queries
+  private collectedUrlHashCache: Set<string> | null = null;
+  private collectedUrlCacheTimestamp: number = 0;
+  private readonly URL_HASH_CACHE_TTL = 60 * 1000; // 1 minute
+
   async getThrottleStatus(): Promise<ThrottleStatus> {
     const monthYear = this.getCurrentMonthYear();
 
@@ -195,8 +200,27 @@ export class WebSearchService {
   }
 
   async getCollectedUrlHashes(): Promise<Set<string>> {
+    // Check if cache is valid
+    const now = Date.now();
+    if (
+      this.collectedUrlHashCache &&
+      now - this.collectedUrlCacheTimestamp < this.URL_HASH_CACHE_TTL
+    ) {
+      return this.collectedUrlHashCache;
+    }
+
+    // Fetch fresh data and cache it
     const urls = await prisma.collectedUrl.findMany({ select: { urlHash: true } });
-    return new Set(urls.map(u => u.urlHash));
+    this.collectedUrlHashCache = new Set(urls.map(u => u.urlHash));
+    this.collectedUrlCacheTimestamp = now;
+
+    return this.collectedUrlHashCache;
+  }
+
+  // Invalidate cache when new URLs are stored
+  invalidateUrlHashCache(): void {
+    this.collectedUrlHashCache = null;
+    this.collectedUrlCacheTimestamp = 0;
   }
 
   async storeCollectedUrls(
@@ -233,6 +257,11 @@ export class WebSearchService {
       data: urlRecords,
       skipDuplicates: true,
     });
+
+    // Invalidate hash cache since new URLs were added
+    if (result.count > 0) {
+      this.invalidateUrlHashCache();
+    }
 
     return result.count;
   }

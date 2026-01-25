@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { CHART_COLORS } from '@/lib/config';
 
@@ -24,7 +25,7 @@ const PIE_COLORS = [
   '#a4e6a5',
 ];
 
-export function CategoryPieChart({ data, showLegend = true }: CategoryPieChartProps) {
+export const CategoryPieChart = memo(function CategoryPieChart({ data, showLegend = true }: CategoryPieChartProps) {
   // Truncate long names for display
   const truncateName = (name: string, maxLength: number = 15) => {
     return name.length > maxLength ? name.slice(0, maxLength) + '...' : name;
@@ -82,14 +83,14 @@ export function CategoryPieChart({ data, showLegend = true }: CategoryPieChartPr
       </ResponsiveContainer>
     </div>
   );
-}
+});
 
 interface SegmentPieChartProps {
   data: Record<string, number>;
   title?: string;
 }
 
-export function SegmentPieChart({ data }: SegmentPieChartProps) {
+export const SegmentPieChart = memo(function SegmentPieChart({ data }: SegmentPieChartProps) {
   const chartData = Object.entries(data).map(([name, value]) => ({
     name,
     value,
@@ -141,4 +142,4 @@ export function SegmentPieChart({ data }: SegmentPieChartProps) {
       </ResponsiveContainer>
     </div>
   );
-}
+});

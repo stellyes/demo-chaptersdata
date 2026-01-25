@@ -99,43 +99,60 @@ export async function GET(request: NextRequest) {
     const acceptEncoding = request.headers.get('accept-encoding') || '';
     const supportsGzip = acceptEncoding.includes('gzip');
 
-    let responseData: { success: boolean; data: InvoiceLineItem[]; count: number; cached: boolean; source: string };
+    // Get pagination and filter params
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const pageSize = parseInt(url.searchParams.get('pageSize') || '5000');
+    const vendor = url.searchParams.get('vendor'); // Optional filter
+    const brand = url.searchParams.get('brand'); // Optional filter
 
     // Check cache first
     const currentHash = await computeInvoiceHash();
 
     if (
-      invoiceCache &&
-      invoiceCache.hash === currentHash &&
-      Date.now() - invoiceCache.timestamp < CACHE_TTL
+      !invoiceCache ||
+      invoiceCache.hash !== currentHash ||
+      Date.now() - invoiceCache.timestamp > CACHE_TTL
     ) {
-      console.log(`Returning cached invoice data: ${invoiceCache.data.length} items`);
-      responseData = {
-        success: true,
-        data: invoiceCache.data,
-        count: invoiceCache.data.length,
-        cached: true,
-        source: 'aurora',
-      };
-    } else {
       // Load fresh data
       const data = await loadInvoiceData();
-
-      // Update cache
       invoiceCache = {
         data,
         timestamp: Date.now(),
         hash: currentHash,
       };
-
-      responseData = {
-        success: true,
-        data,
-        count: data.length,
-        cached: false,
-        source: 'aurora',
-      };
     }
+
+    // Apply filters
+    let filteredData = invoiceCache.data;
+
+    if (vendor) {
+      filteredData = filteredData.filter(i => i.vendor.toLowerCase().includes(vendor.toLowerCase()));
+    }
+
+    if (brand) {
+      filteredData = filteredData.filter(i => i.brand.toLowerCase().includes(brand.toLowerCase()));
+    }
+
+    // Calculate pagination
+    const totalCount = filteredData.length;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
+
+    const responseData = {
+      success: true,
+      data: paginatedData,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+      cached: invoiceCache.hash === currentHash,
+      source: 'aurora',
+    };
 
     // Compress response if client supports gzip
     if (supportsGzip) {

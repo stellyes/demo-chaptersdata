@@ -55,11 +55,26 @@ export function getCorsHeaders(request: NextRequest): Record<string, string> {
 
 /**
  * Create headers object for gzip responses with CORS
+ * Includes Vary header to ensure correct cache behavior
  */
 export function getGzipResponseHeaders(request: NextRequest): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     'Content-Encoding': 'gzip',
+    'Vary': 'Accept-Encoding, Origin',
+    'Cache-Control': 'private, max-age=300',
+    ...getCorsHeaders(request),
+  };
+}
+
+/**
+ * Create headers object for non-gzip JSON responses with CORS
+ */
+export function getJsonResponseHeaders(request: NextRequest): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'Vary': 'Accept-Encoding, Origin',
+    'Cache-Control': 'private, max-age=300',
     ...getCorsHeaders(request),
   };
 }

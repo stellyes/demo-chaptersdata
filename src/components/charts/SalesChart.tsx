@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import {
   LineChart,
   Line,
@@ -25,7 +26,7 @@ interface SalesChartProps {
   showLegend?: boolean;
 }
 
-export function SalesChart({ data, metric = 'revenue', showLegend = true }: SalesChartProps) {
+export const SalesChart = memo(function SalesChart({ data, metric = 'revenue', showLegend = true }: SalesChartProps) {
   const formatYAxis = (value: number) => {
     if (metric === 'revenue') {
       return `$${(value / 1000).toFixed(0)}k`;
@@ -91,7 +92,7 @@ export function SalesChart({ data, metric = 'revenue', showLegend = true }: Sale
       </AreaChart>
     </ResponsiveContainer>
   );
-}
+});
 
 // Transaction count chart (similar to SalesChart but formatted for counts)
 interface TransactionChartProps {
@@ -103,7 +104,7 @@ interface TransactionChartProps {
   showLegend?: boolean;
 }
 
-export function TransactionChart({ data, showLegend = true }: TransactionChartProps) {
+export const TransactionChart = memo(function TransactionChart({ data, showLegend = true }: TransactionChartProps) {
   const formatYAxis = (value: number) => {
     return value.toLocaleString();
   };
@@ -163,9 +164,9 @@ export function TransactionChart({ data, showLegend = true }: TransactionChartPr
       </AreaChart>
     </ResponsiveContainer>
   );
-}
+});
 
-export function SimpleLineChart({
+export const SimpleLineChart = memo(function SimpleLineChart({
   data,
   dataKey,
   color = CHART_COLORS.primary,
@@ -191,4 +192,4 @@ export function SimpleLineChart({
       </LineChart>
     </ResponsiveContainer>
   );
-}
+});

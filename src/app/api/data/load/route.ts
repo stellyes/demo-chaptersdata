@@ -123,7 +123,7 @@ async function computeDataHash(): Promise<string> {
 }
 
 // Load all data from Aurora PostgreSQL
-async function loadAllDataFromAurora(startDate?: string, endDate?: string): Promise<AllDataResponse> {
+async function loadAllDataFromAurora(startDate?: string, endDate?: string, storeId?: string): Promise<AllDataResponse> {
   console.log('Loading data from Aurora PostgreSQL...');
   const startTime = Date.now();
 
@@ -135,9 +135,13 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string): Prom
     },
   } : {};
 
-  console.log(`Date filter: ${startDate} to ${endDate}`);
+  // Build store filter (reduces response size by ~50% when filtering)
+  const storeFilter = storeId && storeId !== 'combined' ? { storeId } : {};
+
+  console.log(`Date filter: ${startDate} to ${endDate}, Store filter: ${storeId || 'all'}`);
 
   // Load all data in parallel for maximum speed
+  // Apply store filter to reduce response size when a specific store is selected
   const [
     salesRecords,
     brandRecords,
@@ -146,18 +150,20 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string): Prom
     canonicalBrands,
   ] = await Promise.all([
     prisma.salesRecord.findMany({
-      where: dateFilter,
+      where: { ...dateFilter, ...storeFilter },
       orderBy: { date: 'asc' },
     }),
     prisma.brandRecord.findMany({
+      where: storeFilter,
       orderBy: { netSales: 'desc' },
       include: { brand: true },
     }),
     prisma.productRecord.findMany({
+      where: storeFilter,
       orderBy: { netSales: 'desc' },
     }),
     prisma.budtenderRecord.findMany({
-      where: dateFilter,
+      where: { ...dateFilter, ...storeFilter },
       orderBy: [{ date: 'desc' }, { netSales: 'desc' }],
     }),
     prisma.canonicalBrand.findMany({
@@ -258,15 +264,17 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string): Prom
 
 export async function GET(request: NextRequest) {
   try {
-    // Extract date range from query parameters
+    // Extract query parameters
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;
+    const storeId = searchParams.get('storeId') || undefined; // Optional store filter
 
-    // Include date range in cache key to ensure different ranges have separate caches
+    // Include date range and store in cache key for proper cache invalidation
     const dateRangeKey = startDate && endDate ? `${startDate}-${endDate}` : 'all';
+    const storeKey = storeId || 'combined';
     const currentHash = await computeDataHash();
-    const cacheKey = `${currentHash}-${dateRangeKey}`;
+    const cacheKey = `${currentHash}-${dateRangeKey}-${storeKey}`;
 
     const acceptEncoding = request.headers.get('accept-encoding') || '';
     const supportsGzip = acceptEncoding.includes('gzip');
@@ -286,8 +294,8 @@ export async function GET(request: NextRequest) {
         source: 'aurora',
       };
     } else {
-      // Load fresh data from Aurora with date filter
-      const data = await loadAllDataFromAurora(startDate, endDate);
+      // Load fresh data from Aurora with date and store filters
+      const data = await loadAllDataFromAurora(startDate, endDate, storeId);
 
       // Update cache (include date range in hash for proper cache invalidation)
       dataCache = {

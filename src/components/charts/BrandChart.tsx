@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import {
   BarChart,
   Bar,
@@ -22,7 +23,7 @@ interface TopBrandsChartProps {
   limit?: number;
 }
 
-export function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
+export const TopBrandsChart = memo(function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
   const chartData = data.slice(0, limit).map((b) => ({
     // Truncate to 12 chars for mobile-friendly display
     name: b.brand.length > 12 ? b.brand.slice(0, 12) + '…' : b.brand,
@@ -83,13 +84,13 @@ export function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
       </ResponsiveContainer>
     </div>
   );
-}
+});
 
 interface MarginScatterProps {
   data: BrandRecord[];
 }
 
-export function MarginScatterChart({ data }: MarginScatterProps) {
+export const MarginScatterChart = memo(function MarginScatterChart({ data }: MarginScatterProps) {
   // Prepare data with normalized size values
   // Filter out: zero/negative sales, 100% margins (malformed data), and empty brand names
   const filteredData = data
@@ -228,4 +229,4 @@ export function MarginScatterChart({ data }: MarginScatterProps) {
       </ResponsiveContainer>
     </div>
   );
-}
+});
