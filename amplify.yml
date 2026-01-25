@@ -14,20 +14,20 @@ frontend:
         - echo "NEXT_PUBLIC_COGNITO_USER_POOL_ID=$NEXT_PUBLIC_COGNITO_USER_POOL_ID" >> .env.production
         - echo "NEXT_PUBLIC_COGNITO_CLIENT_ID=$NEXT_PUBLIC_COGNITO_CLIENT_ID" >> .env.production
         - echo "NEXT_PUBLIC_COGNITO_IDENTITY_POOL_ID=$NEXT_PUBLIC_COGNITO_IDENTITY_POOL_ID" >> .env.production
-        # AWS credentials (mapped from S3_ prefix since AWS_ is reserved in Amplify)
+        # The sync script maps: S3_ACCESS_KEY_ID -> AWS_ACCESS_KEY_ID, etc.
         - echo "AWS_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID" >> .env.production
         - echo "AWS_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY" >> .env.production
         - echo "AWS_REGION=$S3_REGION" >> .env.production
         - echo "S3_BUCKET_NAME=$S3_BUCKET_NAME" >> .env.production
-        # API keys
+        # API Keys
         - echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env.production
         - echo "SERPAPI_API_KEY=$SERPAPI_API_KEY" >> .env.production
         # DynamoDB
         - echo "DYNAMODB_QR_TABLE=$DYNAMODB_QR_TABLE" >> .env.production
         - echo "DYNAMODB_CLICKS_TABLE=$DYNAMODB_CLICKS_TABLE" >> .env.production
-        # QR
+        # QR Code
         - echo "QR_REDIRECT_BASE_URL=$QR_REDIRECT_BASE_URL" >> .env.production
-        # Legacy auth (if still used)
+        # Legacy Auth (if still used)
         - echo "AUTH_ADMIN_HASH=$AUTH_ADMIN_HASH" >> .env.production
         - echo "AUTH_ANALYST_HASH=$AUTH_ANALYST_HASH" >> .env.production
         # Learning API (for Lambda-triggered autonomous learning)

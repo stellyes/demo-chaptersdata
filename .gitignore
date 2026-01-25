@@ -9,12 +9,13 @@ out/
 build/
 dist/
 
-# Environment files
+# Environment files (except .env.example which is committed)
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+!.env.example
 
 # Debug logs
 npm-debug.log*

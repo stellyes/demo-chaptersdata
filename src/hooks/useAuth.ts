@@ -1,8 +1,19 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCurrentUser, signIn, signOut, fetchAuthSession, confirmSignIn } from 'aws-amplify/auth';
 import { isAmplifyConfigured } from '@/lib/amplify-config';
+import {
+  getLocalSessionToken,
+  setLocalSessionToken,
+  clearLocalSessionToken,
+  getSessionCookie,
+  setSessionCookie,
+  clearSessionCookie,
+  setLogoutToken,
+  generateSessionId,
+  SessionBroadcastChannel,
+} from '@/lib/session-sync';
 
 export interface UserOrganization {
   orgId: string;
@@ -38,6 +49,16 @@ export function useAuth() {
     needsNewPassword: false,
   });
 
+  const broadcastRef = useRef<SessionBroadcastChannel | null>(null);
+
+  // Initialize broadcast channel for session sync
+  useEffect(() => {
+    broadcastRef.current = new SessionBroadcastChannel();
+    return () => {
+      broadcastRef.current?.close();
+    };
+  }, []);
+
   const fetchUserOrganizations = useCallback(async (userId: string, isGlobalAdmin: boolean): Promise<UserOrganization[]> => {
     try {
       const params = new URLSearchParams({
@@ -52,6 +73,48 @@ export function useAuth() {
       console.error('Failed to fetch user organizations:', error);
       return [];
     }
+  }, []);
+
+  // Create session token for cross-domain sync
+  const createSessionToken = useCallback((userId: string) => {
+    const token = {
+      userId,
+      sessionId: generateSessionId(),
+      timestamp: Date.now(),
+    };
+
+    setLocalSessionToken(token);
+    setSessionCookie(token);
+
+    // Notify other tabs
+    broadcastRef.current?.postMessage({
+      type: 'SESSION_CREATED',
+      payload: token,
+    });
+
+    return token;
+  }, []);
+
+  // Destroy session token (called before sign out)
+  const destroySessionToken = useCallback(() => {
+    const currentToken = getLocalSessionToken();
+
+    if (currentToken) {
+      // Set logout token for cross-domain propagation
+      setLogoutToken(currentToken.userId, currentToken.sessionId);
+
+      // Notify other tabs
+      broadcastRef.current?.postMessage({
+        type: 'SESSION_DESTROYED',
+        payload: {
+          userId: currentToken.userId,
+          sessionId: currentToken.sessionId,
+        },
+      });
+    }
+
+    clearLocalSessionToken();
+    clearSessionCookie();
   }, []);
 
   const checkAuth = useCallback(async () => {
@@ -91,6 +154,12 @@ export function useAuth() {
       // For global admins, fetch all organizations
       const organizations = await fetchUserOrganizations(user.userId, isGlobalAdmin);
 
+      // Check if we need to create/update session token
+      const existingToken = getLocalSessionToken() || getSessionCookie();
+      if (!existingToken || existingToken.userId !== user.userId) {
+        createSessionToken(user.userId);
+      }
+
       setAuthState({
         isAuthenticated: true,
         isLoading: false,
@@ -116,7 +185,7 @@ export function useAuth() {
         needsNewPassword: false,
       });
     }
-  }, [fetchUserOrganizations]);
+  }, [fetchUserOrganizations, createSessionToken]);
 
   useEffect(() => {
     checkAuth();
@@ -132,7 +201,7 @@ export function useAuth() {
       const result = await signIn({ username, password });
 
       if (result.isSignedIn) {
-        await checkAuth();
+        await checkAuth(); // This will create the session token
         return { isSignedIn: true, nextStep: null };
       } else {
         const nextStep = result.nextStep?.signInStep;
@@ -193,6 +262,9 @@ export function useAuth() {
     }
 
     try {
+      // Destroy session token BEFORE signing out (for cross-domain sync)
+      destroySessionToken();
+
       await signOut();
       setAuthState({
         isAuthenticated: false,
@@ -208,6 +280,20 @@ export function useAuth() {
         error: error instanceof Error ? error.message : 'Sign out failed',
       }));
     }
+  }, [destroySessionToken]);
+
+  // Force logout (called when session is invalidated externally)
+  const forceLogout = useCallback(() => {
+    clearLocalSessionToken();
+    clearSessionCookie();
+    setAuthState({
+      isAuthenticated: false,
+      isLoading: false,
+      isGlobalAdmin: false,
+      user: null,
+      error: null,
+      needsNewPassword: false,
+    });
   }, []);
 
   return {
@@ -216,5 +302,6 @@ export function useAuth() {
     signOut: handleSignOut,
     confirmNewPassword: handleConfirmNewPassword,
     checkAuth,
+    forceLogout,
   };
 }
