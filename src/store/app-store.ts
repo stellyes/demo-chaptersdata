@@ -769,6 +769,18 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'chapters-app-store',
+      version: 1,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Record<string, unknown>;
+
+        // Migration from version 0 (no version) to version 1
+        // Ensure dateRange has a default value if null/undefined
+        if (version === 0 || !state.dateRange) {
+          state.dateRange = getDefaultDateRange();
+        }
+
+        return state;
+      },
       partialize: (state) => ({
         user: state.user,
         currentOrganization: state.currentOrganization,
