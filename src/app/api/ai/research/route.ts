@@ -11,13 +11,15 @@ let s3Client: S3Client | null = null;
 
 function getS3Client(): S3Client {
   if (!s3Client) {
-    s3Client = new S3Client({
+    const config = {
       region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
       credentials: {
         accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
         secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
       },
-    });
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    s3Client = new S3Client(config as any);
   }
   return s3Client;
 }

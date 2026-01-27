@@ -9,25 +9,30 @@ import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/clien
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { AWS_CONFIG, DYNAMODB_TABLES } from '@/lib/config';
 
-const s3 = new S3Client({
-  region: AWS_CONFIG.region,
-  credentials: AWS_CONFIG.accessKeyId && AWS_CONFIG.secretAccessKey
-    ? {
+const s3Config = AWS_CONFIG.accessKeyId && AWS_CONFIG.secretAccessKey
+  ? {
+      region: AWS_CONFIG.region,
+      credentials: {
         accessKeyId: AWS_CONFIG.accessKeyId,
         secretAccessKey: AWS_CONFIG.secretAccessKey,
-      }
-    : undefined,
-});
+      },
+    }
+  : { region: AWS_CONFIG.region };
 
-const dynamodb = new DynamoDBClient({
-  region: AWS_CONFIG.region,
-  credentials: AWS_CONFIG.accessKeyId && AWS_CONFIG.secretAccessKey
-    ? {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const s3 = new S3Client(s3Config as any);
+
+const dynamoConfig = AWS_CONFIG.accessKeyId && AWS_CONFIG.secretAccessKey
+  ? {
+      region: AWS_CONFIG.region,
+      credentials: {
         accessKeyId: AWS_CONFIG.accessKeyId,
         secretAccessKey: AWS_CONFIG.secretAccessKey,
-      }
-    : undefined,
-});
+      },
+    }
+  : { region: AWS_CONFIG.region };
+
+const dynamodb = new DynamoDBClient(dynamoConfig);
 
 // Migrate QR codes from DynamoDB to Aurora
 async function migrateQRCodes(): Promise<{ migrated: number; skipped: number; errors: string[] }> {

@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropicClient } from './claude';
 import { webSearchService, SearchResult } from './web-search';
 import { saveInsights, InsightInput } from './knowledge-base';
+import { dataCorrelationsService, CorrelationSummary } from './data-correlations';
 import { CLAUDE_CONFIG } from '@/lib/config';
 
 // Default org ID for autonomous learning (set via env var or use fallback)
@@ -290,8 +291,19 @@ export class DailyLearningService {
   }
 
   private async phase1DataReview(state: DailyLearningJobState): Promise<DataReviewResult> {
-    // Load all data sources in parallel
-    const [salesData, brandData, customerData, invoiceData, qrData, seoData, budtenderData, productData, researchData] = await Promise.all([
+    // Load all data sources in parallel, including cross-table correlations
+    const [
+      salesData,
+      brandData,
+      customerData,
+      invoiceData,
+      qrData,
+      seoData,
+      budtenderData,
+      productData,
+      researchData,
+      correlationSummary,
+    ] = await Promise.all([
       this.loadRecentSalesData(),
       this.loadRecentBrandData(),
       this.loadRecentCustomerData(),
@@ -301,9 +313,12 @@ export class DailyLearningService {
       this.loadBudtenderData(),
       this.loadProductData(),
       this.loadResearchData(),
+      dataCorrelationsService.getCorrelationSummaryForAI(),
     ]);
 
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
+
+## INDIVIDUAL DATA SOURCES
 
 SALES DATA: ${JSON.stringify(salesData, null, 2)}
 BRAND DATA: ${JSON.stringify(brandData, null, 2)}
@@ -315,9 +330,22 @@ MARKET RESEARCH: ${JSON.stringify(researchData, null, 2)}
 QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
 WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
 
+## CROSS-TABLE CORRELATIONS & ANALYTICS
+The following links data across multiple tables to reveal deeper insights:
+
+${correlationSummary}
+
+## ANALYSIS INSTRUCTIONS
+1. Look for correlations between purchasing costs and sales revenue by brand
+2. Identify which product categories have the best markup ratios
+3. Note any discrepancies between vendor costs and sales performance
+4. Identify customer segments that may need attention (at-risk, lapsed)
+5. Look for patterns in dates with regulatory events vs sales performance
+6. Cross-reference the knowledge base insights with current data
+
 Return JSON:
 {
-  "summary": "Brief overview",
+  "summary": "Brief overview including key cross-table insights",
   "keyMetrics": { "salesTrend": "", "topBrands": [], "customerActivity": "", "recentChanges": [] },
   "areasOfConcern": [],
   "areasOfOpportunity": [],
@@ -895,27 +923,64 @@ Return ONLY valid JSON.`;
     dataReview: DataReviewResult,
     webResearchResults: WebResearchResult[]
   ): Promise<CorrelatedInsight[]> {
+    // Load structured correlation data for deep analysis
+    const correlations = await dataCorrelationsService.getAllCorrelations();
+
+    // Build correlation insights summary
+    const correlationInsights = this.buildCorrelationInsights(correlations);
+
     if (webResearchResults.length === 0) {
-      return dataReview.areasOfConcern.map(concern => ({
+      // Even without web research, use cross-table correlations for insights
+      const internalInsights = dataReview.areasOfConcern.map(concern => ({
         internalObservation: concern,
-        externalEvidence: 'Internal data analysis',
-        correlation: 'identifies',
+        externalEvidence: 'Internal cross-table analysis',
+        correlation: 'identifies' as const,
         confidence: 0.7,
         actionItem: `Investigate: ${concern}`,
         category: 'operations',
       }));
+
+      // Add insights from cross-table correlations
+      const crossTableInsights = this.extractCrossTableInsights(correlations);
+      return [...internalInsights, ...crossTableInsights];
     }
 
     const prompt = `Correlate internal data with external research for cannabis dispensaries.
 
-Internal: ${dataReview.summary}
-Concerns: ${dataReview.areasOfConcern.join(', ')}
+## INTERNAL DATA SUMMARY
+${dataReview.summary}
 
-External Research:
+## AREAS OF CONCERN
+${dataReview.areasOfConcern.join('\n')}
+
+## CROSS-TABLE CORRELATION INSIGHTS
+These insights were derived from linking data across multiple database tables:
+
+${correlationInsights}
+
+## EXTERNAL RESEARCH FINDINGS
 ${webResearchResults.map(r => `Q: ${r.question}\nSummary: ${r.summary}`).join('\n\n')}
 
-Return JSON:
-[{ "internalObservation": "", "externalEvidence": "", "correlation": "supports|contradicts|explains", "confidence": 0-1, "actionItem": "", "category": "" }]`;
+## ANALYSIS INSTRUCTIONS
+1. Correlate internal business performance with external market trends
+2. Link brand profitability insights with industry news about those brands
+3. Connect customer segment data with market research on consumer behavior
+4. Relate purchasing patterns with vendor/supply chain news
+5. Match regulatory updates with compliance-related internal data
+
+For each correlation, explain HOW the internal data connects to external evidence.
+
+Return JSON array:
+[{
+  "internalObservation": "specific finding from internal data or cross-table analysis",
+  "externalEvidence": "supporting external research or market trend",
+  "correlation": "supports|contradicts|explains|validates|warns",
+  "confidence": 0.0-1.0,
+  "actionItem": "specific recommended action",
+  "category": "sales|brands|customers|market|regulatory|operations|purchasing"
+}]
+
+Generate 5-10 high-quality correlations.`;
 
     const response = await this.client.messages.create({
       model: CLAUDE_CONFIG.defaultModel,
@@ -932,6 +997,121 @@ Return JSON:
     if (!jsonMatch) return [];
 
     return JSON.parse(jsonMatch[0]) as CorrelatedInsight[];
+  }
+
+  /**
+   * Build a text summary of correlation insights for AI prompts
+   */
+  private buildCorrelationInsights(correlations: CorrelationSummary): string {
+    const insights: string[] = [];
+
+    // Brand profitability insights
+    if (correlations.brandProfitability.length > 0) {
+      const topProfit = correlations.brandProfitability[0];
+      const lowProfit = correlations.brandProfitability
+        .filter(b => b.markupRatio > 0 && b.markupRatio < 1.5)
+        .slice(0, 3);
+
+      insights.push(`BRAND PROFITABILITY:
+- Top performer: ${topProfit.brandName} with ${topProfit.markupRatio.toFixed(2)}x markup ($${topProfit.totalPurchaseCost.toFixed(0)} cost → $${topProfit.totalNetSales.toFixed(0)} sales)
+${lowProfit.length > 0 ? `- Low margin brands needing review: ${lowProfit.map(b => `${b.brandName} (${b.markupRatio.toFixed(2)}x)`).join(', ')}` : ''}`);
+    }
+
+    // Product category insights
+    if (correlations.productCategoryFlow.length > 0) {
+      const categories = correlations.productCategoryFlow.slice(0, 5);
+      insights.push(`PRODUCT CATEGORY FLOW:
+${categories.map(c => `- ${c.productType}: ${c.markupRatio.toFixed(2)}x markup, ${c.pctOfTotalSales.toFixed(1)}% of sales`).join('\n')}`);
+    }
+
+    // Customer segment insights
+    if (correlations.customerSegments.length > 0) {
+      const atRiskTotal = correlations.customerSegments.reduce((sum, s) => sum + s.atRiskCount, 0);
+      const lapsedTotal = correlations.customerSegments.reduce((sum, s) => sum + s.lapsedCount, 0);
+      insights.push(`CUSTOMER HEALTH:
+- At-risk customers: ${atRiskTotal}
+- Lapsed customers: ${lapsedTotal}
+- Top segment: ${correlations.customerSegments[0]?.segment} (${correlations.customerSegments[0]?.customerCount} customers)`);
+    }
+
+    // Vendor concentration insights
+    if (correlations.vendorPerformance.length > 0) {
+      const topVendor = correlations.vendorPerformance[0];
+      const totalPurchasing = correlations.vendorPerformance.reduce((sum, v) => sum + v.totalPurchaseCost, 0);
+      const topVendorPct = (topVendor.totalPurchaseCost / totalPurchasing) * 100;
+
+      insights.push(`VENDOR CONCENTRATION:
+- Top vendor: ${topVendor.vendorName} (${topVendorPct.toFixed(1)}% of purchasing, ${topVendor.brandCount} brands)
+- Reorder frequency: ${topVendor.avgDaysBetweenOrders.toFixed(0)} days average`);
+    }
+
+    return insights.join('\n\n');
+  }
+
+  /**
+   * Extract actionable insights from cross-table correlations
+   */
+  private extractCrossTableInsights(correlations: CorrelationSummary): CorrelatedInsight[] {
+    const insights: CorrelatedInsight[] = [];
+
+    // Identify low-margin brands
+    const lowMarginBrands = correlations.brandProfitability.filter(b => b.markupRatio > 0 && b.markupRatio < 1.3);
+    if (lowMarginBrands.length > 0) {
+      insights.push({
+        internalObservation: `${lowMarginBrands.length} brands have markup ratios below 1.3x: ${lowMarginBrands.slice(0, 3).map(b => b.brandName).join(', ')}`,
+        externalEvidence: 'Cross-table analysis of purchase costs vs sales revenue',
+        correlation: 'identifies',
+        confidence: 0.85,
+        actionItem: 'Review pricing or vendor negotiations for low-margin brands',
+        category: 'purchasing',
+      });
+    }
+
+    // Identify at-risk customer segments
+    const totalAtRisk = correlations.customerSegments.reduce((sum, s) => sum + s.atRiskCount, 0);
+    if (totalAtRisk > 50) {
+      insights.push({
+        internalObservation: `${totalAtRisk} customers are in "at-risk" status across all segments`,
+        externalEvidence: 'Customer recency and visit pattern analysis',
+        correlation: 'warns',
+        confidence: 0.8,
+        actionItem: 'Launch re-engagement campaign targeting at-risk customers',
+        category: 'customers',
+      });
+    }
+
+    // Identify vendor concentration risk
+    if (correlations.vendorPerformance.length > 0) {
+      const totalPurchasing = correlations.vendorPerformance.reduce((sum, v) => sum + v.totalPurchaseCost, 0);
+      const topVendor = correlations.vendorPerformance[0];
+      const concentration = (topVendor.totalPurchaseCost / totalPurchasing) * 100;
+
+      if (concentration > 40) {
+        insights.push({
+          internalObservation: `${topVendor.vendorName} accounts for ${concentration.toFixed(1)}% of all purchasing`,
+          externalEvidence: 'Vendor-invoice correlation analysis',
+          correlation: 'warns',
+          confidence: 0.75,
+          actionItem: 'Consider diversifying vendor relationships to reduce supply chain risk',
+          category: 'purchasing',
+        });
+      }
+    }
+
+    // Identify high-performing product categories
+    const topCategory = correlations.productCategoryFlow.find(c => c.markupRatio > 2);
+    if (topCategory) {
+      insights.push({
+        internalObservation: `${topCategory.productType} has exceptional markup ratio of ${topCategory.markupRatio.toFixed(2)}x`,
+        externalEvidence: 'Purchase-to-sales flow analysis by category',
+        correlation: 'validates',
+        confidence: 0.9,
+        actionItem: `Consider expanding ${topCategory.productType} inventory and marketing`,
+        category: 'sales',
+      });
+    }
+
+    return insights;
   }
 
   private async phase5DigestGeneration(
