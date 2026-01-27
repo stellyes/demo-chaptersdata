@@ -1809,13 +1809,22 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     // Extract from high-impact regulatory updates
     for (const reg of digest.regulatoryUpdates) {
       if (reg.impactLevel === 'high') {
+        // Safely parse deadline - it might be text like "soon" or "TBD" instead of a date
+        let expiresAt = this.calculateExpirationDate('regulatory');
+        if (reg.deadline) {
+          const parsedDate = new Date(reg.deadline);
+          if (!isNaN(parsedDate.getTime())) {
+            expiresAt = parsedDate;
+          }
+        }
+
         insightsToSave.push({
           category: 'regulatory',
           subcategory: 'update',
           insight: reg.update,
           confidence: 'high',
           source: reg.source || source,
-          expiresAt: reg.deadline ? new Date(reg.deadline) : this.calculateExpirationDate('regulatory'),
+          expiresAt,
         });
       }
     }
