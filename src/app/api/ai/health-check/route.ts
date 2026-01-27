@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { runFullHealthCheck, HealthCheckInput } from '@/lib/services/data-health';
-import { HealthCheckReport, BrandMappingData } from '@/types';
+import { HealthCheckReport, BrandMappingData, InvoiceLineItem } from '@/types';
+import { prisma } from '@/lib/prisma';
 
 // S3 Client singleton
 let s3Client: S3Client | null = null;
@@ -77,6 +78,52 @@ async function saveHealthCheck(report: HealthCheckReport): Promise<void> {
       ContentType: 'application/json',
     })
   );
+}
+
+// Load recent invoice data from database (last 60 days for trend analysis)
+async function loadRecentInvoiceData(): Promise<InvoiceLineItem[]> {
+  try {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const lineItems = await prisma.invoiceLineItem.findMany({
+      where: {
+        invoice: {
+          invoiceDate: { gte: sixtyDaysAgo },
+        },
+      },
+      include: {
+        invoice: {
+          include: { vendor: true },
+        },
+        brand: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Transform to frontend format
+    return lineItems.map((item) => ({
+      invoice_id: item.invoiceId,
+      line_item_id: `${item.invoiceId}-${item.lineNumber}`,
+      vendor: item.invoice?.vendor?.canonicalName || item.invoice?.originalVendorName || 'Unknown',
+      brand: item.brand?.canonicalName || item.originalBrandName,
+      product_name: item.productName || '',
+      product_type: item.productType || '',
+      product_subtype: item.productSubtype || undefined,
+      sku_units: item.skuUnits,
+      unit_cost: Number(item.unitCost),
+      total_cost: Number(item.totalCost),
+      total_with_excise: Number(item.totalCostWithExcise),
+      strain: item.strain || undefined,
+      unit_size: item.unitSize || undefined,
+      trace_id: item.traceId || undefined,
+      is_promo: item.isPromo,
+      invoice_date: item.invoice?.invoiceDate?.toISOString().split('T')[0],
+    }));
+  } catch (error) {
+    console.error('Error loading invoice data for health check:', error);
+    return [];
+  }
 }
 
 // Load brand mappings from S3
@@ -172,7 +219,10 @@ export async function POST(request: NextRequest) {
     if (body.sales) inputData.sales = body.sales;
     if (body.brands) inputData.brands = body.brands;
     if (body.customers) inputData.customers = body.customers;
-    if (body.invoices) inputData.invoices = body.invoices;
+
+    // Load invoice data from database (not sent from frontend to avoid huge payloads)
+    // Only load recent data needed for trend analysis
+    inputData.invoices = await loadRecentInvoiceData();
 
     // Load brand mappings from S3 for alias checking
     inputData.brandMappings = await loadBrandMappings();

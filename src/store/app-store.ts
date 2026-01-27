@@ -659,27 +659,50 @@ export const useAppStore = create<AppState>()(
               console.error('Error loading customer data:', err);
             });
 
-            // Load invoice data separately in background
-            fetch('/api/data/invoices')
-              .then(res => res.json())
-              .then(invoiceResult => {
-                if (invoiceResult.success) {
-                  set((state) => ({
-                    invoiceData: invoiceResult.data || [],
-                    dataStatus: {
-                      ...state.dataStatus,
-                      invoices: {
-                        loaded: (invoiceResult.data?.length || 0) > 0,
-                        count: invoiceResult.data?.length || 0,
-                        lastUpdated: new Date().toISOString(),
+            // Load invoice data in pages (similar to customers - can be large dataset)
+            const loadInvoicePages = async () => {
+              const pageSize = 5000;
+              let allInvoices: InvoiceLineItem[] = [];
+              let page = 1;
+              let hasMore = true;
+
+              while (hasMore) {
+                try {
+                  const res = await fetch(`/api/data/invoices?page=${page}&pageSize=${pageSize}`);
+                  const result = await res.json();
+
+                  if (result.success && result.data) {
+                    allInvoices = [...allInvoices, ...result.data];
+                    hasMore = result.pagination?.hasMore || false;
+                    page++;
+
+                    // Update store with partial data as it loads
+                    set((state) => ({
+                      invoiceData: allInvoices,
+                      dataStatus: {
+                        ...state.dataStatus,
+                        invoices: {
+                          loaded: true,
+                          count: result.pagination?.totalCount || allInvoices.length,
+                          lastUpdated: new Date().toISOString(),
+                        },
                       },
-                    },
-                  }));
+                    }));
+                  } else {
+                    hasMore = false;
+                  }
+                } catch (err) {
+                  console.error(`Error loading invoice page ${page}:`, err);
+                  hasMore = false;
                 }
-              })
-              .catch(err => {
-                console.error('Error loading invoice data:', err);
-              });
+              }
+
+              console.log(`Loaded ${allInvoices.length} invoices in ${page - 1} pages`);
+            };
+
+            loadInvoicePages().catch(err => {
+              console.error('Error loading invoice data:', err);
+            });
 
             // Load research, SEO, QR codes, and AI recommendations in background
             fetch('/api/data/research')

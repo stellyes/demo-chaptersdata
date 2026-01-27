@@ -113,11 +113,12 @@ export function DataHealthTab() {
           'Content-Type': 'application/json',
           ...(currentOrganization?.orgId && { 'X-Org-Id': currentOrganization.orgId }),
         },
+        // Note: Invoice data is loaded server-side to avoid huge request payloads
         body: JSON.stringify({
           sales: salesData,
           brands: brandData,
           customers: customerData,
-          invoices: invoiceData,
+          // invoices omitted - loaded from DB server-side
         }),
       });
 
