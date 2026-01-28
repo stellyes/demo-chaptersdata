@@ -104,14 +104,15 @@ export const SegmentPieChart = memo(function SegmentPieChart({ data }: SegmentPi
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   // Custom label renderer - show labels for all visible segments (≥1%)
-  const renderLabel = ({ cx, cy, midAngle, outerRadius, percent, index }: {
-    cx: number;
-    cy: number;
-    midAngle: number;
-    outerRadius: number;
-    percent: number;
-    index: number;
+  const renderLabel = ({ cx, cy, midAngle, outerRadius, percent }: {
+    cx?: number;
+    cy?: number;
+    midAngle?: number;
+    outerRadius?: number;
+    percent?: number;
+    index?: number;
   }) => {
+    if (cx == null || cy == null || midAngle == null || outerRadius == null || percent == null) return null;
     if (percent < 0.01) return null; // Don't show labels for segments < 1%
 
     const RADIAN = Math.PI / 180;

@@ -7,6 +7,8 @@ frontend:
     build:
       commands:
         # Create .env.production file with runtime environment variables
+        # Find your App ID in AWS Amplify Console > App settings > General
+        - echo "AMPLIFY_APP_ID=$AMPLIFY_APP_ID" >> .env.production
         # Database
         - echo "DATABASE_URL=$DATABASE_URL" >> .env.production
         # AWS Cognito (NEXT_PUBLIC_ prefix makes them available client-side)
