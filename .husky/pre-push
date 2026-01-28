@@ -1,0 +1,29 @@
+#!/bin/bash
+# Pre-push hook: Syncs environment variables to Amplify when pushing to main
+
+# Get the branch being pushed to
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+push_branch=$(git rev-parse --abbrev-ref @{push} 2>/dev/null || echo "")
+
+# Check if pushing to main
+if [ "$current_branch" = "main" ]; then
+    echo "Pushing to main - syncing environment variables to Amplify..."
+
+    # Run the sync script
+    if [ -x ./scripts/sync-env-to-amplify.sh ]; then
+        ./scripts/sync-env-to-amplify.sh
+        sync_exit=$?
+
+        if [ $sync_exit -ne 0 ]; then
+            echo ""
+            echo "WARNING: Environment variable sync failed."
+            echo "The push will continue, but production env vars may not be updated."
+            echo "Run './scripts/sync-env-to-amplify.sh' manually to sync."
+            echo ""
+            # Don't block the push, just warn
+        fi
+    else
+        echo "WARNING: sync-env-to-amplify.sh not found or not executable"
+        echo "Environment variables will not be synced to Amplify."
+    fi
+fi

@@ -7,7 +7,7 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
-import { QrCode, Link, Download, Loader2 } from 'lucide-react';
+import { QrCode, Link, Download, Loader2, Copy, Check } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { useAppStore } from '@/store/app-store';
 import { QRCode } from '@/types';
@@ -15,6 +15,8 @@ import { QRCode } from '@/types';
 export function QRCodePage() {
   const { qrCodesData, setQrCodesData } = useAppStore();
   const [qrImage, setQrImage] = useState<string>('');
+  const [trackingUrl, setTrackingUrl] = useState<string>('');
+  const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -35,19 +37,7 @@ export function QRCodePage() {
     try {
       setSaving(true);
 
-      // Generate QR code image
-      const qrDataUrl = await QRCodeLib.toDataURL(formData.url, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: formData.color,
-          light: formData.bgColor,
-        },
-      });
-
-      setQrImage(qrDataUrl);
-
-      // Save to API
+      // Save to API first to get the tracking URL
       const response = await fetch('/api/qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,6 +49,22 @@ export function QRCodePage() {
 
       const result = await response.json();
       if (result.success && result.data) {
+        // Use tracking URL for QR code (this is what gets scanned and tracked)
+        const urlToEncode = result.data.trackingUrl || formData.url;
+        setTrackingUrl(urlToEncode);
+
+        // Generate QR code image with tracking URL
+        const qrDataUrl = await QRCodeLib.toDataURL(urlToEncode, {
+          width: 300,
+          margin: 2,
+          color: {
+            dark: formData.color,
+            light: formData.bgColor,
+          },
+        });
+
+        setQrImage(qrDataUrl);
+
         // Add to store
         setQrCodesData([result.data, ...qrCodesData]);
         setFormData({ ...formData, name: '', url: '' });
@@ -76,6 +82,17 @@ export function QRCodePage() {
     link.download = `qr-${formData.name || 'code'}.png`;
     link.href = qrImage;
     link.click();
+  };
+
+  const copyTrackingUrl = async () => {
+    if (!trackingUrl) return;
+    try {
+      await navigator.clipboard.writeText(trackingUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
   };
 
   const tabs = [
@@ -171,13 +188,45 @@ export function QRCodePage() {
               {qrImage ? (
                 <>
                   <img src={qrImage} alt="Generated QR Code" className="mb-4 rounded-lg shadow-lg" />
-                  <button
-                    onClick={downloadQR}
-                    className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded text-sm font-medium hover:bg-[var(--paper)]"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download PNG
-                  </button>
+
+                  {/* Tracking URL Display */}
+                  {trackingUrl && (
+                    <div className="w-full mb-4 p-3 bg-[var(--paper)] rounded-lg">
+                      <p className="text-xs text-[var(--muted)] mb-1">Tracking URL (encoded in QR)</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-xs text-[var(--ink)] truncate">{trackingUrl}</code>
+                        <button
+                          onClick={copyTrackingUrl}
+                          className="p-1.5 hover:bg-[var(--border)] rounded transition-colors"
+                          title="Copy tracking URL"
+                        >
+                          {copied ? (
+                            <Check className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4 text-[var(--muted)]" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={downloadQR}
+                      className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded text-sm font-medium hover:bg-[var(--paper)]"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download PNG
+                    </button>
+                    <button
+                      onClick={copyTrackingUrl}
+                      disabled={!trackingUrl}
+                      className="flex items-center gap-2 px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-sm font-medium disabled:opacity-50"
+                    >
+                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copied ? 'Copied!' : 'Copy Link'}
+                    </button>
+                  </div>
                 </>
               ) : (
                 <div className="text-center text-[var(--muted)]">

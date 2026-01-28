@@ -159,6 +159,7 @@ export interface SEOSummary {
 export interface QRCode {
   shortCode: string;
   originalUrl: string;
+  trackingUrl?: string; // The URL that should be encoded in QR codes for click tracking
   name: string;
   description?: string;
   createdAt: string;

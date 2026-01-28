@@ -8,7 +8,8 @@
     "start": "next start -p 3001",
     "lint": "eslint",
     "prepare": "husky",
-    "sync-env": "./scripts/sync-env.sh"
+    "sync-env": "./scripts/sync-env.sh",
+    "sync-amplify": "./scripts/sync-env-to-amplify.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

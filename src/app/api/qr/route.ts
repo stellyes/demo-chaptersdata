@@ -6,6 +6,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Get the base URL for tracking redirects
+function getTrackingBaseUrl(): string {
+  // Use environment variable if set, otherwise derive from NEXTAUTH_URL or default
+  return (
+    process.env.QR_TRACKING_BASE_URL ||
+    process.env.NEXTAUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    'https://bcsf.chaptersdata.com'
+  );
+}
+
+// Build the tracking URL for a QR code
+function buildTrackingUrl(shortCode: string): string {
+  const baseUrl = getTrackingBaseUrl();
+  return `${baseUrl}/r/${shortCode}`;
+}
+
 // GET - Load all QR codes
 export async function GET() {
   try {
@@ -14,9 +31,15 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Add tracking URL to each QR code
+    const qrCodesWithTracking = qrCodes.map((qr) => ({
+      ...qr,
+      trackingUrl: buildTrackingUrl(qr.shortCode),
+    }));
+
     return NextResponse.json({
       success: true,
-      data: qrCodes,
+      data: qrCodesWithTracking,
     });
   } catch (error) {
     console.error('Error loading QR codes:', error);
@@ -40,9 +63,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const generatedShortCode = shortCode || `qr_${Date.now().toString(36)}`;
+
     const qrCode = await prisma.qrCode.create({
       data: {
-        shortCode: shortCode || `qr_${Date.now().toString(36)}`,
+        shortCode: generatedShortCode,
         name,
         originalUrl,
         description,
@@ -51,9 +76,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Return with tracking URL
     return NextResponse.json({
       success: true,
-      data: qrCode,
+      data: {
+        ...qrCode,
+        trackingUrl: buildTrackingUrl(qrCode.shortCode),
+      },
     });
   } catch (error) {
     console.error('Error creating QR code:', error);
