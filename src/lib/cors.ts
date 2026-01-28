@@ -5,6 +5,30 @@
 
 import { NextRequest } from 'next/server';
 
+/**
+ * Detect if the request is from an iOS device (Safari PWA has gzip issues)
+ */
+export function isIOSRequest(request: NextRequest): boolean {
+  const userAgent = request.headers.get('user-agent') || '';
+  return /iPhone|iPad|iPod/i.test(userAgent) && /Safari/i.test(userAgent);
+}
+
+/**
+ * Check if gzip should be used for this request
+ * Disabled for iOS due to Safari PWA decompression bugs
+ */
+export function shouldUseGzip(request: NextRequest): boolean {
+  const acceptEncoding = request.headers.get('accept-encoding') || '';
+  const supportsGzip = acceptEncoding.includes('gzip');
+
+  // Disable gzip for iOS - Safari PWA has decompression issues
+  if (isIOSRequest(request)) {
+    return false;
+  }
+
+  return supportsGzip;
+}
+
 // Allowed origins - keep in sync with middleware.ts
 const ALLOWED_ORIGINS = [
   'http://localhost:3002',

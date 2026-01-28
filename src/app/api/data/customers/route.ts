@@ -6,7 +6,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { gzipSync } from 'zlib';
-import { getGzipResponseHeaders } from '@/lib/cors';
+import { getGzipResponseHeaders, shouldUseGzip } from '@/lib/cors';
 
 interface CustomerRecord {
   store_name: string;
@@ -73,8 +73,8 @@ async function loadCustomerData(): Promise<CustomerRecord[]> {
 
 export async function GET(request: NextRequest) {
   try {
-    const acceptEncoding = request.headers.get('accept-encoding') || '';
-    const supportsGzip = acceptEncoding.includes('gzip');
+    // Check gzip support (disabled for iOS due to Safari PWA bugs)
+    const supportsGzip = shouldUseGzip(request);
 
     // Get pagination params
     const url = new URL(request.url);

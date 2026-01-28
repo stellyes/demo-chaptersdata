@@ -20,6 +20,36 @@ function getDefaultDateRange(): { start: string; end: string } {
     end: today.toISOString().split('T')[0],
   };
 }
+
+// Helper to detect iOS devices (for PWA-specific optimizations)
+function isIOSDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) && /Safari/i.test(navigator.userAgent);
+}
+
+// Helper to create a fetch with timeout and abort signal
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number = 30000,
+  signal?: AbortSignal
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      signal: signal || controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+// Helper to yield to browser for GC between large operations
+const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 100));
 import {
   User,
   UserOrganization,
@@ -616,20 +646,30 @@ export const useAppStore = create<AppState>()(
 
             // Load customer data in pages (large dataset - 93k+ records)
             const loadCustomerPages = async () => {
-              const pageSize = 10000;
+              // Use smaller page size on iOS to avoid memory pressure
+              const isIOS = isIOSDevice();
+              const pageSize = isIOS ? 5000 : 10000;
+              const requestTimeout = isIOS ? 45000 : 30000; // Longer timeout for iOS
+
               let allCustomers: CustomerRecord[] = [];
               let page = 1;
               let hasMore = true;
+              let retryCount = 0;
+              const maxRetries = 3;
 
               while (hasMore) {
                 try {
-                  const res = await fetch(`/api/data/customers?page=${page}&pageSize=${pageSize}`);
+                  const res = await fetchWithTimeout(
+                    `/api/data/customers?page=${page}&pageSize=${pageSize}`,
+                    requestTimeout
+                  );
                   const result = await res.json();
 
                   if (result.success && result.data) {
                     allCustomers = [...allCustomers, ...result.data];
                     hasMore = result.pagination?.hasMore || false;
                     page++;
+                    retryCount = 0; // Reset retry count on success
 
                     // Update store with partial data as it loads
                     set((state) => ({
@@ -643,12 +683,28 @@ export const useAppStore = create<AppState>()(
                         },
                       },
                     }));
+
+                    // Yield to browser between pages to allow GC (especially important on iOS)
+                    if (hasMore) {
+                      await yieldToBrowser();
+                    }
                   } else {
                     hasMore = false;
                   }
                 } catch (err) {
                   console.error(`Error loading customer page ${page}:`, err);
-                  hasMore = false;
+
+                  // Retry logic with exponential backoff
+                  if (retryCount < maxRetries) {
+                    retryCount++;
+                    const backoffMs = Math.min(1000 * Math.pow(2, retryCount), 10000);
+                    console.log(`Retrying customer page ${page} in ${backoffMs}ms (attempt ${retryCount}/${maxRetries})`);
+                    await new Promise(resolve => setTimeout(resolve, backoffMs));
+                    // Don't increment page, retry same page
+                  } else {
+                    console.error(`Failed to load customer page ${page} after ${maxRetries} retries`);
+                    hasMore = false;
+                  }
                 }
               }
 
@@ -661,20 +717,30 @@ export const useAppStore = create<AppState>()(
 
             // Load invoice data in pages (similar to customers - can be large dataset)
             const loadInvoicePages = async () => {
-              const pageSize = 5000;
+              // Use smaller page size on iOS to avoid memory pressure
+              const isIOS = isIOSDevice();
+              const pageSize = isIOS ? 2500 : 5000;
+              const requestTimeout = isIOS ? 45000 : 30000;
+
               let allInvoices: InvoiceLineItem[] = [];
               let page = 1;
               let hasMore = true;
+              let retryCount = 0;
+              const maxRetries = 3;
 
               while (hasMore) {
                 try {
-                  const res = await fetch(`/api/data/invoices?page=${page}&pageSize=${pageSize}`);
+                  const res = await fetchWithTimeout(
+                    `/api/data/invoices?page=${page}&pageSize=${pageSize}`,
+                    requestTimeout
+                  );
                   const result = await res.json();
 
                   if (result.success && result.data) {
                     allInvoices = [...allInvoices, ...result.data];
                     hasMore = result.pagination?.hasMore || false;
                     page++;
+                    retryCount = 0; // Reset retry count on success
 
                     // Update store with partial data as it loads
                     set((state) => ({
@@ -688,12 +754,27 @@ export const useAppStore = create<AppState>()(
                         },
                       },
                     }));
+
+                    // Yield to browser between pages to allow GC (especially important on iOS)
+                    if (hasMore) {
+                      await yieldToBrowser();
+                    }
                   } else {
                     hasMore = false;
                   }
                 } catch (err) {
                   console.error(`Error loading invoice page ${page}:`, err);
-                  hasMore = false;
+
+                  // Retry logic with exponential backoff
+                  if (retryCount < maxRetries) {
+                    retryCount++;
+                    const backoffMs = Math.min(1000 * Math.pow(2, retryCount), 10000);
+                    console.log(`Retrying invoice page ${page} in ${backoffMs}ms (attempt ${retryCount}/${maxRetries})`);
+                    await new Promise(resolve => setTimeout(resolve, backoffMs));
+                  } else {
+                    console.error(`Failed to load invoice page ${page} after ${maxRetries} retries`);
+                    hasMore = false;
+                  }
                 }
               }
 

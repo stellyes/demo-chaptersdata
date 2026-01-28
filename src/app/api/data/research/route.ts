@@ -6,7 +6,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { gzipSync } from 'zlib';
-import { getGzipResponseHeaders } from '@/lib/cors';
+import { getGzipResponseHeaders, shouldUseGzip } from '@/lib/cors';
 
 interface ResearchFinding {
   id: string;
@@ -161,8 +161,8 @@ async function loadAIRecommendations(): Promise<AIRecommendation[]> {
 
 export async function GET(request: NextRequest) {
   try {
-    const acceptEncoding = request.headers.get('accept-encoding') || '';
-    const supportsGzip = acceptEncoding.includes('gzip');
+    // Check gzip support (disabled for iOS due to Safari PWA bugs)
+    const supportsGzip = shouldUseGzip(request);
     const url = new URL(request.url);
     const forceRefresh = url.searchParams.get('refresh') === 'true';
     const includeDebug = url.searchParams.get('debug') === 'true';
