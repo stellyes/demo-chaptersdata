@@ -8,7 +8,8 @@ import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { useFilteredSalesData, useNormalizedBrandDataCompat, useAppStore } from '@/store/app-store';
 import { calculateSalesSummary, calculateBrandSummary } from '@/lib/services/data-processor';
-import { Sparkles, TrendingUp, ShoppingBag, Users, RefreshCw, Loader2, FileText, Calendar, ChevronDown, MessageSquare, Check, Database, Brain } from 'lucide-react';
+import { Sparkles, TrendingUp, ShoppingBag, Users, RefreshCw, Loader2, FileText, Calendar, ChevronDown, MessageSquare, Check, Database, Brain, Download } from 'lucide-react';
+import { downloadAsMarkdown, openPrintWindow } from '@/lib/export-utils';
 import { LearningProgressTab } from '@/components/learning/LearningProgressTab';
 import { format } from 'date-fns';
 import ReactMarkdown, { Components } from 'react-markdown';
@@ -109,6 +110,7 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
   const [customQueryResult, setCustomQueryResult] = useState('');
   const [customQueryLoading, setCustomQueryLoading] = useState(false);
   const [selectedResearchIds, setSelectedResearchIds] = useState<string[]>([]);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   // All data sources enabled by default - no longer user-selectable
   const [contextOptions] = useState<DataContextOptions>({
     includeSales: true,
@@ -463,6 +465,27 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     );
   };
 
+  // Export custom query result
+  const handleExportCustomQuery = (exportFormat: 'print' | 'markdown') => {
+    if (!customQueryResult) return;
+
+    const timestamp = format(new Date(), 'yyyy-MM-dd-HHmm');
+    const options = {
+      filename: `custom-query-${timestamp}`,
+      title: 'Custom Query Analysis',
+      subtitle: customPrompt.length > 100 ? customPrompt.slice(0, 97) + '...' : customPrompt,
+      generatedAt: new Date(),
+    };
+
+    if (exportFormat === 'markdown') {
+      downloadAsMarkdown(customQueryResult, options);
+    } else {
+      openPrintWindow(customQueryResult, options);
+    }
+
+    setShowExportMenu(false);
+  };
+
   const analysisCards = [
     {
       type: 'sales' as AnalysisType,
@@ -747,14 +770,49 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
                   <SectionLabel>Query Result</SectionLabel>
                   <SectionTitle>Claude&apos;s Analysis</SectionTitle>
                 </div>
-                <button
-                  onClick={runCustomQuery}
-                  disabled={customQueryLoading}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--paper)] rounded transition-colors"
-                >
-                  <RefreshCw className={`w-4 h-4 ${customQueryLoading ? 'animate-spin' : ''}`} />
-                  Regenerate
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={runCustomQuery}
+                    disabled={customQueryLoading}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--paper)] rounded transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${customQueryLoading ? 'animate-spin' : ''}`} />
+                    Regenerate
+                  </button>
+                  {/* Export Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowExportMenu(!showExportMenu)}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--paper)] rounded transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export
+                    </button>
+                    {showExportMenu && (
+                      <>
+                        {/* Backdrop to close menu when clicking outside */}
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setShowExportMenu(false)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 bg-[var(--white)] border border-[var(--border)] rounded-lg shadow-lg z-20 py-1 min-w-[160px]">
+                          <button
+                            onClick={() => handleExportCustomQuery('print')}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
+                          >
+                            Print / Save PDF
+                          </button>
+                          <button
+                            onClick={() => handleExportCustomQuery('markdown')}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
+                          >
+                            Markdown (.md)
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="prose prose-sm max-w-none text-[var(--ink)]">
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{customQueryResult}</ReactMarkdown>

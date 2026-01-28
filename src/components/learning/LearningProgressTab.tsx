@@ -12,6 +12,7 @@ import {
   CheckCircle,
   ChevronDown,
   Clock,
+  Download,
   FileText,
   Loader2,
   PlayCircle,
@@ -20,6 +21,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { downloadAsMarkdown, openPrintWindow, formatDailyDigestAsMarkdown, DailyDigestExport } from '@/lib/export-utils';
 
 interface DailyDigest {
   executiveSummary: string;
@@ -238,6 +240,33 @@ export function LearningProgressTab() {
     setExpandedSections(newExpanded);
   };
 
+  // Export digest
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const handleExportDigest = (exportFormat: 'print' | 'markdown') => {
+    if (!latestDigest) return;
+
+    // Convert to export format
+    const digestExport: DailyDigestExport = latestDigest;
+    const markdownContent = formatDailyDigestAsMarkdown(digestExport, latestJob || undefined);
+
+    const timestamp = format(new Date(), 'yyyy-MM-dd');
+    const options = {
+      filename: `learning-digest-${timestamp}`,
+      title: 'Daily Intelligence Digest',
+      subtitle: `Data Health: ${latestDigest.dataHealthScore} | Confidence: ${Math.round(latestDigest.confidenceScore * 100)}%`,
+      generatedAt: latestJob?.completedAt ? new Date(latestJob.completedAt) : new Date(),
+    };
+
+    if (exportFormat === 'markdown') {
+      downloadAsMarkdown(markdownContent, options);
+    } else {
+      openPrintWindow(markdownContent, options);
+    }
+
+    setShowExportMenu(false);
+  };
+
   const getPhaseLabel = (phase: string | null): string => {
     switch (phase) {
       case 'data_review': return 'Reviewing Data';
@@ -319,6 +348,40 @@ export function LearningProgressTab() {
                 </>
               )}
             </button>
+            {/* Export Dropdown */}
+            <div className="relative flex-1 sm:flex-none">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                disabled={!latestDigest}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 sm:py-2 border border-[var(--border)] rounded text-sm font-medium hover:bg-[var(--paper)] disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                Export
+              </button>
+              {showExportMenu && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 bg-[var(--white)] border border-[var(--border)] rounded-lg shadow-lg z-20 py-1 min-w-[160px]">
+                    <button
+                      onClick={() => handleExportDigest('print')}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
+                    >
+                      Print / Save PDF
+                    </button>
+                    <button
+                      onClick={() => handleExportDigest('markdown')}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
+                    >
+                      Markdown (.md)
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
