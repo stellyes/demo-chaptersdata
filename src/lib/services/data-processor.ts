@@ -560,31 +560,51 @@ export function calculateBrandSummary(brandData: BrandRecord[]): {
 // Calculate customer summary metrics
 export function calculateCustomerSummary(customerData: CustomerRecord[]): {
   totalCustomers: number;
-  segmentBreakdown: Record<CustomerSegment, number>;
-  recencyBreakdown: Record<RecencySegment, number>;
+  segmentBreakdown: Record<string, number>;
+  recencyBreakdown: Record<string, number>;
   avgLifetimeValue: number;
 } {
-  const segmentBreakdown: Record<CustomerSegment, number> = {
+  // Initialize with known segments, but also count any others that appear
+  const segmentBreakdown: Record<string, number> = {
     'New/Low': 0,
     'Regular': 0,
     'Good': 0,
     'VIP': 0,
     'Whale': 0,
+    'Occasional': 0,
   };
 
-  const recencyBreakdown: Record<RecencySegment, number> = {
+  const recencyBreakdown: Record<string, number> = {
     'Active': 0,
     'Warm': 0,
     'Cool': 0,
     'Cold': 0,
     'Lost': 0,
+    'Dormant': 0,
+    'At Risk': 0,
   };
 
   let totalLTV = 0;
 
   for (const customer of customerData) {
-    segmentBreakdown[customer.customer_segment]++;
-    recencyBreakdown[customer.recency_segment]++;
+    // Handle customer segment - initialize if not present
+    const segment = customer.customer_segment;
+    if (segment) {
+      if (!(segment in segmentBreakdown)) {
+        segmentBreakdown[segment] = 0;
+      }
+      segmentBreakdown[segment]++;
+    }
+
+    // Handle recency segment - initialize if not present
+    const recency = customer.recency_segment;
+    if (recency) {
+      if (!(recency in recencyBreakdown)) {
+        recencyBreakdown[recency] = 0;
+      }
+      recencyBreakdown[recency]++;
+    }
+
     totalLTV += customer.lifetime_net_sales;
   }
 

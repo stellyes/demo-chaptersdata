@@ -65,8 +65,8 @@ export interface ProductRecord {
 }
 
 // Customer data types
-export type CustomerSegment = 'New/Low' | 'Regular' | 'Good' | 'VIP' | 'Whale';
-export type RecencySegment = 'Active' | 'Warm' | 'Cool' | 'Cold' | 'Lost';
+export type CustomerSegment = 'New/Low' | 'Regular' | 'Good' | 'VIP' | 'Whale' | 'Occasional' | string;
+export type RecencySegment = 'Active' | 'Warm' | 'Cool' | 'Cold' | 'Lost' | 'Dormant' | 'At Risk' | string;
 
 export interface CustomerRecord {
   [key: string]: string | number | CustomerSegment | RecencySegment | undefined;

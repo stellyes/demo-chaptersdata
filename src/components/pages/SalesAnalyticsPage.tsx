@@ -827,7 +827,10 @@ function CustomerAnalyticsTab() {
             <SectionLabel>By Lifetime Value</SectionLabel>
             <SectionTitle>Customer Value Segments</SectionTitle>
             <div className="space-y-3">
-              {Object.entries(customerSummary.segmentBreakdown).map(([segment, count]) => (
+              {Object.entries(customerSummary.segmentBreakdown)
+                .filter(([, count]) => count > 0)
+                .sort((a, b) => b[1] - a[1])
+                .map(([segment, count]) => (
                 <div key={segment} className="flex items-center justify-between p-3 bg-[var(--paper)] rounded">
                   <span className="font-medium">{segment}</span>
                   <div className="flex items-center gap-3">
@@ -844,7 +847,10 @@ function CustomerAnalyticsTab() {
             <SectionLabel>By Recency</SectionLabel>
             <SectionTitle>Customer Activity Segments</SectionTitle>
             <div className="space-y-3">
-              {Object.entries(customerSummary.recencyBreakdown).map(([segment, count]) => (
+              {Object.entries(customerSummary.recencyBreakdown)
+                .filter(([, count]) => count > 0)
+                .sort((a, b) => b[1] - a[1])
+                .map(([segment, count]) => (
                 <div key={segment} className="flex items-center justify-between p-3 bg-[var(--paper)] rounded">
                   <span className="font-medium">{segment}</span>
                   <div className="flex items-center gap-3">

@@ -91,30 +91,69 @@ interface SegmentPieChartProps {
 }
 
 export const SegmentPieChart = memo(function SegmentPieChart({ data }: SegmentPieChartProps) {
-  const chartData = Object.entries(data).map(([name, value]) => ({
-    name,
-    value,
-  }));
+  // Filter out zero/NaN values and sort by value descending
+  const chartData = Object.entries(data)
+    .filter(([, value]) => value > 0 && !isNaN(value))
+    .map(([name, value]) => ({
+      name,
+      value,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Calculate total for percentage
+  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+
+  // Custom label renderer - show labels for all visible segments (≥1%)
+  const renderLabel = ({ cx, cy, midAngle, outerRadius, percent, index }: {
+    cx: number;
+    cy: number;
+    midAngle: number;
+    outerRadius: number;
+    percent: number;
+    index: number;
+  }) => {
+    if (percent < 0.01) return null; // Don't show labels for segments < 1%
+
+    const RADIAN = Math.PI / 180;
+    // Position labels further out for small segments to avoid overlap
+    const radius = outerRadius + (percent < 0.1 ? 35 : 25);
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text
+        x={x}
+        y={y}
+        fill="#333"
+        textAnchor={x > cx ? 'start' : 'end'}
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={percent >= 0.1 ? 500 : 400}
+      >
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
 
   // Calculate dynamic height based on legend
   const legendRows = Math.ceil(chartData.length / 3);
   const legendHeight = legendRows * 28;
-  const chartHeight = 300 + legendHeight;
+  const chartHeight = 340 + legendHeight;
 
   return (
     <div style={{ width: '100%', height: chartHeight }}>
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 25, right: 30, bottom: legendHeight + 15, left: 30 }}>
+        <PieChart margin={{ top: 30, right: 50, bottom: legendHeight + 15, left: 50 }}>
           <Pie
             data={chartData}
             cx="50%"
-            cy="40%"
-            innerRadius={40}
-            outerRadius={75}
+            cy="38%"
+            innerRadius={45}
+            outerRadius={80}
             paddingAngle={2}
             dataKey="value"
-            label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-            labelLine={false}
+            label={renderLabel}
+            labelLine={{ stroke: '#999', strokeWidth: 1 }}
           >
             {chartData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
