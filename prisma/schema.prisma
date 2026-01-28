@@ -579,6 +579,27 @@ model DailyLearningJob {
   @@map("daily_learning_jobs")
 }
 
+// ============================================
+// CUSTOM QUERY JOBS
+// Async processing for AI custom queries
+// ============================================
+
+model CustomQueryJob {
+  id                  String    @id @default(uuid())
+  prompt              String    @db.Text
+  status              String    @default("pending") // pending, running, completed, failed
+  startedAt           DateTime  @default(now()) @map("started_at")
+  completedAt         DateTime? @map("completed_at")
+  result              String?   @db.Text
+  errorMessage        String?   @map("error_message") @db.Text
+  contextOptions      Json      @default("{}") @map("context_options")
+  selectedResearchIds Json      @default("[]") @map("selected_research_ids")
+
+  @@index([status])
+  @@index([startedAt])
+  @@map("custom_query_jobs")
+}
+
 model DailyDigest {
   id              String   @id @default(uuid())
   createdAt       DateTime @default(now()) @map("created_at")

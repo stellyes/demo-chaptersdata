@@ -109,16 +109,17 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
   const [customQueryResult, setCustomQueryResult] = useState('');
   const [customQueryLoading, setCustomQueryLoading] = useState(false);
   const [selectedResearchIds, setSelectedResearchIds] = useState<string[]>([]);
-  const [contextOptions, setContextOptions] = useState<DataContextOptions>({
+  // All data sources enabled by default - no longer user-selectable
+  const [contextOptions] = useState<DataContextOptions>({
     includeSales: true,
     includeBrands: true,
-    includeBrandMappings: true, // Include brand mappings by default for proper normalization context
+    includeBrandMappings: true,
     includeProducts: true,
-    includeCustomers: false,
-    includeInvoices: false,
+    includeCustomers: true,
+    includeInvoices: true,
     includeResearch: true,
-    includeSeo: false,
-    includeQrCodes: false,
+    includeSeo: true,
+    includeQrCodes: true,
   });
 
   const salesSummary = useMemo(() => calculateSalesSummary(salesData), [salesData]);
@@ -301,9 +302,92 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     }
   };
 
-  // Run custom query
+  // Current job ID for polling
+  const [currentQueryJobId, setCurrentQueryJobId] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearTimeout(pollingRef.current);
+      }
+    };
+  }, []);
+
+  // Poll for query job status
+  const pollQueryStatus = async (jobId: string) => {
+    try {
+      const response = await fetch(`/api/ai/query/status?jobId=${jobId}`);
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to check job status');
+      }
+
+      const { status, result: queryResult, error } = result.data;
+
+      if (status === 'completed' && queryResult) {
+        // Query complete - display result
+        setCustomQueryResult(queryResult);
+        setCustomQueryLoading(false);
+        setCurrentQueryJobId(null);
+
+        // Add the report to store for immediate visibility
+        addAiRecommendation({
+          id: jobId,
+          type: 'custom',
+          date: new Date().toISOString(),
+          analysis: queryResult,
+          summary: customPrompt.slice(0, 200),
+        });
+
+        // Show success notification
+        addNotification({
+          type: 'success',
+          title: 'Custom Query Complete!',
+          message: 'Your analysis is ready to view.',
+          actionLabel: 'View Results',
+          actionPage: 'recommendations',
+          actionTab: 'history',
+        });
+      } else if (status === 'failed') {
+        // Query failed
+        setCustomQueryResult(`Error: ${error || 'Query failed'}`);
+        setCustomQueryLoading(false);
+        setCurrentQueryJobId(null);
+
+        addNotification({
+          type: 'error',
+          title: 'Query Failed',
+          message: error || 'An error occurred during the query.',
+        });
+      } else {
+        // Still running - poll again in 3 seconds
+        pollingRef.current = setTimeout(() => pollQueryStatus(jobId), 3000);
+      }
+    } catch (error) {
+      console.error('Error polling query status:', error);
+      setCustomQueryResult(`Error: ${error instanceof Error ? error.message : 'Failed to check query status'}`);
+      setCustomQueryLoading(false);
+      setCurrentQueryJobId(null);
+
+      addNotification({
+        type: 'error',
+        title: 'Query Failed',
+        message: error instanceof Error ? error.message : 'Failed to check query status.',
+      });
+    }
+  };
+
+  // Run custom query (async with polling)
   const runCustomQuery = async () => {
     if (!customPrompt.trim()) return;
+
+    // Clear any existing polling
+    if (pollingRef.current) {
+      clearTimeout(pollingRef.current);
+    }
 
     setCustomQueryLoading(true);
     setCustomQueryResult('');
@@ -321,7 +405,7 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     });
 
     try {
-      // Server loads data directly from Aurora - we just send the prompt and options
+      // Submit the query - returns immediately with jobId
       const response = await fetch('/api/ai/query', {
         method: 'POST',
         headers: {
@@ -343,35 +427,25 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
 
       const result = await response.json();
 
-      if (result.success) {
-        setCustomQueryResult(result.data.analysis);
+      if (result.success && result.data.jobId) {
+        // Job created - start polling for results
+        setCurrentQueryJobId(result.data.jobId);
 
-        // Add the report to store for immediate visibility
-        if (result.data.report) {
-          addAiRecommendation(result.data.report);
-        }
-
-        // Show "Query Complete" notification with link to view
+        // Show processing notification
         addNotification({
-          type: 'success',
-          title: 'Custom Query Complete!',
-          message: 'Your analysis is ready to view.',
-          actionLabel: 'View Results',
-          actionPage: 'recommendations',
-          actionTab: 'history',
+          type: 'info',
+          title: 'Query Processing',
+          message: 'Your query is being analyzed. This may take a minute...',
         });
+
+        // Start polling after a short delay
+        pollingRef.current = setTimeout(() => pollQueryStatus(result.data.jobId), 2000);
       } else {
-        setCustomQueryResult(`Error: ${result.error}`);
-
-        // Show error notification
-        addNotification({
-          type: 'error',
-          title: 'Query Failed',
-          message: result.error || 'An error occurred during the query.',
-        });
+        throw new Error(result.error || 'Failed to create query job');
       }
     } catch (error) {
       setCustomQueryResult(`Error: ${error instanceof Error ? error.message : 'Query failed'}`);
+      setCustomQueryLoading(false);
 
       // Show error notification
       addNotification({
@@ -379,14 +453,7 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
         title: 'Query Failed',
         message: error instanceof Error ? error.message : 'An error occurred during the query.',
       });
-    } finally {
-      setCustomQueryLoading(false);
     }
-  };
-
-  // Toggle context option
-  const toggleContextOption = (key: keyof DataContextOptions) => {
-    setContextOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   // Toggle research document selection
@@ -581,52 +648,13 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
                   Ask Claude Anything
                 </h4>
                 <p className="text-sm text-[var(--muted)]">
-                  Query your business data with custom questions. Select which data sources to include for context.
+                  Query your business data with custom questions. All available data sources are included for comprehensive context.
                 </p>
               </div>
             </div>
 
-            {/* Data Context Selection */}
-            <div className="mb-6">
-              <SectionLabel>Data Context</SectionLabel>
-              <p className="text-xs md:text-sm text-[var(--muted)] mb-3">
-                Select which data sources to include in the query. More data = more context but higher token usage.
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 md:gap-3">
-                {[
-                  { key: 'includeSales', label: 'Sales', count: salesData.length || dataStatus.sales.count },
-                  { key: 'includeBrands', label: 'Brands', count: brandData.length || dataStatus.brands.count },
-                  { key: 'includeBrandMappings', label: 'Brand Map', count: brandMappingsSummary?.totalCanonicalBrands || dataStatus.mappings.count },
-                  { key: 'includeProducts', label: 'Products', count: productData.length || dataStatus.products.count },
-                  { key: 'includeCustomers', label: 'Customers', count: customerData.length || dataStatus.customers.count },
-                  { key: 'includeInvoices', label: 'Invoices', count: invoiceData.length || dataStatus.invoices.count },
-                  { key: 'includeResearch', label: 'Research', count: researchData.length || dataStatus.research.count },
-                  { key: 'includeSeo', label: 'SEO', count: seoData.length || dataStatus.seo.count },
-                  { key: 'includeQrCodes', label: 'QR Codes', count: qrCodesData.length || dataStatus.qrCodes.count },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => toggleContextOption(item.key as keyof DataContextOptions)}
-                    className={`flex items-center justify-between p-2 md:p-3 rounded-lg border transition-colors ${
-                      contextOptions[item.key as keyof DataContextOptions]
-                        ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--ink)]'
-                        : 'bg-[var(--paper)] border-[var(--border)] text-[var(--muted)]'
-                    }`}
-                  >
-                    <span className="text-xs md:text-sm font-medium truncate">{item.label}</span>
-                    <div className="flex items-center gap-1 md:gap-2 ml-1">
-                      <span className="text-xs">{item.count > 0 ? item.count.toLocaleString() : '0'}</span>
-                      {contextOptions[item.key as keyof DataContextOptions] && (
-                        <Check className="w-3 h-3 md:w-4 md:h-4 text-[var(--accent)] shrink-0" />
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Research Document Selection */}
-            {contextOptions.includeResearch && researchData.length > 0 && (
+            {researchData.length > 0 && (
               <div className="mb-6">
                 <SectionLabel>Select Research Documents (Optional)</SectionLabel>
                 <p className="text-sm text-[var(--muted)] mb-3">
@@ -693,7 +721,7 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
               {customQueryLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Analyzing...
+                  {currentQueryJobId ? 'Processing Query...' : 'Submitting...'}
                 </>
               ) : (
                 <>
@@ -702,6 +730,13 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
                 </>
               )}
             </button>
+
+            {/* Processing Status */}
+            {customQueryLoading && currentQueryJobId && (
+              <p className="text-sm text-[var(--muted)] mt-3">
+                Your query is being analyzed in the background. Results will appear automatically when ready.
+              </p>
+            )}
           </Card>
 
           {/* Custom Query Result */}

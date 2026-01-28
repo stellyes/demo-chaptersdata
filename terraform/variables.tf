@@ -59,3 +59,26 @@ variable "allowed_cidr_blocks" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+# ============================================
+# ASYNC JOB SYSTEM VARIABLES
+# ============================================
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name for data storage"
+  type        = string
+  default     = "retail-data-bcgr"
+}
+
+variable "anthropic_api_key" {
+  description = "Anthropic API key for Claude (sensitive)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "amplify_app_url" {
+  description = "Base URL of the Amplify application"
+  type        = string
+  default     = "https://bcsf.chaptersdata.com"
+}

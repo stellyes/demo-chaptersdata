@@ -999,8 +999,6 @@ function BudtenderAnalyticsTab() {
       name: string;
       store: string;
       totalSales: number;
-      totalTransactions: number;
-      totalCustomers: number;
       totalUnits: number;
       marginSum: number;
       dayCount: number;
@@ -1013,16 +1011,12 @@ function BudtenderAnalyticsTab() {
           name: record.employee_name,
           store: record.store,
           totalSales: 0,
-          totalTransactions: 0,
-          totalCustomers: 0,
           totalUnits: 0,
           marginSum: 0,
           dayCount: 0,
         };
       }
       byEmployee[key].totalSales += record.net_sales;
-      byEmployee[key].totalTransactions += record.tickets_count; // Use actual transaction count
-      byEmployee[key].totalCustomers += record.customers_count;
       byEmployee[key].totalUnits += record.units_sold;
       byEmployee[key].marginSum += record.gross_margin_pct;
       byEmployee[key].dayCount++;

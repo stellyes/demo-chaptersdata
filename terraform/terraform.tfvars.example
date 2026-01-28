@@ -19,3 +19,16 @@ publicly_accessible = true
 # Restrict to specific IPs in production
 # Example: ["10.0.0.0/8", "YOUR_OFFICE_IP/32"]
 allowed_cidr_blocks = ["0.0.0.0/0"]
+
+# ============================================
+# ASYNC JOB SYSTEM
+# ============================================
+
+# S3 bucket for data storage
+s3_bucket_name = "retail-data-bcgr"
+
+# Anthropic API key for Claude (store securely, don't commit to version control)
+# anthropic_api_key = "sk-ant-..."
+
+# Amplify application URL (for scheduled learning triggers)
+amplify_app_url = "https://bcsf.chaptersdata.com"

@@ -80,6 +80,77 @@ async function saveHealthCheck(report: HealthCheckReport): Promise<void> {
   );
 }
 
+// Minimal sales data needed for health check (only fields used by data-health.ts)
+interface HealthCheckSalesData {
+  date: string;
+  store: string;
+  store_id: string;
+  net_sales: number;
+  gross_margin_pct: number;
+  tickets_count: number;
+  customers_count: number;
+}
+
+// Minimal customer data needed for health check (only fields used by data-health.ts)
+interface HealthCheckCustomerData {
+  customer_id: string;
+  store_name: string;
+  lifetime_net_sales: number;
+  lifetime_visits: number;
+  customer_segment: string | null;
+  recency_segment: string | null;
+  last_visit_date: string;
+}
+
+// Load recent sales data from database (last 60 days for trend analysis)
+async function loadRecentSalesData(): Promise<HealthCheckSalesData[]> {
+  try {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const records = await prisma.salesRecord.findMany({
+      where: { date: { gte: sixtyDaysAgo } },
+      orderBy: { date: 'desc' },
+    });
+
+    return records.map((r) => ({
+      date: r.date.toISOString().split('T')[0],
+      store: r.storeName || r.storeId,
+      store_id: r.storeId,
+      net_sales: Number(r.netSales),
+      gross_margin_pct: Number(r.grossMarginPct),
+      tickets_count: r.ticketsCount,
+      customers_count: r.customersCount,
+    }));
+  } catch (error) {
+    console.error('Error loading sales data for health check:', error);
+    return [];
+  }
+}
+
+// Load customer data from database
+async function loadCustomerData(): Promise<HealthCheckCustomerData[]> {
+  try {
+    const records = await prisma.customer.findMany({
+      orderBy: { lifetimeNetSales: 'desc' },
+      take: 1000, // Top 1000 customers
+    });
+
+    return records.map((c) => ({
+      customer_id: c.customerId,
+      store_name: c.storeName,
+      lifetime_net_sales: Number(c.lifetimeNetSales),
+      lifetime_visits: c.lifetimeVisits,
+      customer_segment: c.customerSegment,
+      recency_segment: c.recencySegment,
+      last_visit_date: c.lastVisitDate?.toISOString().split('T')[0] || '',
+    }));
+  } catch (error) {
+    console.error('Error loading customer data for health check:', error);
+    return [];
+  }
+}
+
 // Load recent invoice data from database (last 60 days for trend analysis)
 async function loadRecentInvoiceData(): Promise<InvoiceLineItem[]> {
   try {
@@ -208,40 +279,32 @@ export async function GET(request: NextRequest) {
 }
 
 // POST - Trigger new health check
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const body = await request.json().catch(() => ({}));
+    // Load all data directly from Aurora database (server-side)
+    // This ensures health check works regardless of frontend state
+    const [salesData, customerData, invoiceData, brandMappings] = await Promise.all([
+      loadRecentSalesData(),
+      loadCustomerData(),
+      loadRecentInvoiceData(),
+      loadBrandMappings(),
+    ]);
 
-    // Accept data directly in request body or load from other endpoints
-    const inputData: HealthCheckInput = {};
+    // Cast to expected types - our minimal data includes all fields used by health check
+    const inputData: HealthCheckInput = {
+      sales: salesData as unknown as HealthCheckInput['sales'],
+      customers: customerData as unknown as HealthCheckInput['customers'],
+      invoices: invoiceData,
+      brandMappings,
+    };
 
-    // If data provided in body, use it
-    if (body.sales) inputData.sales = body.sales;
-    if (body.brands) inputData.brands = body.brands;
-    if (body.customers) inputData.customers = body.customers;
-
-    // Load invoice data from database (not sent from frontend to avoid huge payloads)
-    // Only load recent data needed for trend analysis
-    inputData.invoices = await loadRecentInvoiceData();
-
-    // Load brand mappings from S3 for alias checking
-    inputData.brandMappings = await loadBrandMappings();
-
-    // If no data provided, we need to fetch it
-    // In a real scenario, this would call the other API endpoints
-    // For now, we'll run with whatever data is provided
-    if (!inputData.sales && !inputData.invoices && !inputData.customers) {
-      // Return instructions for the client to provide data
+    // Check if we have any data to analyze
+    if (salesData.length === 0 && invoiceData.length === 0 && customerData.length === 0) {
       return NextResponse.json({
         success: true,
         data: {
-          message: 'Health check requires data. Please provide sales, invoices, and/or customers in the request body.',
-          example: {
-            sales: '[array of sales records]',
-            invoices: '[array of invoice line items]',
-            customers: '[array of customer records]',
-            brands: '[array of brand records]',
-          },
+          report: null,
+          message: 'No data available in the database to analyze. Upload sales, invoice, or customer data first.',
         },
       });
     }
