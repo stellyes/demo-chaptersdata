@@ -111,6 +111,7 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
   const [customQueryLoading, setCustomQueryLoading] = useState(false);
   const [selectedResearchIds, setSelectedResearchIds] = useState<string[]>([]);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportMenuReportId, setExportMenuReportId] = useState<string | null>(null);
   // All data sources enabled by default - no longer user-selectable
   const [contextOptions] = useState<DataContextOptions>({
     includeSales: true,
@@ -484,6 +485,35 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     }
 
     setShowExportMenu(false);
+  };
+
+  // Export past report
+  const handleExportPastReport = (
+    report: { id: string; type: string; date: string; summary?: string; analysis: string },
+    exportFormat: 'print' | 'markdown'
+  ) => {
+    let reportDate: Date;
+    try {
+      reportDate = new Date(report.date);
+    } catch {
+      reportDate = new Date();
+    }
+
+    const timestamp = format(reportDate, 'yyyy-MM-dd-HHmm');
+    const options = {
+      filename: `${report.type}-analysis-${timestamp}`,
+      title: `${report.type.charAt(0).toUpperCase() + report.type.slice(1)} Analysis`,
+      subtitle: report.summary || undefined,
+      generatedAt: reportDate,
+    };
+
+    if (exportFormat === 'markdown') {
+      downloadAsMarkdown(report.analysis, options);
+    } else {
+      openPrintWindow(report.analysis, options);
+    }
+
+    setExportMenuReportId(null);
   };
 
   const analysisCards = [
@@ -912,6 +942,43 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
                         </button>
                         <AnimatedCollapse isOpen={isExpanded}>
                           <div className="p-4 border-t border-[var(--border)] bg-[var(--white)]">
+                            {/* Export button row */}
+                            <div className="flex justify-end mb-4">
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExportMenuReportId(exportMenuReportId === report.id ? null : report.id);
+                                  }}
+                                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--paper)] rounded transition-colors"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Export
+                                </button>
+                                {exportMenuReportId === report.id && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-10"
+                                      onClick={() => setExportMenuReportId(null)}
+                                    />
+                                    <div className="absolute right-0 top-full mt-1 bg-[var(--white)] border border-[var(--border)] rounded-lg shadow-lg z-20 py-1 min-w-[160px]">
+                                      <button
+                                        onClick={() => handleExportPastReport(report, 'print')}
+                                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
+                                      >
+                                        Print / Save PDF
+                                      </button>
+                                      <button
+                                        onClick={() => handleExportPastReport(report, 'markdown')}
+                                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
+                                      >
+                                        Markdown (.md)
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                             {report.summary && (
                               <div className="mb-4 p-3 bg-[var(--accent)]/5 rounded-lg">
                                 <p className="text-sm font-medium text-[var(--ink)]">Question</p>
