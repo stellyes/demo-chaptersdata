@@ -34,63 +34,245 @@ export interface DailyDigestExport {
   confidenceScore: number;
 }
 
-// Print-optimized CSS styles
+// Print-optimized CSS styles - Academic/LaTeX-like formatting
 const PRINT_STYLES = `
   @media print {
+    @page {
+      margin: 1in;
+      @bottom-center {
+        content: counter(page);
+      }
+    }
     body {
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: 11pt;
-      line-height: 1.6;
+      font-family: 'Computer Modern Serif', 'Latin Modern Roman', 'Times New Roman', Georgia, serif;
+      font-size: 10pt;
+      line-height: 1.4;
       color: #000;
       max-width: none;
       padding: 0;
+      counter-reset: page;
     }
-    h1 { font-size: 24pt; margin-bottom: 8pt; border-bottom: 2px solid #000; padding-bottom: 8pt; }
-    h2 { font-size: 16pt; margin-top: 20pt; margin-bottom: 8pt; page-break-after: avoid; color: #333; }
-    h3 { font-size: 13pt; margin-top: 14pt; margin-bottom: 6pt; page-break-after: avoid; }
-    p { margin-bottom: 8pt; orphans: 3; widows: 3; }
-    ul, ol { margin-left: 20pt; margin-bottom: 10pt; }
-    li { margin-bottom: 4pt; }
-    table { border-collapse: collapse; width: 100%; margin: 12pt 0; page-break-inside: avoid; }
-    th, td { border: 1px solid #666; padding: 6pt 8pt; text-align: left; font-size: 10pt; }
-    th { background: #f0f0f0; font-weight: bold; }
-    .header { border-bottom: 2px solid #000; padding-bottom: 12pt; margin-bottom: 20pt; }
-    .meta { color: #666; font-size: 10pt; font-style: italic; margin-top: 4pt; }
-    .section { page-break-inside: avoid; margin-bottom: 16pt; }
-    .metric-grid { display: flex; gap: 20pt; flex-wrap: wrap; margin: 12pt 0; }
-    .metric { background: #f5f5f5; padding: 8pt 12pt; border-radius: 4pt; }
-    .metric-value { font-size: 18pt; font-weight: bold; color: #1a1a1a; }
-    .metric-label { font-size: 9pt; color: #666; }
-    hr { border: none; border-top: 1px solid #ccc; margin: 16pt 0; }
-    code { background: #f5f5f5; padding: 2pt 4pt; font-family: 'Courier New', monospace; font-size: 10pt; }
-    pre { background: #f5f5f5; padding: 10pt; overflow-x: auto; font-size: 9pt; }
-    blockquote { border-left: 3pt solid #ccc; padding-left: 12pt; margin-left: 0; color: #555; }
-    @page { margin: 0.75in; }
+    h1 {
+      font-size: 17pt;
+      font-weight: bold;
+      margin-top: 0;
+      margin-bottom: 12pt;
+      text-align: left;
+    }
+    h2 {
+      font-size: 12pt;
+      font-weight: bold;
+      margin-top: 18pt;
+      margin-bottom: 6pt;
+      page-break-after: avoid;
+      border-bottom: 0.5pt solid #000;
+      padding-bottom: 3pt;
+    }
+    h3 {
+      font-size: 10pt;
+      font-weight: bold;
+      margin-top: 12pt;
+      margin-bottom: 4pt;
+      page-break-after: avoid;
+    }
+    h4 {
+      font-size: 10pt;
+      font-weight: bold;
+      margin-top: 10pt;
+      margin-bottom: 3pt;
+    }
+    p {
+      margin-top: 0;
+      margin-bottom: 6pt;
+      text-align: justify;
+      orphans: 3;
+      widows: 3;
+    }
+    ul, ol {
+      margin-left: 18pt;
+      margin-top: 4pt;
+      margin-bottom: 8pt;
+      padding-left: 0;
+    }
+    li {
+      margin-bottom: 2pt;
+      text-align: left;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8pt 0;
+      page-break-inside: avoid;
+      font-size: 9pt;
+    }
+    th, td {
+      border: 0.5pt solid #000;
+      padding: 4pt 6pt;
+      text-align: left;
+    }
+    th {
+      font-weight: bold;
+    }
+    .document-header {
+      margin-bottom: 16pt;
+    }
+    .document-title {
+      font-size: 17pt;
+      font-weight: bold;
+      margin-bottom: 8pt;
+    }
+    .document-subtitle {
+      font-size: 10pt;
+      font-style: italic;
+      color: #333;
+      margin-bottom: 4pt;
+    }
+    .document-date {
+      font-size: 10pt;
+      font-style: italic;
+      color: #333;
+      margin-bottom: 12pt;
+    }
+    .title-rule {
+      border: none;
+      border-top: 0.5pt solid #000;
+      margin: 12pt 0;
+    }
+    hr {
+      border: none;
+      border-top: 0.5pt solid #000;
+      margin: 12pt 0;
+    }
+    code {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 9pt;
+    }
+    pre {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 9pt;
+      margin: 8pt 0;
+      padding: 8pt;
+      border: 0.5pt solid #ccc;
+      overflow-x: auto;
+    }
+    blockquote {
+      margin-left: 18pt;
+      margin-right: 18pt;
+      font-style: italic;
+    }
+    .page-number {
+      position: fixed;
+      bottom: 0.5in;
+      width: 100%;
+      text-align: center;
+      font-size: 10pt;
+    }
   }
   /* Screen styles for preview */
   body {
-    max-width: 800px;
+    max-width: 650px;
     margin: 0 auto;
     padding: 40px 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #1a1a1a;
+    font-family: 'Times New Roman', Georgia, serif;
+    font-size: 12pt;
+    line-height: 1.4;
+    color: #000;
   }
-  h1 { font-size: 28px; margin-bottom: 8px; }
-  h2 { font-size: 20px; margin-top: 32px; margin-bottom: 12px; color: #333; border-bottom: 1px solid #e5e5e5; padding-bottom: 8px; }
-  h3 { font-size: 16px; margin-top: 20px; margin-bottom: 8px; }
-  .header { border-bottom: 2px solid #1a1a1a; padding-bottom: 16px; margin-bottom: 24px; }
-  .meta { color: #666; font-size: 13px; font-style: italic; }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-  th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
-  th { background: #f8f8f8; font-weight: 600; }
-  ul, ol { margin-left: 24px; margin-bottom: 16px; }
-  li { margin-bottom: 6px; }
-  hr { border: none; border-top: 1px solid #e5e5e5; margin: 24px 0; }
-  code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
-  pre { background: #f5f5f5; padding: 16px; border-radius: 6px; overflow-x: auto; }
-  blockquote { border-left: 4px solid #ddd; padding-left: 16px; margin-left: 0; color: #555; }
+  h1 {
+    font-size: 17pt;
+    font-weight: bold;
+    margin-bottom: 12px;
+  }
+  h2 {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-top: 24px;
+    margin-bottom: 8px;
+    border-bottom: 0.5pt solid #000;
+    padding-bottom: 4px;
+  }
+  h3 {
+    font-size: 10pt;
+    font-weight: bold;
+    margin-top: 16px;
+    margin-bottom: 6px;
+  }
+  h4 {
+    font-size: 10pt;
+    font-weight: bold;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+  p {
+    margin-bottom: 8px;
+    text-align: justify;
+  }
+  .document-header {
+    margin-bottom: 20px;
+  }
+  .document-title {
+    font-size: 17pt;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+  .document-subtitle {
+    font-size: 10pt;
+    font-style: italic;
+    color: #333;
+    margin-bottom: 4px;
+  }
+  .document-date {
+    font-size: 10pt;
+    font-style: italic;
+    color: #333;
+  }
+  .title-rule {
+    border: none;
+    border-top: 0.5pt solid #000;
+    margin: 16px 0;
+  }
+  hr {
+    border: none;
+    border-top: 0.5pt solid #000;
+    margin: 16px 0;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 10pt;
+  }
+  th, td {
+    border: 0.5pt solid #000;
+    padding: 6px 8px;
+    text-align: left;
+  }
+  th {
+    font-weight: bold;
+  }
+  ul, ol {
+    margin-left: 24px;
+    margin-bottom: 12px;
+  }
+  li {
+    margin-bottom: 4px;
+  }
+  code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10pt;
+  }
+  pre {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10pt;
+    padding: 12px;
+    border: 0.5pt solid #ccc;
+    overflow-x: auto;
+  }
+  blockquote {
+    margin-left: 24px;
+    margin-right: 24px;
+    font-style: italic;
+  }
 `;
 
 /**
@@ -178,7 +360,7 @@ function convertMarkdownToHTML(markdown: string): string {
 }
 
 /**
- * Build print-optimized HTML document
+ * Build print-optimized HTML document with academic/LaTeX-like formatting
  */
 function buildPrintableHTML(markdownContent: string, options: ExportOptions): string {
   const date = format(options.generatedAt || new Date(), 'MMMM d, yyyy h:mm a');
@@ -193,10 +375,11 @@ function buildPrintableHTML(markdownContent: string, options: ExportOptions): st
   <style>${PRINT_STYLES}</style>
 </head>
 <body>
-  <div class="header">
-    <h1>${options.title || 'Export'}</h1>
-    ${options.subtitle ? `<p class="meta">${options.subtitle}</p>` : ''}
-    <p class="meta">Generated: ${date}</p>
+  <div class="document-header">
+    <div class="document-title">${options.title || 'Export'}</div>
+    ${options.subtitle ? `<div class="document-subtitle">${options.subtitle}</div>` : ''}
+    <div class="document-date">Generated: ${date}</div>
+    <hr class="title-rule">
   </div>
   <div class="content">
     ${htmlContent}
