@@ -54,23 +54,6 @@ const PRINT_STYLES = `
       margin: 0;
       padding: 0;
     }
-    /* Page numbers via CSS counter */
-    body {
-      counter-reset: page;
-    }
-    .page-footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 10pt;
-      padding-bottom: 0.25in;
-    }
-    .page-footer::after {
-      counter-increment: page;
-      content: counter(page);
-    }
     /* Document header */
     .document-header {
       margin-bottom: 10pt;
@@ -104,6 +87,18 @@ const PRINT_STYLES = `
       font-weight: bold;
       margin: 14pt 0 6pt 0;
       line-height: 1.2;
+      text-align: center;
+      position: relative;
+      padding-bottom: 8pt;
+    }
+    h1::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2in;
+      border-bottom: 0.5pt solid #000;
     }
     h2 {
       font-size: 11pt;
@@ -130,7 +125,8 @@ const PRINT_STYLES = `
     /* Paragraphs */
     p {
       margin: 0 0 4pt 0;
-      text-align: left;
+      text-align: justify;
+      text-justify: inter-word;
       orphans: 3;
       widows: 3;
       line-height: 1.2;
@@ -239,6 +235,18 @@ const PRINT_STYLES = `
     font-weight: bold;
     margin: 14pt 0 6pt 0;
     line-height: 1.2;
+    text-align: center;
+    position: relative;
+    padding-bottom: 8pt;
+  }
+  h1::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2in;
+    border-bottom: 0.5pt solid #000;
   }
   h2 {
     font-size: 11pt;
@@ -262,6 +270,8 @@ const PRINT_STYLES = `
   }
   p {
     margin: 0 0 4pt 0;
+    text-align: justify;
+    text-justify: inter-word;
     line-height: 1.2;
   }
   ul, ol {
@@ -308,9 +318,6 @@ const PRINT_STYLES = `
   blockquote {
     margin: 4pt 16pt;
     font-style: italic;
-  }
-  .page-footer {
-    display: none;
   }
 `;
 
@@ -423,7 +430,6 @@ function buildPrintableHTML(markdownContent: string, options: ExportOptions): st
   <div class="content">
     ${htmlContent}
   </div>
-  <div class="page-footer"></div>
 </body>
 </html>`;
 }
