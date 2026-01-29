@@ -36,112 +36,142 @@ export interface DailyDigestExport {
 
 // Print-optimized CSS styles - Academic/LaTeX-like formatting
 const PRINT_STYLES = `
+  /* Print styles */
   @media print {
     @page {
-      margin: 1in;
-      @bottom-center {
-        content: counter(page);
-      }
+      size: letter;
+      margin: 1in 1.25in;
+    }
+    html {
+      font-size: 10pt;
     }
     body {
-      font-family: 'Computer Modern Serif', 'Latin Modern Roman', 'Times New Roman', Georgia, serif;
+      font-family: 'Times New Roman', 'Times', Georgia, serif;
       font-size: 10pt;
-      line-height: 1.4;
+      line-height: 1.2;
       color: #000;
       max-width: none;
+      margin: 0;
       padding: 0;
+    }
+    /* Page numbers via CSS counter */
+    body {
       counter-reset: page;
     }
-    h1 {
-      font-size: 17pt;
+    .page-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 10pt;
+      padding-bottom: 0.25in;
+    }
+    .page-footer::after {
+      counter-increment: page;
+      content: counter(page);
+    }
+    /* Document header */
+    .document-header {
+      margin-bottom: 10pt;
+    }
+    .document-title {
+      font-size: 14pt;
       font-weight: bold;
-      margin-top: 0;
-      margin-bottom: 12pt;
-      text-align: left;
+      margin-bottom: 6pt;
+      line-height: 1.2;
+    }
+    .document-subtitle {
+      font-size: 10pt;
+      font-style: italic;
+      margin-bottom: 2pt;
+      line-height: 1.2;
+    }
+    .document-date {
+      font-size: 10pt;
+      font-style: italic;
+      margin-bottom: 8pt;
+      line-height: 1.2;
+    }
+    .title-rule {
+      border: none;
+      border-top: 0.4pt solid #000;
+      margin: 8pt 0 12pt 0;
+    }
+    /* Headings */
+    h1 {
+      font-size: 14pt;
+      font-weight: bold;
+      margin: 14pt 0 6pt 0;
+      line-height: 1.2;
     }
     h2 {
-      font-size: 12pt;
+      font-size: 11pt;
       font-weight: bold;
-      margin-top: 18pt;
-      margin-bottom: 6pt;
+      margin: 12pt 0 4pt 0;
+      padding-bottom: 2pt;
+      border-bottom: 0.4pt solid #000;
+      line-height: 1.2;
       page-break-after: avoid;
-      border-bottom: 0.5pt solid #000;
-      padding-bottom: 3pt;
     }
     h3 {
       font-size: 10pt;
       font-weight: bold;
-      margin-top: 12pt;
-      margin-bottom: 4pt;
+      margin: 8pt 0 2pt 0;
+      line-height: 1.2;
       page-break-after: avoid;
     }
     h4 {
       font-size: 10pt;
       font-weight: bold;
-      margin-top: 10pt;
-      margin-bottom: 3pt;
+      margin: 6pt 0 2pt 0;
+      line-height: 1.2;
     }
+    /* Paragraphs */
     p {
-      margin-top: 0;
-      margin-bottom: 6pt;
-      text-align: justify;
+      margin: 0 0 4pt 0;
+      text-align: left;
       orphans: 3;
       widows: 3;
+      line-height: 1.2;
     }
+    /* Lists - very compact */
     ul, ol {
-      margin-left: 18pt;
-      margin-top: 4pt;
-      margin-bottom: 8pt;
-      padding-left: 0;
+      margin: 2pt 0 6pt 16pt;
+      padding: 0;
+      line-height: 1.2;
     }
     li {
-      margin-bottom: 2pt;
-      text-align: left;
+      margin: 0 0 1pt 0;
+      padding: 0;
+      line-height: 1.2;
     }
+    li > ul, li > ol {
+      margin: 1pt 0 1pt 14pt;
+    }
+    /* Tables */
     table {
       border-collapse: collapse;
       width: 100%;
-      margin: 8pt 0;
-      page-break-inside: avoid;
+      margin: 6pt 0;
       font-size: 9pt;
+      line-height: 1.2;
+      page-break-inside: avoid;
     }
     th, td {
-      border: 0.5pt solid #000;
-      padding: 4pt 6pt;
+      border: 0.4pt solid #000;
+      padding: 3pt 5pt;
       text-align: left;
+      vertical-align: top;
     }
     th {
       font-weight: bold;
     }
-    .document-header {
-      margin-bottom: 16pt;
-    }
-    .document-title {
-      font-size: 17pt;
-      font-weight: bold;
-      margin-bottom: 8pt;
-    }
-    .document-subtitle {
-      font-size: 10pt;
-      font-style: italic;
-      color: #333;
-      margin-bottom: 4pt;
-    }
-    .document-date {
-      font-size: 10pt;
-      font-style: italic;
-      color: #333;
-      margin-bottom: 12pt;
-    }
-    .title-rule {
-      border: none;
-      border-top: 0.5pt solid #000;
-      margin: 12pt 0;
-    }
+    /* Other elements */
     hr {
       border: none;
-      border-top: 0.5pt solid #000;
-      margin: 12pt 0;
+      border-top: 0.4pt solid #000;
+      margin: 8pt 0;
     }
     code {
       font-family: 'Courier New', Courier, monospace;
@@ -149,129 +179,138 @@ const PRINT_STYLES = `
     }
     pre {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 9pt;
-      margin: 8pt 0;
-      padding: 8pt;
-      border: 0.5pt solid #ccc;
+      font-size: 8pt;
+      margin: 4pt 0;
+      padding: 6pt;
+      border: 0.4pt solid #999;
       overflow-x: auto;
+      line-height: 1.15;
     }
     blockquote {
-      margin-left: 18pt;
-      margin-right: 18pt;
+      margin: 4pt 16pt;
+      font-style: italic;
+      line-height: 1.2;
+    }
+    strong {
+      font-weight: bold;
+    }
+    em {
       font-style: italic;
     }
-    .page-number {
-      position: fixed;
-      bottom: 0.5in;
-      width: 100%;
-      text-align: center;
-      font-size: 10pt;
-    }
   }
-  /* Screen styles for preview */
+  /* Screen preview styles */
   body {
-    max-width: 650px;
+    max-width: 6.5in;
     margin: 0 auto;
-    padding: 40px 20px;
-    font-family: 'Times New Roman', Georgia, serif;
-    font-size: 12pt;
-    line-height: 1.4;
+    padding: 0.75in 1in;
+    font-family: 'Times New Roman', 'Times', Georgia, serif;
+    font-size: 10pt;
+    line-height: 1.2;
     color: #000;
-  }
-  h1 {
-    font-size: 17pt;
-    font-weight: bold;
-    margin-bottom: 12px;
-  }
-  h2 {
-    font-size: 12pt;
-    font-weight: bold;
-    margin-top: 24px;
-    margin-bottom: 8px;
-    border-bottom: 0.5pt solid #000;
-    padding-bottom: 4px;
-  }
-  h3 {
-    font-size: 10pt;
-    font-weight: bold;
-    margin-top: 16px;
-    margin-bottom: 6px;
-  }
-  h4 {
-    font-size: 10pt;
-    font-weight: bold;
-    margin-top: 12px;
-    margin-bottom: 4px;
-  }
-  p {
-    margin-bottom: 8px;
-    text-align: justify;
+    background: #fff;
   }
   .document-header {
-    margin-bottom: 20px;
+    margin-bottom: 10pt;
   }
   .document-title {
-    font-size: 17pt;
+    font-size: 14pt;
     font-weight: bold;
-    margin-bottom: 10px;
+    margin-bottom: 6pt;
+    line-height: 1.2;
   }
   .document-subtitle {
     font-size: 10pt;
     font-style: italic;
-    color: #333;
-    margin-bottom: 4px;
+    margin-bottom: 2pt;
+    line-height: 1.2;
   }
   .document-date {
     font-size: 10pt;
     font-style: italic;
-    color: #333;
+    line-height: 1.2;
   }
   .title-rule {
     border: none;
-    border-top: 0.5pt solid #000;
-    margin: 16px 0;
+    border-top: 0.4pt solid #000;
+    margin: 8pt 0 12pt 0;
+  }
+  h1 {
+    font-size: 14pt;
+    font-weight: bold;
+    margin: 14pt 0 6pt 0;
+    line-height: 1.2;
+  }
+  h2 {
+    font-size: 11pt;
+    font-weight: bold;
+    margin: 12pt 0 4pt 0;
+    padding-bottom: 2pt;
+    border-bottom: 0.4pt solid #000;
+    line-height: 1.2;
+  }
+  h3 {
+    font-size: 10pt;
+    font-weight: bold;
+    margin: 8pt 0 2pt 0;
+    line-height: 1.2;
+  }
+  h4 {
+    font-size: 10pt;
+    font-weight: bold;
+    margin: 6pt 0 2pt 0;
+    line-height: 1.2;
+  }
+  p {
+    margin: 0 0 4pt 0;
+    line-height: 1.2;
+  }
+  ul, ol {
+    margin: 2pt 0 6pt 16pt;
+    padding: 0;
+    line-height: 1.2;
+  }
+  li {
+    margin: 0 0 1pt 0;
+    line-height: 1.2;
   }
   hr {
     border: none;
-    border-top: 0.5pt solid #000;
-    margin: 16px 0;
+    border-top: 0.4pt solid #000;
+    margin: 8pt 0;
   }
   table {
     border-collapse: collapse;
     width: 100%;
-    margin: 12px 0;
-    font-size: 10pt;
+    margin: 6pt 0;
+    font-size: 9pt;
+    line-height: 1.2;
   }
   th, td {
-    border: 0.5pt solid #000;
-    padding: 6px 8px;
+    border: 0.4pt solid #000;
+    padding: 3pt 5pt;
     text-align: left;
   }
   th {
     font-weight: bold;
   }
-  ul, ol {
-    margin-left: 24px;
-    margin-bottom: 12px;
-  }
-  li {
-    margin-bottom: 4px;
-  }
   code {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 10pt;
+    font-size: 9pt;
   }
   pre {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 10pt;
-    padding: 12px;
-    border: 0.5pt solid #ccc;
+    font-size: 8pt;
+    padding: 6pt;
+    border: 0.4pt solid #999;
     overflow-x: auto;
+    line-height: 1.15;
   }
   blockquote {
-    margin-left: 24px;
-    margin-right: 24px;
+    margin: 4pt 16pt;
     font-style: italic;
+  }
+  .page-footer {
+    display: none;
   }
 `;
 
@@ -384,6 +423,7 @@ function buildPrintableHTML(markdownContent: string, options: ExportOptions): st
   <div class="content">
     ${htmlContent}
   </div>
+  <div class="page-footer"></div>
 </body>
 </html>`;
 }
