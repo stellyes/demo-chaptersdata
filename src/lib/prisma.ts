@@ -78,6 +78,7 @@ export async function initializePrisma(): Promise<PrismaClient> {
 /**
  * Wrapper for database operations that ensures credentials are valid.
  * Automatically retries with fresh credentials if authentication fails.
+ * Also handles connection pool timeouts with disconnect/reconnect.
  */
 export async function withPrisma<T>(operation: (client: PrismaClient) => Promise<T>): Promise<T> {
   try {
@@ -90,6 +91,19 @@ export async function withPrisma<T>(operation: (client: PrismaClient) => Promise
         errorMessage.includes('password authentication failed')) {
       console.warn('Database authentication failed, refreshing credentials...');
       clearDatabaseUrlCache();
+      await initializePrisma();
+      return await operation(prisma);
+    }
+
+    // Check if this is a connection pool timeout
+    if (errorMessage.includes('Timed out fetching a new connection') ||
+        errorMessage.includes('connection pool')) {
+      console.warn('Database connection pool timeout, attempting reconnect...');
+      try {
+        await prisma.$disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
       await initializePrisma();
       return await operation(prisma);
     }

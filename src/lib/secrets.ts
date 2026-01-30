@@ -50,7 +50,19 @@ export async function getDatabaseUrl(): Promise<string> {
     // URL-encode the password to handle special characters
     const encodedPassword = encodeURIComponent(secret.password);
 
-    cachedDatabaseUrl = `postgresql://${secret.username}:${encodedPassword}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require`;
+    // Connection pool parameters optimized for serverless environments:
+    // - connection_limit: Max connections in pool (low for serverless to avoid exhausting DB)
+    // - pool_timeout: Seconds to wait for a connection from the pool
+    // - connect_timeout: Seconds to wait for new connection to DB
+    // - socket_timeout: Seconds to wait for socket operations
+    const poolParams = [
+      'sslmode=require',
+      'connection_limit=5',      // Low limit for serverless - prevents connection exhaustion
+      'pool_timeout=10',         // Wait up to 10s for connection from pool
+      'connect_timeout=10',      // Wait up to 10s to establish new connection
+    ].join('&');
+
+    cachedDatabaseUrl = `postgresql://${secret.username}:${encodedPassword}@${DB_HOST}:${DB_PORT}/${DB_NAME}?${poolParams}`;
     cacheExpiry = Date.now() + CACHE_TTL_MS;
 
     return cachedDatabaseUrl;
