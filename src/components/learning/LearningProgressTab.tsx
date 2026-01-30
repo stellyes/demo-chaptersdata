@@ -68,7 +68,12 @@ interface CurrentJobStatus {
     phase: string;
     startedAt: string;
     progress: number;
+    runningForMinutes?: number;
   } | null;
+  recovered?: {
+    jobId: string;
+    message: string;
+  };
 }
 
 export function LearningProgressTab() {
@@ -392,9 +397,18 @@ export function LearningProgressTab() {
               <span className="text-sm font-medium text-blue-800">
                 {getPhaseLabel(currentStatus.currentJob.phase)}
               </span>
-              <span className="text-sm text-blue-600">
-                {Math.round(currentStatus.currentJob.progress)}%
-              </span>
+              <div className="flex items-center gap-3">
+                {currentStatus.currentJob.runningForMinutes !== undefined && (
+                  <span className="text-xs text-blue-500">
+                    {currentStatus.currentJob.runningForMinutes < 60
+                      ? `${currentStatus.currentJob.runningForMinutes}m`
+                      : `${Math.floor(currentStatus.currentJob.runningForMinutes / 60)}h ${currentStatus.currentJob.runningForMinutes % 60}m`}
+                  </span>
+                )}
+                <span className="text-sm text-blue-600">
+                  {Math.round(currentStatus.currentJob.progress)}%
+                </span>
+              </div>
             </div>
             <div className="w-full bg-blue-200 rounded-full h-2">
               <div
@@ -402,6 +416,15 @@ export function LearningProgressTab() {
                 style={{ width: `${currentStatus.currentJob.progress}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Recovered Job Notice */}
+        {currentStatus.recovered && (
+          <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm text-amber-800">
+              ⚠️ {currentStatus.recovered.message}
+            </p>
           </div>
         )}
       </Card>

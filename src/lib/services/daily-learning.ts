@@ -174,6 +174,9 @@ export class DailyLearningService {
   }): Promise<{ jobId: string; digest: DailyDigestContent | null }> {
     const { forceRun = false, skipWebResearch = false } = options || {};
 
+    // Clean up any stale jobs before checking for existing jobs
+    await this.cleanupStaleJobs();
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -367,7 +370,52 @@ Return JSON:
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Failed to parse data review response');
 
-    return JSON.parse(jsonMatch[0]) as DataReviewResult;
+    try {
+      return JSON.parse(jsonMatch[0]) as DataReviewResult;
+    } catch (parseError) {
+      // If JSON parsing fails, try to clean up common issues
+      console.error('JSON parse error in phase1DataReview, attempting cleanup...');
+      console.error('Parse error details:', parseError instanceof Error ? parseError.message : 'Unknown');
+
+      let cleanedJson = jsonMatch[0]
+        .replace(/,\s*}/g, '}')  // Remove trailing commas before }
+        .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
+        .replace(/[\x00-\x1F\x7F]/g, ' ')  // Remove control characters
+        .replace(/\n\s*\n/g, '\n')  // Remove extra newlines
+        .replace(/"\s*\n\s*"/g, '", "')  // Fix missing commas between string elements
+        .replace(/}\s*\n\s*{/g, '}, {')  // Fix missing commas between objects
+        .replace(/]\s*\n\s*\[/g, '], [');  // Fix missing commas between arrays
+
+      try {
+        return JSON.parse(cleanedJson) as DataReviewResult;
+      } catch (secondError) {
+        // Last resort: try to extract just the structure we need
+        console.error('JSON cleanup failed, attempting manual extraction...');
+        console.error('Raw response preview:', responseText.substring(0, 1000));
+
+        // Try a more forgiving approach: extract key fields manually
+        try {
+          const summaryMatch = responseText.match(/"summary"\s*:\s*"([^"]*(?:\\"[^"]*)*)"/);
+          const result: DataReviewResult = {
+            summary: summaryMatch ? summaryMatch[1].replace(/\\"/g, '"') : 'Failed to parse summary',
+            keyMetrics: {
+              salesTrend: 'Unable to parse',
+              topBrands: [],
+              customerActivity: 'Unable to parse',
+              recentChanges: [],
+            },
+            areasOfConcern: [],
+            areasOfOpportunity: [],
+            anomalies: [],
+            suggestedQuestionTopics: ['Data quality', 'Sales trends', 'Customer engagement'],
+          };
+          console.warn('Using fallback parsed result due to JSON errors');
+          return result;
+        } catch (fallbackError) {
+          throw new Error(`Failed to parse data review JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+        }
+      }
+    }
   }
 
   private async phase2QuestionGeneration(
@@ -1916,6 +1964,10 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     }));
   }
 
+  // Maximum time a job can run before being considered stale (2 hours)
+  // Jobs should complete within 15-30 minutes normally
+  private static readonly STALE_JOB_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+
   async getCurrentJobStatus(): Promise<{
     isRunning: boolean;
     currentJob: { id: string; phase: string; startedAt: Date; progress: number } | null;
@@ -1926,6 +1978,23 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     });
 
     if (!runningJob) return { isRunning: false, currentJob: null };
+
+    // Check if the job is stale (running for too long without completion)
+    const jobAge = Date.now() - runningJob.startedAt.getTime();
+    if (jobAge > DailyLearningService.STALE_JOB_TIMEOUT_MS) {
+      // Auto-recover: Mark stale job as failed
+      console.warn(`Stale job detected: ${runningJob.id} has been running for ${Math.round(jobAge / 60000)} minutes. Auto-recovering.`);
+      await prisma.dailyLearningJob.update({
+        where: { id: runningJob.id },
+        data: {
+          status: 'failed',
+          completedAt: new Date(),
+          errorMessage: `Job stalled and was auto-recovered after ${Math.round(jobAge / 60000)} minutes`,
+          errorPhase: runningJob.currentPhase || 'unknown',
+        },
+      });
+      return { isRunning: false, currentJob: null };
+    }
 
     const phases = [
       runningJob.dataReviewDone,
@@ -1945,6 +2014,42 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
         progress,
       },
     };
+  }
+
+  /**
+   * Cleans up any stale jobs that have been running for too long.
+   * This should be called before starting a new job to ensure we don't
+   * block on jobs that crashed or stalled.
+   */
+  async cleanupStaleJobs(): Promise<number> {
+    const staleThreshold = new Date(Date.now() - DailyLearningService.STALE_JOB_TIMEOUT_MS);
+
+    const staleJobs = await prisma.dailyLearningJob.findMany({
+      where: {
+        status: 'running',
+        startedAt: { lt: staleThreshold },
+      },
+    });
+
+    if (staleJobs.length === 0) return 0;
+
+    console.warn(`Found ${staleJobs.length} stale job(s). Auto-recovering...`);
+
+    for (const job of staleJobs) {
+      const jobAge = Date.now() - job.startedAt.getTime();
+      await prisma.dailyLearningJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'failed',
+          completedAt: new Date(),
+          errorMessage: `Job stalled and was auto-recovered after ${Math.round(jobAge / 60000)} minutes`,
+          errorPhase: job.currentPhase || 'unknown',
+        },
+      });
+      console.warn(`Recovered stale job ${job.id} (was in phase: ${job.currentPhase || 'unknown'})`);
+    }
+
+    return staleJobs.length;
   }
 
   /**

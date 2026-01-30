@@ -161,6 +161,20 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      case 'recover_stale': {
+        // Manually trigger cleanup of stale jobs
+        const recoveredCount = await dailyLearningService.cleanupStaleJobs();
+        return NextResponse.json({
+          success: true,
+          data: {
+            message: recoveredCount > 0
+              ? `Recovered ${recoveredCount} stale job(s)`
+              : 'No stale jobs found',
+            recoveredCount,
+          },
+        });
+      }
+
       default:
         return NextResponse.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
     }

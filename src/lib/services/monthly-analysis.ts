@@ -156,6 +156,9 @@ export class MonthlyAnalysisService {
   }): Promise<{ jobId: string; report: MonthlyReportContent | null }> {
     const { forceRun = false } = options || {};
 
+    // Clean up any stale jobs before checking for existing jobs
+    await this.cleanupStaleJobs();
+
     // Default to previous month
     const targetDate = new Date();
     targetDate.setMonth(targetDate.getMonth() - 1);
@@ -680,6 +683,9 @@ Return JSON:
     }));
   }
 
+  // Maximum time a job can run before being considered stale (4 hours for monthly - it's more intensive)
+  private static readonly STALE_JOB_TIMEOUT_MS = 4 * 60 * 60 * 1000;
+
   async getCurrentJobStatus(): Promise<{
     isRunning: boolean;
     currentJob: { id: string; phase: string; monthYear: string; startedAt: Date; progress: number } | null;
@@ -690,6 +696,23 @@ Return JSON:
     });
 
     if (!runningJob) {
+      return { isRunning: false, currentJob: null };
+    }
+
+    // Check if the job is stale (running for too long without completion)
+    const jobAge = Date.now() - runningJob.startedAt.getTime();
+    if (jobAge > MonthlyAnalysisService.STALE_JOB_TIMEOUT_MS) {
+      // Auto-recover: Mark stale job as failed
+      console.warn(`Stale monthly job detected: ${runningJob.id} has been running for ${Math.round(jobAge / 60000)} minutes. Auto-recovering.`);
+      await prisma.monthlyAnalysisJob.update({
+        where: { id: runningJob.id },
+        data: {
+          status: 'failed',
+          completedAt: new Date(),
+          errorMessage: `Job stalled and was auto-recovered after ${Math.round(jobAge / 60000)} minutes`,
+          errorPhase: runningJob.currentPhase || 'unknown',
+        },
+      });
       return { isRunning: false, currentJob: null };
     }
 
@@ -711,6 +734,40 @@ Return JSON:
         progress,
       },
     };
+  }
+
+  /**
+   * Cleans up any stale monthly jobs that have been running for too long.
+   */
+  async cleanupStaleJobs(): Promise<number> {
+    const staleThreshold = new Date(Date.now() - MonthlyAnalysisService.STALE_JOB_TIMEOUT_MS);
+
+    const staleJobs = await prisma.monthlyAnalysisJob.findMany({
+      where: {
+        status: 'running',
+        startedAt: { lt: staleThreshold },
+      },
+    });
+
+    if (staleJobs.length === 0) return 0;
+
+    console.warn(`Found ${staleJobs.length} stale monthly job(s). Auto-recovering...`);
+
+    for (const job of staleJobs) {
+      const jobAge = Date.now() - job.startedAt.getTime();
+      await prisma.monthlyAnalysisJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'failed',
+          completedAt: new Date(),
+          errorMessage: `Job stalled and was auto-recovered after ${Math.round(jobAge / 60000)} minutes`,
+          errorPhase: job.currentPhase || 'unknown',
+        },
+      });
+      console.warn(`Recovered stale monthly job ${job.id} for ${job.monthYear} (was in phase: ${job.currentPhase || 'unknown'})`);
+    }
+
+    return staleJobs.length;
   }
 }
 
