@@ -6,7 +6,7 @@
 // ============================================
 
 import Anthropic from '@anthropic-ai/sdk';
-import { prisma } from '@/lib/prisma';
+import { prisma, initializePrisma } from '@/lib/prisma';
 import { getAnthropicClient } from './claude';
 import { webSearchService, SearchResult } from './web-search';
 import { saveInsights, InsightInput } from './knowledge-base';
@@ -173,6 +173,10 @@ export class DailyLearningService {
     skipWebResearch?: boolean;
   }): Promise<{ jobId: string; digest: DailyDigestContent | null }> {
     const { forceRun = false, skipWebResearch = false } = options || {};
+
+    // Initialize Prisma with proper connection pool settings
+    // This ensures connection pool params (connection_limit, pool_timeout) are applied
+    await initializePrisma();
 
     // Clean up any stale jobs before checking for existing jobs
     await this.cleanupStaleJobs();
