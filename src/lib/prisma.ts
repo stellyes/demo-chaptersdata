@@ -48,13 +48,33 @@ const createPrismaClient = (datasourceUrl?: string) => {
 // This allows us to fetch credentials before creating the client
 let _prisma: PrismaClient | undefined = globalThis.prisma;
 
+// Helper to add pool params to a URL that might not have them
+function ensurePoolParams(url: string | undefined): string | undefined {
+  if (!url) return url;
+
+  // If URL already has connection_limit, assume pool params are present
+  if (url.includes('connection_limit=')) return url;
+
+  // Add pool params
+  const separator = url.includes('?') ? '&' : '?';
+  const poolParams = [
+    'connection_limit=20',
+    'pool_timeout=30',
+    'connect_timeout=15',
+  ].join('&');
+
+  return `${url}${separator}${poolParams}`;
+}
+
 // Export a getter that returns the prisma instance
 // For backwards compatibility with code that imports `prisma` directly
 export const prisma = new Proxy({} as PrismaClient, {
   get(_target, prop) {
     if (!_prisma) {
       // Fallback: create with env var if not initialized
-      _prisma = createPrismaClient(process.env.DATABASE_URL);
+      // Ensure pool params are added even if using env var directly
+      const urlWithParams = ensurePoolParams(process.env.DATABASE_URL);
+      _prisma = createPrismaClient(urlWithParams);
       if (process.env.NODE_ENV !== 'production') {
         globalThis.prisma = _prisma;
       }
