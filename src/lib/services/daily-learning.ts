@@ -16,6 +16,46 @@ import { CLAUDE_CONFIG } from '@/lib/config';
 // Default org ID for autonomous learning (set via env var or use fallback)
 const DEFAULT_LEARNING_ORG_ID = process.env.DEFAULT_ORG_ID || 'chapters-primary';
 
+// Timeout for database queries (60 seconds)
+const QUERY_TIMEOUT_MS = 60000;
+
+// Helper to add timeout to async operations
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operationName: string
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Operation '${operationName}' timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
+}
+
+// Safe query helper with timeout and default fallback
+async function safeQuery<T>(
+  queryFn: () => Promise<T>,
+  defaultValue: T,
+  operationName: string
+): Promise<T> {
+  try {
+    return await withTimeout(queryFn(), QUERY_TIMEOUT_MS, operationName);
+  } catch (error) {
+    console.warn(`Query '${operationName}' failed:`, error);
+    return defaultValue;
+  }
+}
+
 // Daily Learning Configuration
 export const DAILY_LEARNING_CONFIG = {
   maxSearchesPerDay: 8,
@@ -1656,45 +1696,88 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const cooldownDate = new Date();
     cooldownDate.setDate(cooldownDate.getDate() - DAILY_LEARNING_CONFIG.questionRepeatCooldownDays);
 
-    // Fetch past questions with their performance data
-    const pastQuestions = await prisma.learningQuestion.findMany({
-      where: { isActive: true },
-      orderBy: [
-        { answerQuality: 'desc' },
-        { timesAsked: 'asc' },
-      ],
-      take: DAILY_LEARNING_CONFIG.maxPastQuestionsForContext,
-      select: {
-        question: true,
-        category: true,
-        timesAsked: true,
-        lastAsked: true,
-        answerQuality: true,
-        isActive: true,
-      },
-    });
+    // Run all queries in parallel with timeouts to prevent any single query from blocking
+    const [pastQuestions, recentlyAskedQuestions, recentDigests, collectedUrls, monthlyContext] = await Promise.all([
+      // Fetch past questions with their performance data
+      safeQuery(
+        () => prisma.learningQuestion.findMany({
+          where: { isActive: true },
+          orderBy: [
+            { answerQuality: 'desc' },
+            { timesAsked: 'asc' },
+          ],
+          take: DAILY_LEARNING_CONFIG.maxPastQuestionsForContext,
+          select: {
+            question: true,
+            category: true,
+            timesAsked: true,
+            lastAsked: true,
+            answerQuality: true,
+            isActive: true,
+          },
+        }),
+        [],
+        'pastQuestions'
+      ),
 
-    // Get questions asked recently (within cooldown) to avoid repetition
-    const recentlyAskedQuestions = await prisma.learningQuestion.findMany({
-      where: {
-        lastAsked: { gte: cooldownDate },
-        answerQuality: { gte: DAILY_LEARNING_CONFIG.lowQualityThreshold },
-      },
-      select: { question: true },
-    });
+      // Get questions asked recently (within cooldown) to avoid repetition
+      safeQuery(
+        () => prisma.learningQuestion.findMany({
+          where: {
+            lastAsked: { gte: cooldownDate },
+            answerQuality: { gte: DAILY_LEARNING_CONFIG.lowQualityThreshold },
+          },
+          select: { question: true },
+        }),
+        [],
+        'recentlyAskedQuestions'
+      ),
 
-    // Fetch past digests with expanded fields for industry/regulatory context
-    const recentDigests = await prisma.dailyDigest.findMany({
-      orderBy: { digestDate: 'desc' },
-      take: DAILY_LEARNING_CONFIG.maxPastDigestsForContext,
-      select: {
-        digestDate: true,
-        correlatedInsights: true,
-        questionsForTomorrow: true,
-        industryHighlights: true,
-        regulatoryUpdates: true,
-      },
-    });
+      // Fetch past digests with expanded fields for industry/regulatory context
+      safeQuery(
+        () => prisma.dailyDigest.findMany({
+          orderBy: { digestDate: 'desc' },
+          take: DAILY_LEARNING_CONFIG.maxPastDigestsForContext,
+          select: {
+            digestDate: true,
+            correlatedInsights: true,
+            questionsForTomorrow: true,
+            industryHighlights: true,
+            regulatoryUpdates: true,
+          },
+        }),
+        [],
+        'recentDigests'
+      ),
+
+      // Fetch collected URLs with high relevance for web research memory
+      safeQuery(
+        () => prisma.collectedUrl.findMany({
+          where: {
+            relevanceScore: { gte: 0.6 },
+          },
+          orderBy: [
+            { relevanceScore: 'desc' },
+            { createdAt: 'desc' },
+          ],
+          take: DAILY_LEARNING_CONFIG.maxCollectedUrlsForContext,
+          select: {
+            title: true,
+            url: true,
+            snippet: true,
+            domain: true,
+            sourceQuery: true,
+            relevanceScore: true,
+            categories: true,
+          },
+        }),
+        [],
+        'collectedUrls'
+      ),
+
+      // Fetch monthly strategic context
+      this.getMonthlyStrategicContext(),
+    ]);
 
     // Extract insights from past digests
     const pastInsights: HistoricalLearningContext['pastInsights'] = [];
@@ -1765,29 +1848,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
       }
     }
 
-    // NEW: Fetch collected URLs with high relevance for web research memory
-    const collectedUrls = await prisma.collectedUrl.findMany({
-      where: {
-        relevanceScore: { gte: 0.6 },
-      },
-      orderBy: [
-        { relevanceScore: 'desc' },
-        { createdAt: 'desc' },
-      ],
-      take: DAILY_LEARNING_CONFIG.maxCollectedUrlsForContext,
-      select: {
-        title: true,
-        url: true,
-        snippet: true,
-        domain: true,
-        sourceQuery: true,
-        relevanceScore: true,
-        categories: true,
-      },
-    });
-
-    // NEW: Fetch monthly strategic context
-    const { monthlyStrategicQuestions, strategicPriorities } = await this.getMonthlyStrategicContext();
+    // Extract monthly context from the parallel fetched result
+    const { monthlyStrategicQuestions, strategicPriorities } = monthlyContext;
 
     return {
       pastQuestions,
@@ -1818,13 +1880,17 @@ Return ONLY valid JSON, no markdown or explanation.`;
     monthlyStrategicQuestions: HistoricalLearningContext['monthlyStrategicQuestions'];
     strategicPriorities: HistoricalLearningContext['strategicPriorities'];
   }> {
-    const latestReport = await prisma.monthlyStrategicReport.findFirst({
-      orderBy: { createdAt: 'desc' },
-      select: {
-        keyQuestionsNext: true,
-        strategicPriorities: true,
-      },
-    });
+    const latestReport = await safeQuery(
+      () => prisma.monthlyStrategicReport.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          keyQuestionsNext: true,
+          strategicPriorities: true,
+        },
+      }),
+      null,
+      'monthlyStrategicReport'
+    );
 
     if (!latestReport) {
       return { monthlyStrategicQuestions: [], strategicPriorities: [] };
@@ -1854,16 +1920,20 @@ Return ONLY valid JSON, no markdown or explanation.`;
    * Identifies low-quality questions that should be re-investigated
    */
   private async getLowQualityQuestionsToRevisit(): Promise<string[]> {
-    const lowQualityQuestions = await prisma.learningQuestion.findMany({
-      where: {
-        isActive: true,
-        answerQuality: { lt: DAILY_LEARNING_CONFIG.lowQualityThreshold },
-        timesAsked: { gte: 1 },
-      },
-      orderBy: { answerQuality: 'asc' },
-      take: 3,
-      select: { question: true },
-    });
+    const lowQualityQuestions = await safeQuery(
+      () => prisma.learningQuestion.findMany({
+        where: {
+          isActive: true,
+          answerQuality: { lt: DAILY_LEARNING_CONFIG.lowQualityThreshold },
+          timesAsked: { gte: 1 },
+        },
+        orderBy: { answerQuality: 'asc' },
+        take: 3,
+        select: { question: true },
+      }),
+      [],
+      'lowQualityQuestions'
+    );
 
     return lowQualityQuestions.map(q => q.question);
   }
