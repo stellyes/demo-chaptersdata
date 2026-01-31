@@ -7,6 +7,32 @@
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 
+// Timeout for individual correlation queries (30 seconds)
+const QUERY_TIMEOUT_MS = 30000;
+
+// Helper to add timeout to async operations
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operationName: string
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Operation '${operationName}' timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
+}
+
 // ============================================
 // TYPE DEFINITIONS
 // ============================================
@@ -164,10 +190,26 @@ export class DataCorrelationsService {
 
   /**
    * Get all correlations for Progressive Learning
+   * Uses timeouts to prevent any single query from blocking indefinitely
    */
   async getAllCorrelations(): Promise<CorrelationSummary> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - this.lookbackDays);
+
+    // Run all correlation queries with timeouts
+    // If any query times out, use empty result to allow processing to continue
+    const safeQuery = async <T>(
+      queryFn: () => Promise<T>,
+      defaultValue: T,
+      operationName: string
+    ): Promise<T> => {
+      try {
+        return await withTimeout(queryFn(), QUERY_TIMEOUT_MS, operationName);
+      } catch (error) {
+        console.warn(`Correlation query '${operationName}' failed:`, error);
+        return defaultValue;
+      }
+    };
 
     const [
       dailyPerformance,
@@ -178,13 +220,13 @@ export class DataCorrelationsService {
       dateCorrelations,
       knowledgeGraph,
     ] = await Promise.all([
-      this.getDailyStorePerformance(startDate),
-      this.getBrandProfitability(),
-      this.getProductCategoryFlow(),
-      this.getCustomerSegmentMetrics(),
-      this.getVendorPerformance(startDate),
-      this.getDateCorrelations(startDate),
-      this.getKnowledgeGraphByCategory(),
+      safeQuery(() => this.getDailyStorePerformance(startDate), [], 'dailyStorePerformance'),
+      safeQuery(() => this.getBrandProfitability(), [], 'brandProfitability'),
+      safeQuery(() => this.getProductCategoryFlow(), [], 'productCategoryFlow'),
+      safeQuery(() => this.getCustomerSegmentMetrics(), [], 'customerSegments'),
+      safeQuery(() => this.getVendorPerformance(startDate), [], 'vendorPerformance'),
+      safeQuery(() => this.getDateCorrelations(startDate), [], 'dateCorrelations'),
+      safeQuery(() => this.getKnowledgeGraphByCategory(), {}, 'knowledgeGraph'),
     ]);
 
     // Build summary
