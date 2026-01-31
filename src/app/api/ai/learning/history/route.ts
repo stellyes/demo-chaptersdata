@@ -25,6 +25,8 @@ export async function GET() {
         webResearchDone: true,
         correlationDone: true,
         digestGenDone: true,
+        errorMessage: true,
+        errorPhase: true,
       },
     });
 
@@ -42,6 +44,8 @@ export async function GET() {
       webResearchDone: job.webResearchDone,
       correlationDone: job.correlationDone,
       digestGenDone: job.digestGenDone,
+      errorMessage: job.errorMessage,
+      errorPhase: job.errorPhase,
     }));
 
     return NextResponse.json({
