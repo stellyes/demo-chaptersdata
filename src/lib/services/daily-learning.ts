@@ -19,6 +19,9 @@ const DEFAULT_LEARNING_ORG_ID = process.env.DEFAULT_ORG_ID || 'chapters-primary'
 // Timeout for database queries (60 seconds)
 const QUERY_TIMEOUT_MS = 60000;
 
+// Timeout for Claude API calls (5 minutes - these are larger prompts)
+const CLAUDE_API_TIMEOUT_MS = 5 * 60 * 1000;
+
 // Helper to add timeout to async operations
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -400,11 +403,16 @@ Return JSON:
   "suggestedQuestionTopics": []
 }`;
 
-    const response = await this.client.messages.create({
-      model: CLAUDE_CONFIG.haiku,
-      max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Add timeout to Claude API call to prevent indefinite hanging
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: CLAUDE_CONFIG.haiku,
+        max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CLAUDE_API_TIMEOUT_MS,
+      'phase1DataReview Claude API call'
+    );
 
     state.inputTokens += response.usage.input_tokens;
     state.outputTokens += response.usage.output_tokens;
@@ -499,11 +507,16 @@ ${progressiveContext}
 Return JSON array:
 [{ "question": "", "category": "sales|brands|customers|market|regulatory|operations", "priority": 1-10, "requiresWebResearch": boolean, "requiresInternalData": boolean, "context": "why this question matters based on learning history" }]`;
 
-    const response = await this.client.messages.create({
-      model: CLAUDE_CONFIG.haiku,
-      max_tokens: DAILY_LEARNING_CONFIG.phase2TokenBudget,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Add timeout to Claude API call to prevent indefinite hanging
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: CLAUDE_CONFIG.haiku,
+        max_tokens: DAILY_LEARNING_CONFIG.phase2TokenBudget,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CLAUDE_API_TIMEOUT_MS,
+      'phase2QuestionGeneration Claude API call'
+    );
 
     state.inputTokens += response.usage.input_tokens;
     state.outputTokens += response.usage.output_tokens;
@@ -515,30 +528,36 @@ Return JSON array:
 
     const questions = JSON.parse(jsonMatch[0]) as GeneratedQuestion[];
 
-    // Update question tracking in database with enhanced metadata
-    for (const q of questions) {
-      const questionHash = this.hashString(q.question.toLowerCase());
-      await prisma.learningQuestion.upsert({
-        where: { questionHash },
-        create: {
-          question: q.question,
-          questionHash,
-          category: q.category,
-          priority: q.priority,
-          requiresWebResearch: q.requiresWebResearch,
-          requiresInternalData: q.requiresInternalData,
-          generatedBy: 'ai',
-          timesAsked: 1,
-          lastAsked: new Date(),
-        },
-        update: {
-          priority: q.priority,
-          isActive: true,
-          timesAsked: { increment: 1 },
-          lastAsked: new Date(),
-        },
-      });
-    }
+    // Update question tracking in database - run in parallel with timeouts
+    await Promise.all(
+      questions.map((q) => {
+        const questionHash = this.hashString(q.question.toLowerCase());
+        return safeQuery(
+          () => prisma.learningQuestion.upsert({
+            where: { questionHash },
+            create: {
+              question: q.question,
+              questionHash,
+              category: q.category,
+              priority: q.priority,
+              requiresWebResearch: q.requiresWebResearch,
+              requiresInternalData: q.requiresInternalData,
+              generatedBy: 'ai',
+              timesAsked: 1,
+              lastAsked: new Date(),
+            },
+            update: {
+              priority: q.priority,
+              isActive: true,
+              timesAsked: { increment: 1 },
+              lastAsked: new Date(),
+            },
+          }),
+          null,
+          `upsertQuestion-${questionHash.substring(0, 8)}`
+        );
+      })
+    );
 
     return questions;
   }
@@ -701,11 +720,16 @@ Return JSON:
 Return ONLY valid JSON.`;
 
     try {
-      const response = await this.client.messages.create({
-        model: CLAUDE_CONFIG.haiku,
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      });
+      // Add timeout to Claude API call to prevent indefinite hanging
+      const response = await withTimeout(
+        this.client.messages.create({
+          model: CLAUDE_CONFIG.haiku,
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+        CLAUDE_API_TIMEOUT_MS,
+        'analyzeSearchResult Claude API call'
+      );
 
       state.inputTokens += response.usage.input_tokens;
       state.outputTokens += response.usage.output_tokens;
@@ -1074,11 +1098,16 @@ Return JSON array:
 
 Generate 5-10 high-quality correlations.`;
 
-    const response = await this.client.messages.create({
-      model: CLAUDE_CONFIG.defaultModel,
-      max_tokens: DAILY_LEARNING_CONFIG.phase4TokenBudget,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Add timeout to Claude API call to prevent indefinite hanging
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: CLAUDE_CONFIG.defaultModel,
+        max_tokens: DAILY_LEARNING_CONFIG.phase4TokenBudget,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CLAUDE_API_TIMEOUT_MS,
+      'phase4Correlation Claude API call'
+    );
 
     state.inputTokens += response.usage.input_tokens;
     state.outputTokens += response.usage.output_tokens;
@@ -1264,11 +1293,16 @@ Generate 2-4 items for industryHighlights, regulatoryUpdates, marketTrends, and 
 If web research was not conducted, base industryHighlights, regulatoryUpdates, and marketTrends on general cannabis industry knowledge.
 Return ONLY valid JSON, no markdown or explanation.`;
 
-    const response = await this.client.messages.create({
-      model: CLAUDE_CONFIG.defaultModel,
-      max_tokens: DAILY_LEARNING_CONFIG.phase5TokenBudget,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Add timeout to Claude API call to prevent indefinite hanging
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: CLAUDE_CONFIG.defaultModel,
+        max_tokens: DAILY_LEARNING_CONFIG.phase5TokenBudget,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CLAUDE_API_TIMEOUT_MS,
+      'phase5DigestGeneration Claude API call'
+    );
 
     state.inputTokens += response.usage.input_tokens;
     state.outputTokens += response.usage.output_tokens;
@@ -1943,11 +1977,16 @@ Return ONLY valid JSON, no markdown or explanation.`;
 "${question.question}"
 Focus on California cannabis market. Return ONLY the query.`;
 
-    const response = await this.client.messages.create({
-      model: CLAUDE_CONFIG.haiku,
-      max_tokens: 100,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Add timeout to Claude API call to prevent indefinite hanging
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: CLAUDE_CONFIG.haiku,
+        max_tokens: 100,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CLAUDE_API_TIMEOUT_MS,
+      'buildSearchQuery Claude API call'
+    );
 
     state.inputTokens += response.usage.input_tokens;
     state.outputTokens += response.usage.output_tokens;
@@ -1970,11 +2009,16 @@ ${results.map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}`).join('\n\n')}
 
 Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance": 0-1, "keyPoints": [] }], "summary": "" }`;
 
-    const response = await this.client.messages.create({
-      model: CLAUDE_CONFIG.haiku,
-      max_tokens: DAILY_LEARNING_CONFIG.phase3TokenBudget,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Add timeout to Claude API call to prevent indefinite hanging
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: CLAUDE_CONFIG.haiku,
+        max_tokens: DAILY_LEARNING_CONFIG.phase3TokenBudget,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CLAUDE_API_TIMEOUT_MS,
+      'analyzeSearchResults Claude API call'
+    );
 
     state.inputTokens += response.usage.input_tokens;
     state.outputTokens += response.usage.output_tokens;
