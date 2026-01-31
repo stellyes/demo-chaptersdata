@@ -54,6 +54,10 @@ model Storefront {
   productRecords  ProductRecord[]
   customers       Customer[]
   budtenderRecords BudtenderRecord[]
+  products        Product[]
+  metrcPackages   MetrcPackage[]
+  metrcTransfers  MetrcTransfer[]
+  dataFlags       DataFlag[]
 
   @@map("storefronts")
 }
@@ -183,6 +187,7 @@ model CanonicalBrand {
   brandRecords  BrandRecord[]
   lineItems     InvoiceLineItem[]
   vendorBrands  VendorBrand[]
+  products      Product[]
 
   @@map("canonical_brands")
 }
@@ -1043,6 +1048,138 @@ model ExternalFeedItem {
   @@index([isProcessed])
   @@index([relevanceScore])
   @@map("external_feed_items")
+}
+
+// ============================================
+// PRODUCT CATALOG
+// Treez product inventory synced from API
+// ============================================
+
+model Product {
+  id                String            @id @default(uuid())
+  treezProductId    String            @unique @map("treez_product_id")
+  storefrontId      String?           @map("storefront_id")
+  storefront        Storefront?       @relation(fields: [storefrontId], references: [id])
+  brandId           String?           @map("brand_id")
+  brand             CanonicalBrand?   @relation(fields: [brandId], references: [id])
+  originalBrandName String?           @map("original_brand_name")
+  productName       String            @map("product_name")
+  productType       String?           @map("product_type")
+  productSubtype    String?           @map("product_subtype")
+  category          String?
+  strain            String?
+  unitSize          String?           @map("unit_size")
+  thcContent        Decimal?          @map("thc_content") @db.Decimal(6, 3)
+  cbdContent        Decimal?          @map("cbd_content") @db.Decimal(6, 3)
+  retailPrice       Decimal?          @map("retail_price") @db.Decimal(10, 2)
+  wholesalePrice    Decimal?          @map("wholesale_price") @db.Decimal(10, 2)
+  quantityOnHand    Int               @default(0) @map("quantity_on_hand")
+  isActive          Boolean           @default(true) @map("is_active")
+  lastSyncedAt      DateTime?         @map("last_synced_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  @@index([brandId])
+  @@index([productType])
+  @@index([isActive])
+  @@map("products")
+}
+
+// ============================================
+// METRC COMPLIANCE DATA
+// Inventory and transfer tracking from METRC API
+// ============================================
+
+model MetrcPackage {
+  id                String    @id @default(uuid())
+  metrcLabel        String    @unique @map("metrc_label")
+  storefrontId      String?   @map("storefront_id")
+  storefront        Storefront? @relation(fields: [storefrontId], references: [id])
+  itemName          String?   @map("item_name")
+  productCategory   String?   @map("product_category")
+  quantity          Decimal   @default(0) @db.Decimal(12, 4)
+  unitOfMeasure     String?   @map("unit_of_measure")
+  packageStatus     String?   @map("package_status") // active, on_hold, in_transit
+  sourceHarvestName String?   @map("source_harvest_name")
+  labTestState      String?   @map("lab_test_state")
+  labTestPassed     Boolean?  @map("lab_test_passed")
+  receivedFromFacility String? @map("received_from_facility")
+  receivedDateTime  DateTime? @map("received_date_time")
+  packagedDate      DateTime? @map("packaged_date") @db.Date
+  lastModifiedAt    DateTime? @map("last_modified_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([packageStatus])
+  @@index([productCategory])
+  @@index([lastModifiedAt])
+  @@map("metrc_packages")
+}
+
+model MetrcTransfer {
+  id                  String    @id @default(uuid())
+  metrcTransferId     Int       @unique @map("metrc_transfer_id")
+  storefrontId        String?   @map("storefront_id")
+  storefront          Storefront? @relation(fields: [storefrontId], references: [id])
+  manifestNumber      String?   @map("manifest_number")
+  transferType        String?   @map("transfer_type") // incoming, outgoing
+  shipperFacility     String?   @map("shipper_facility")
+  shipperLicense      String?   @map("shipper_license")
+  recipientFacility   String?   @map("recipient_facility")
+  recipientLicense    String?   @map("recipient_license")
+  createdDateTime     DateTime? @map("created_date_time")
+  receivedDateTime    DateTime? @map("received_date_time")
+  packageCount        Int       @default(0) @map("package_count")
+  totalQuantity       Decimal   @default(0) @map("total_quantity") @db.Decimal(12, 4)
+  lastModifiedAt      DateTime? @map("last_modified_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@index([transferType])
+  @@index([manifestNumber])
+  @@index([lastModifiedAt])
+  @@map("metrc_transfers")
+}
+
+// ============================================
+// DATA DISCREPANCY FLAGS
+// Tracks data quality issues for manual review
+// ============================================
+
+model DataFlag {
+  id              String    @id @default(uuid())
+  storefrontId    String?   @map("storefront_id")
+  storefront      Storefront? @relation(fields: [storefrontId], references: [id])
+  flagType        String    @map("flag_type") // vendor_mismatch, brand_mismatch, duplicate_record, missing_link, data_anomaly
+  severity        String    @default("medium") // critical, high, medium, low
+  status          String    @default("pending") // pending, reviewed, resolved, ignored
+
+  sourceTable     String    @map("source_table") // invoices, invoice_line_items, products, etc.
+  sourceRecordId  String    @map("source_record_id")
+
+  title           String
+  description     String    @db.Text
+
+  rawValue        String?   @map("raw_value") // The original value that caused the flag
+  suggestedMatch  String?   @map("suggested_match") // Auto-suggested correction
+  suggestedMatchId String?  @map("suggested_match_id") // FK to suggested match record
+  similarityScore Decimal?  @map("similarity_score") @db.Decimal(5, 4) // 0-1 fuzzy match score
+
+  reviewedBy      String?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at")
+  resolution      String?   @db.Text // What action was taken
+
+  metadata        Json      @default("{}") // Additional context
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([flagType])
+  @@index([severity])
+  @@index([status])
+  @@index([sourceTable])
+  @@index([createdAt])
+  @@map("data_flags")
 }
 
 // ============================================

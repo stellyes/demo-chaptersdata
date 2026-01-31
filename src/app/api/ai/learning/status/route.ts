@@ -6,8 +6,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// Maximum time a job can run before being considered stale (2 hours)
-const STALE_JOB_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+// Maximum time a job can run before being considered stale (1 hour - reduced for faster recovery)
+const STALE_JOB_TIMEOUT_MS = 1 * 60 * 60 * 1000;
 
 export async function GET() {
   try {

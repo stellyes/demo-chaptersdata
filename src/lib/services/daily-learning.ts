@@ -2040,7 +2040,7 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
 
   // Maximum time a job can run before being considered stale (2 hours)
   // Jobs should complete within 15-30 minutes normally
-  private static readonly STALE_JOB_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+  private static readonly STALE_JOB_TIMEOUT_MS = 1 * 60 * 60 * 1000; // 1 hour (reduced from 2)
 
   async getCurrentJobStatus(): Promise<{
     isRunning: boolean;
