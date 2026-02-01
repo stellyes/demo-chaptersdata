@@ -373,7 +373,8 @@ export class DailyLearningService {
   }
 
   private async phase1DataReview(state: DailyLearningJobState): Promise<DataReviewResult> {
-    // Load all data sources in parallel, including cross-table correlations
+    // Load all data sources in parallel with timeouts
+    // Each data loader has a 60-second timeout and returns empty data on failure
     const [
       salesData,
       brandData,
@@ -386,16 +387,16 @@ export class DailyLearningService {
       researchData,
       correlationSummary,
     ] = await Promise.all([
-      this.loadRecentSalesData(),
-      this.loadRecentBrandData(),
-      this.loadRecentCustomerData(),
-      this.loadRecentInvoiceData(),
-      this.loadQrCodeData(),
-      this.loadSeoAuditData(),
-      this.loadBudtenderData(),
-      this.loadProductData(),
-      this.loadResearchData(),
-      dataCorrelationsService.getCorrelationSummaryForAI(),
+      safeQuery(() => this.loadRecentSalesData(), {}, 'loadRecentSalesData'),
+      safeQuery(() => this.loadRecentBrandData(), {}, 'loadRecentBrandData'),
+      safeQuery(() => this.loadRecentCustomerData(), {}, 'loadRecentCustomerData'),
+      safeQuery(() => this.loadRecentInvoiceData(), {}, 'loadRecentInvoiceData'),
+      safeQuery(() => this.loadQrCodeData(), {}, 'loadQrCodeData'),
+      safeQuery(() => this.loadSeoAuditData(), {}, 'loadSeoAuditData'),
+      safeQuery(() => this.loadBudtenderData(), {}, 'loadBudtenderData'),
+      safeQuery(() => this.loadProductData(), {}, 'loadProductData'),
+      safeQuery(() => this.loadResearchData(), {}, 'loadResearchData'),
+      safeQuery(() => dataCorrelationsService.getCorrelationSummaryForAI(), '', 'getCorrelationSummaryForAI'),
     ]);
 
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
