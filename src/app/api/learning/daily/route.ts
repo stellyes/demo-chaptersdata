@@ -7,6 +7,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dailyLearningService } from '@/lib/services/daily-learning';
 import { webSearchService } from '@/lib/services/web-search';
 
+// Extend function timeout to 900 seconds (15 minutes) for long-running learning jobs
+export const maxDuration = 900;
+
 const LEARNING_API_KEY = process.env.LEARNING_API_KEY;
 
 function isAuthorized(request: NextRequest): boolean {

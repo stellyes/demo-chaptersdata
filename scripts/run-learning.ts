@@ -4,18 +4,16 @@
  * Run with: npx tsx scripts/run-learning.ts
  */
 
-import { DailyLearningService } from '../src/lib/services/daily-learning';
+import { dailyLearningService } from '../src/lib/services/daily-learning';
 
 async function main() {
   console.log('========================================');
   console.log('Starting Progressive Learning Job');
   console.log('========================================\n');
 
-  const service = new DailyLearningService();
-
   console.log('Running full learning cycle...\n');
 
-  const result = await service.runDailyLearning({
+  const result = await dailyLearningService.runDailyLearning({
     forceRun: true,
     skipWebResearch: false,
   });
@@ -30,13 +28,20 @@ async function main() {
 
   if (result.digest) {
     console.log('\nDigest Summary:');
-    console.log('  Key Findings:', result.digest.keyFindings?.length || 0);
-    console.log('  Suggested Questions:', result.digest.suggestedQuestions?.length || 0);
+    console.log('  Executive Summary:', result.digest.executiveSummary?.substring(0, 150) + '...');
+    console.log('  Priority Actions:', result.digest.priorityActions?.length || 0);
+    console.log('  Quick Wins:', result.digest.quickWins?.length || 0);
+    console.log('  Watch Items:', result.digest.watchItems?.length || 0);
+    console.log('  Industry Highlights:', result.digest.industryHighlights?.length || 0);
+    console.log('  Questions for Tomorrow:', result.digest.questionsForTomorrow?.length || 0);
+    console.log('  Correlated Insights:', result.digest.correlatedInsights?.length || 0);
+    console.log('  Data Health Score:', result.digest.dataHealthScore || 0);
+    console.log('  Confidence Score:', result.digest.confidenceScore || 0);
 
-    if (result.digest.keyFindings && result.digest.keyFindings.length > 0) {
-      console.log('\nTop Findings:');
-      for (const finding of result.digest.keyFindings.slice(0, 5)) {
-        console.log('  -', finding.substring(0, 100) + '...');
+    if (result.digest.priorityActions && result.digest.priorityActions.length > 0) {
+      console.log('\nTop Priority Actions:');
+      for (const action of result.digest.priorityActions.slice(0, 3)) {
+        console.log('  -', action.action?.substring(0, 80) + '...');
       }
     }
   }

@@ -82,8 +82,9 @@ Resources:
             const isHttps = url.protocol === 'https:';
             const client = isHttps ? https : http;
 
+            // Use run_sync to wait for job completion (Amplify now supports 900s timeout)
             const requestBody = JSON.stringify({
-              action: 'run',
+              action: 'run_sync',
               forceRun: false,
               skipWebResearch: false
             });
@@ -93,6 +94,7 @@ Resources:
               port: url.port || (isHttps ? 443 : 80),
               path: url.pathname,
               method: 'POST',
+              timeout: 840000, // 14 minute timeout on the request
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
@@ -106,13 +108,21 @@ Resources:
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
                   console.log('Response status:', res.statusCode);
-                  console.log('Response body:', data);
+                  console.log('Response body:', data.substring(0, 500));
 
                   if (res.statusCode >= 200 && res.statusCode < 300) {
                     resolve({
                       statusCode: 200,
                       body: JSON.stringify({
-                        message: 'Daily learning triggered successfully',
+                        message: 'Daily learning completed successfully',
+                        response: JSON.parse(data)
+                      })
+                    });
+                  } else if (res.statusCode === 409) {
+                    resolve({
+                      statusCode: 200,
+                      body: JSON.stringify({
+                        message: 'Job already running',
                         response: JSON.parse(data)
                       })
                     });
@@ -120,6 +130,11 @@ Resources:
                     reject(new Error(`API returned ${res.statusCode}: ${data}`));
                   }
                 });
+              });
+
+              req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Request timed out after 14 minutes'));
               });
 
               req.on('error', (e) => {
@@ -168,8 +183,9 @@ Resources:
             const isHttps = url.protocol === 'https:';
             const client = isHttps ? https : http;
 
+            // Use run_sync to wait for job completion (Amplify now supports 900s timeout)
             const requestBody = JSON.stringify({
-              action: 'run',
+              action: 'run_sync',
               forceRun,
               skipWebResearch
             });
@@ -179,6 +195,7 @@ Resources:
               port: url.port || (isHttps ? 443 : 80),
               path: url.pathname,
               method: 'POST',
+              timeout: 840000, // 14 minute timeout on the request
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
@@ -192,13 +209,21 @@ Resources:
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
                   console.log('Response status:', res.statusCode);
-                  console.log('Response body:', data);
+                  console.log('Response body:', data.substring(0, 500));
 
                   if (res.statusCode >= 200 && res.statusCode < 300) {
                     resolve({
                       statusCode: 200,
                       body: JSON.stringify({
-                        message: 'Daily learning triggered successfully',
+                        message: 'Daily learning completed successfully',
+                        response: JSON.parse(data)
+                      })
+                    });
+                  } else if (res.statusCode === 409) {
+                    resolve({
+                      statusCode: 200,
+                      body: JSON.stringify({
+                        message: 'Job already running',
                         response: JSON.parse(data)
                       })
                     });
@@ -206,6 +231,11 @@ Resources:
                     reject(new Error(`API returned ${res.statusCode}: ${data}`));
                   }
                 });
+              });
+
+              req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Request timed out after 14 minutes'));
               });
 
               req.on('error', (e) => {
