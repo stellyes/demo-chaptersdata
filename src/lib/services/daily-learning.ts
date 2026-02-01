@@ -19,8 +19,11 @@ const DEFAULT_LEARNING_ORG_ID = process.env.DEFAULT_ORG_ID || 'chapters-primary'
 // Timeout for database queries (60 seconds)
 const QUERY_TIMEOUT_MS = 60000;
 
-// Timeout for Claude API calls (5 minutes - these are larger prompts)
-const CLAUDE_API_TIMEOUT_MS = 5 * 60 * 1000;
+// Timeout for Claude API calls (2 minutes per attempt - shorter for retry)
+const CLAUDE_API_TIMEOUT_MS = 2 * 60 * 1000;
+
+// Max retries for Claude API calls
+const CLAUDE_API_MAX_RETRIES = 3;
 
 // Helper to add timeout to async operations
 async function withTimeout<T>(
@@ -57,6 +60,35 @@ async function safeQuery<T>(
     console.warn(`Query '${operationName}' failed:`, error);
     return defaultValue;
   }
+}
+
+// Retry helper with exponential backoff for Claude API calls
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  operationName: string,
+  maxRetries: number = CLAUDE_API_MAX_RETRIES
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`${operationName}: attempt ${attempt}/${maxRetries}`);
+      return await withTimeout(fn(), CLAUDE_API_TIMEOUT_MS, `${operationName} (attempt ${attempt})`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`${operationName}: attempt ${attempt} failed:`, lastError.message);
+
+      // Don't wait after the last attempt
+      if (attempt < maxRetries) {
+        // Exponential backoff: 2s, 4s, 8s...
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`${operationName}: waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw new Error(`${operationName} failed after ${maxRetries} attempts. Last error: ${lastError?.message}`);
 }
 
 // Daily Learning Configuration
@@ -403,15 +435,14 @@ Return JSON:
   "suggestedQuestionTopics": []
 }`;
 
-    // Add timeout to Claude API call to prevent indefinite hanging
-    const response = await withTimeout(
-      this.client.messages.create({
+    // Add retry with timeout to Claude API call to handle transient failures
+    const response = await withRetry(
+      () => this.client.messages.create({
         model: CLAUDE_CONFIG.haiku,
         max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
         messages: [{ role: 'user', content: prompt }],
       }),
-      CLAUDE_API_TIMEOUT_MS,
-      'phase1DataReview Claude API call'
+      'phase1DataReview'
     );
 
     state.inputTokens += response.usage.input_tokens;
@@ -507,15 +538,14 @@ ${progressiveContext}
 Return JSON array:
 [{ "question": "", "category": "sales|brands|customers|market|regulatory|operations", "priority": 1-10, "requiresWebResearch": boolean, "requiresInternalData": boolean, "context": "why this question matters based on learning history" }]`;
 
-    // Add timeout to Claude API call to prevent indefinite hanging
-    const response = await withTimeout(
-      this.client.messages.create({
+    // Add retry with timeout to Claude API call to handle transient failures
+    const response = await withRetry(
+      () => this.client.messages.create({
         model: CLAUDE_CONFIG.haiku,
         max_tokens: DAILY_LEARNING_CONFIG.phase2TokenBudget,
         messages: [{ role: 'user', content: prompt }],
       }),
-      CLAUDE_API_TIMEOUT_MS,
-      'phase2QuestionGeneration Claude API call'
+      'phase2QuestionGeneration'
     );
 
     state.inputTokens += response.usage.input_tokens;
@@ -720,15 +750,14 @@ Return JSON:
 Return ONLY valid JSON.`;
 
     try {
-      // Add timeout to Claude API call to prevent indefinite hanging
-      const response = await withTimeout(
-        this.client.messages.create({
+      // Add retry with timeout to Claude API call to handle transient failures
+      const response = await withRetry(
+        () => this.client.messages.create({
           model: CLAUDE_CONFIG.haiku,
           max_tokens: 1000,
           messages: [{ role: 'user', content: prompt }],
         }),
-        CLAUDE_API_TIMEOUT_MS,
-        'analyzeSearchResult Claude API call'
+        'analyzeSearchResult'
       );
 
       state.inputTokens += response.usage.input_tokens;
@@ -1098,15 +1127,14 @@ Return JSON array:
 
 Generate 5-10 high-quality correlations.`;
 
-    // Add timeout to Claude API call to prevent indefinite hanging
-    const response = await withTimeout(
-      this.client.messages.create({
+    // Add retry with timeout to Claude API call to handle transient failures
+    const response = await withRetry(
+      () => this.client.messages.create({
         model: CLAUDE_CONFIG.defaultModel,
         max_tokens: DAILY_LEARNING_CONFIG.phase4TokenBudget,
         messages: [{ role: 'user', content: prompt }],
       }),
-      CLAUDE_API_TIMEOUT_MS,
-      'phase4Correlation Claude API call'
+      'phase4Correlation'
     );
 
     state.inputTokens += response.usage.input_tokens;
@@ -1293,15 +1321,14 @@ Generate 2-4 items for industryHighlights, regulatoryUpdates, marketTrends, and 
 If web research was not conducted, base industryHighlights, regulatoryUpdates, and marketTrends on general cannabis industry knowledge.
 Return ONLY valid JSON, no markdown or explanation.`;
 
-    // Add timeout to Claude API call to prevent indefinite hanging
-    const response = await withTimeout(
-      this.client.messages.create({
+    // Add retry with timeout to Claude API call to handle transient failures
+    const response = await withRetry(
+      () => this.client.messages.create({
         model: CLAUDE_CONFIG.defaultModel,
         max_tokens: DAILY_LEARNING_CONFIG.phase5TokenBudget,
         messages: [{ role: 'user', content: prompt }],
       }),
-      CLAUDE_API_TIMEOUT_MS,
-      'phase5DigestGeneration Claude API call'
+      'phase5DigestGeneration'
     );
 
     state.inputTokens += response.usage.input_tokens;
@@ -1977,15 +2004,14 @@ Return ONLY valid JSON, no markdown or explanation.`;
 "${question.question}"
 Focus on California cannabis market. Return ONLY the query.`;
 
-    // Add timeout to Claude API call to prevent indefinite hanging
-    const response = await withTimeout(
-      this.client.messages.create({
+    // Add retry with timeout to Claude API call to handle transient failures
+    const response = await withRetry(
+      () => this.client.messages.create({
         model: CLAUDE_CONFIG.haiku,
         max_tokens: 100,
         messages: [{ role: 'user', content: prompt }],
       }),
-      CLAUDE_API_TIMEOUT_MS,
-      'buildSearchQuery Claude API call'
+      'buildSearchQuery'
     );
 
     state.inputTokens += response.usage.input_tokens;
@@ -2009,15 +2035,14 @@ ${results.map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}`).join('\n\n')}
 
 Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance": 0-1, "keyPoints": [] }], "summary": "" }`;
 
-    // Add timeout to Claude API call to prevent indefinite hanging
-    const response = await withTimeout(
-      this.client.messages.create({
+    // Add retry with timeout to Claude API call to handle transient failures
+    const response = await withRetry(
+      () => this.client.messages.create({
         model: CLAUDE_CONFIG.haiku,
         max_tokens: DAILY_LEARNING_CONFIG.phase3TokenBudget,
         messages: [{ role: 'user', content: prompt }],
       }),
-      CLAUDE_API_TIMEOUT_MS,
-      'analyzeSearchResults Claude API call'
+      'analyzeSearchResults'
     );
 
     state.inputTokens += response.usage.input_tokens;
