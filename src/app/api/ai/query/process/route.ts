@@ -296,20 +296,27 @@ async function loadDataFromAurora(contextOptions: DataContextOptions) {
   }
 
   if (contextOptions.includeResearch) {
+    // Load from CollectedUrl table - this matches what the frontend shows
+    // (Frontend's /api/data/research uses CollectedUrl, not ResearchDocument)
     loadPromises.push(
-      prisma.researchDocument.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        include: { findings: true },
+      prisma.collectedUrl.findMany({
+        orderBy: [
+          { isAnalyzed: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: 100,
       }).then(records => {
-        data.research = records.map(r => ({
-          id: r.id,
-          summary: r.summary || '',
-          key_findings: r.findings.map(f => f.finding),
-          category: r.category,
-          date: r.createdAt.toISOString().split('T')[0],
-          source: r.sourceUrl || undefined,
-        }));
+        data.research = records.map(r => {
+          const categories = r.categories as string[] | null;
+          return {
+            id: r.id,
+            summary: r.title || '',
+            key_findings: r.snippet ? [r.snippet] : [],
+            category: categories?.[0] || 'Research',
+            date: r.createdAt.toISOString().split('T')[0],
+            source: r.url || undefined,
+          };
+        });
       })
     );
   }
@@ -367,10 +374,40 @@ async function processJob(jobId: string): Promise<void> {
 
     console.log(`[Query Process] Loaded: ${data.sales.length} sales, ${data.brands.length} brands, ${data.customers.length} customers`);
 
-    // Get selected research documents
+    // Get selected research documents with FULL CONTENT for detailed context
     let selectedResearchDocs: Array<{ id: string; summary: string; key_findings: string[]; category: string; source?: string }> | undefined;
-    if (selectedResearchIds && selectedResearchIds.length > 0 && data.research) {
-      selectedResearchDocs = data.research.filter(r => selectedResearchIds.includes(r.id));
+    if (selectedResearchIds && selectedResearchIds.length > 0) {
+      console.log(`[Query Process] Loading ${selectedResearchIds.length} selected research documents with full content...`);
+
+      // Fetch selected documents with fullContent field directly from DB
+      const selectedDocs = await prisma.collectedUrl.findMany({
+        where: {
+          id: { in: selectedResearchIds },
+        },
+      });
+
+      console.log(`[Query Process] Found ${selectedDocs.length} matching research documents`);
+
+      selectedResearchDocs = selectedDocs.map(doc => {
+        const categories = doc.categories as string[] | null;
+        // Build key_findings from snippet AND fullContent for rich context
+        const keyFindings: string[] = [];
+        if (doc.snippet) keyFindings.push(doc.snippet);
+        // Include full content if available (truncated to avoid token limits)
+        if (doc.fullContent) {
+          // Split content into digestible chunks for AI context
+          const contentChunks = doc.fullContent.slice(0, 8000); // ~2000 tokens max per doc
+          keyFindings.push(`Full Article Content:\n${contentChunks}`);
+        }
+
+        return {
+          id: doc.id,
+          summary: doc.title || 'Research Document',
+          key_findings: keyFindings,
+          category: categories?.[0] || 'Research',
+          source: doc.url || undefined,
+        };
+      });
     }
 
     // Load past reports and health check
@@ -388,6 +425,12 @@ async function processJob(jobId: string): Promise<void> {
       enhancedContextOptions,
       selectedResearchDocs
     );
+
+    // Log context size for debugging
+    console.log(`[Query Process] Built data context: ${dataContext.length} chars`);
+    if (selectedResearchDocs && selectedResearchDocs.length > 0) {
+      console.log(`[Query Process] Selected research included: ${selectedResearchDocs.map(d => d.summary.slice(0, 50)).join(', ')}`);
+    }
 
     const analysis = await customQuery(job.prompt, dataContext);
 
