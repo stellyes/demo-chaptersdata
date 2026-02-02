@@ -100,12 +100,21 @@ export function InsightInvestigationTab() {
       params.set('limit', '100');
 
       const response = await fetch(`/api/ai/insights?${params.toString()}`);
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response:', text.slice(0, 500));
+        throw new Error('Server returned non-JSON response. Please try again.');
+      }
+
       const result = await response.json();
 
       if (result.success) {
         setInsights(result.data);
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Failed to load insights');
       }
     } catch (error) {
       console.error('Failed to load insights:', error);
@@ -114,6 +123,8 @@ export function InsightInvestigationTab() {
         title: 'Failed to Load Insights',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
+      // Set empty array on error so UI doesn't break
+      setInsights([]);
     } finally {
       setLoading(false);
       hideLoadingOverlay();
@@ -270,6 +281,42 @@ export function InsightInvestigationTab() {
             </p>
           </div>
         </div>
+
+        {/* Stats in Header */}
+        {(insights.length > 0 || pastInvestigations.length > 0) && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-6">
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+              <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--ink)]">
+                {insights.length}
+              </p>
+              <p className="text-xs md:text-sm text-[var(--muted)]">Total Insights</p>
+            </div>
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+              <p className="text-xl md:text-2xl font-semibold font-serif text-green-600">
+                {insights.filter((i) => i.confidence === 'high').length}
+              </p>
+              <p className="text-xs md:text-sm text-[var(--muted)]">High Confidence</p>
+            </div>
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+              <p className="text-xl md:text-2xl font-semibold font-serif text-amber-600">
+                {insights.filter((i) => i.confidence === 'medium').length}
+              </p>
+              <p className="text-xs md:text-sm text-[var(--muted)]">Medium Confidence</p>
+            </div>
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+              <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--accent)]">
+                {new Set(insights.map((i) => i.category)).size}
+              </p>
+              <p className="text-xs md:text-sm text-[var(--muted)]">Categories</p>
+            </div>
+            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
+              <p className="text-xl md:text-2xl font-semibold font-serif text-blue-600">
+                {pastInvestigations.length}
+              </p>
+              <p className="text-xs md:text-sm text-[var(--muted)]">Investigations</p>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Two Column Layout */}
@@ -601,45 +648,6 @@ export function InsightInvestigationTab() {
         </div>
       </div>
 
-      {/* Stats */}
-      {(insights.length > 0 || pastInvestigations.length > 0) && (
-        <Card>
-          <SectionLabel>Insight Statistics</SectionLabel>
-          <SectionTitle>Knowledge Base Overview</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-4">
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
-              <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--ink)]">
-                {insights.length}
-              </p>
-              <p className="text-xs md:text-sm text-[var(--muted)]">Total Insights</p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
-              <p className="text-xl md:text-2xl font-semibold font-serif text-green-600">
-                {insights.filter((i) => i.confidence === 'high').length}
-              </p>
-              <p className="text-xs md:text-sm text-[var(--muted)]">High Confidence</p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
-              <p className="text-xl md:text-2xl font-semibold font-serif text-amber-600">
-                {insights.filter((i) => i.confidence === 'medium').length}
-              </p>
-              <p className="text-xs md:text-sm text-[var(--muted)]">Medium Confidence</p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
-              <p className="text-xl md:text-2xl font-semibold font-serif text-[var(--accent)]">
-                {new Set(insights.map((i) => i.category)).size}
-              </p>
-              <p className="text-xs md:text-sm text-[var(--muted)]">Categories</p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg text-center">
-              <p className="text-xl md:text-2xl font-semibold font-serif text-blue-600">
-                {pastInvestigations.length}
-              </p>
-              <p className="text-xs md:text-sm text-[var(--muted)]">Investigations</p>
-            </div>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

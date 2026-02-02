@@ -107,16 +107,31 @@ export function BuyerInsightsTab() {
   const loadBuyerInsights = async () => {
     try {
       const response = await fetch('/api/ai/buyer-insights');
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response from buyer-insights:', text.slice(0, 500));
+        throw new Error('Server returned non-JSON response. Please try again.');
+      }
+
       const result = await response.json();
 
       if (result.success) {
         setBuyerInsights(result.data.insights);
         setSummary(result.data.summary);
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Failed to load buyer insights');
       }
     } catch (error) {
       console.error('Failed to load buyer insights:', error);
+      addNotification({
+        type: 'error',
+        title: 'Failed to Load Buyer Insights',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+      setBuyerInsights([]);
     }
   };
 
@@ -129,13 +144,25 @@ export function BuyerInsightsTab() {
       params.set('limit', '50');
 
       const response = await fetch(`/api/ai/insights?${params.toString()}`);
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response from insights:', text.slice(0, 500));
+        throw new Error('Server returned non-JSON response. Please try again.');
+      }
+
       const result = await response.json();
 
       if (result.success) {
         setKnowledgeInsights(result.data);
+      } else {
+        throw new Error(result.error || 'Failed to load knowledge insights');
       }
     } catch (error) {
       console.error('Failed to load knowledge base insights:', error);
+      setKnowledgeInsights([]);
     }
   };
 
