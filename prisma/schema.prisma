@@ -43,6 +43,7 @@ model Storefront {
   brandRecords     BrandRecord[]
   budtenderRecords BudtenderRecord[]
   customers        Customer[]
+  dataFlags        DataFlag[]
   invoices         Invoice[]
   productRecords   ProductRecord[]
   salesRecords     SalesRecord[]
@@ -874,4 +875,33 @@ model RegulatoryEvent {
   @@index([impactLevel])
   @@index([isActive])
   @@map("regulatory_events")
+}
+
+model DataFlag {
+  id               String      @id @default(uuid())
+  storefrontId     String?     @map("storefront_id")
+  flagType         String      @map("flag_type")
+  severity         String      @default("medium")
+  status           String      @default("pending")
+  sourceTable      String      @map("source_table")
+  sourceRecordId   String      @map("source_record_id")
+  title            String
+  description      String      @db.Text
+  rawValue         String?     @map("raw_value")
+  suggestedMatch   String?     @map("suggested_match")
+  suggestedMatchId String?     @map("suggested_match_id")
+  similarityScore  Decimal?    @map("similarity_score") @db.Decimal(5, 4)
+  reviewedBy       String?     @map("reviewed_by")
+  reviewedAt       DateTime?   @map("reviewed_at")
+  resolution       String?     @db.Text
+  metadata         Json        @default("{}")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  storefront       Storefront? @relation(fields: [storefrontId], references: [id])
+
+  @@index([flagType])
+  @@index([severity])
+  @@index([status])
+  @@index([storefrontId])
+  @@map("data_flags")
 }
