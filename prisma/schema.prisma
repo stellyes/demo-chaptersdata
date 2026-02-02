@@ -1,6 +1,3 @@
-// Prisma Schema for Chapters Data Platform
-// Migrating from S3 + DynamoDB to Aurora PostgreSQL
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,10 +6,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// ============================================
-// MULTI-TENANT FOUNDATION
-// ============================================
 
 model Organization {
   id             String        @id @default(uuid())
@@ -31,33 +24,29 @@ model Organization {
 }
 
 model Storefront {
-  id              String          @id @default(uuid())
-  storefrontId    String          @unique @map("storefront_id")
-  orgId           String          @map("org_id")
-  organization    Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name            String
-  type            String
-  status          String          @default("pending")
-  location        String?
-  address         String?
-  city            String?
-  state           String?
-  zipCode         String?         @map("zip_code")
-  phone           String?
-  monthlyBilling  Decimal         @default(0) @map("monthly_billing") @db.Decimal(10, 2)
-  dashboardUrl    String?         @map("dashboard_url")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  invoices        Invoice[]
-  salesRecords    SalesRecord[]
-  brandRecords    BrandRecord[]
-  productRecords  ProductRecord[]
-  customers       Customer[]
+  id               String            @id @default(uuid())
+  storefrontId     String            @unique @map("storefront_id")
+  orgId            String            @map("org_id")
+  name             String
+  type             String
+  status           String            @default("pending")
+  location         String?
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?           @map("zip_code")
+  phone            String?
+  monthlyBilling   Decimal           @default(0) @map("monthly_billing") @db.Decimal(10, 2)
+  dashboardUrl     String?           @map("dashboard_url")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  brandRecords     BrandRecord[]
   budtenderRecords BudtenderRecord[]
-  products        Product[]
-  metrcPackages   MetrcPackage[]
-  metrcTransfers  MetrcTransfer[]
-  dataFlags       DataFlag[]
+  customers        Customer[]
+  invoices         Invoice[]
+  productRecords   ProductRecord[]
+  salesRecords     SalesRecord[]
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("storefronts")
 }
@@ -65,11 +54,11 @@ model Storefront {
 model UserMapping {
   id           String       @id @default(uuid())
   userId       String       @map("user_id")
-  userEmail    String?      @map("user_email")
   orgId        String       @map("org_id")
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   role         String       @default("member")
   assignedAt   DateTime     @default(now()) @map("assigned_at")
+  userEmail    String?      @map("user_email")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@unique([userId, orgId])
   @@index([userId])
@@ -94,31 +83,21 @@ model UserProfile {
   @@map("user_profiles")
 }
 
-// ============================================
-// CLIENT BILLING INVOICES
-// Invoices sent TO clients for services
-// ============================================
-
 model ClientInvoice {
-  id             String    @id @default(uuid())
-  invoiceNumber  String    @unique @map("invoice_number")
-  orgId          String    @map("org_id")
-
-  amount         Decimal   @db.Decimal(10, 2)
-  amountPaid     Decimal   @default(0) @map("amount_paid") @db.Decimal(10, 2)
-  status         String    @default("unpaid") // unpaid, partial, paid
-
-  description    String?
-  dueDate        DateTime  @map("due_date")
-
-  // PDF attachment stored in S3
-  pdfKey         String?   @map("pdf_key")
-  pdfUrl         String?   @map("pdf_url")
-  pdfFileName    String?   @map("pdf_file_name")
-
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  paidAt         DateTime? @map("paid_at")
+  id            String    @id @default(uuid())
+  invoiceNumber String    @unique @map("invoice_number")
+  orgId         String    @map("org_id")
+  amount        Decimal   @db.Decimal(10, 2)
+  amountPaid    Decimal   @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  status        String    @default("unpaid")
+  description   String?
+  dueDate       DateTime  @map("due_date")
+  pdfKey        String?   @map("pdf_key")
+  pdfUrl        String?   @map("pdf_url")
+  pdfFileName   String?   @map("pdf_file_name")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  paidAt        DateTime? @map("paid_at")
 
   @@index([orgId])
   @@index([status])
@@ -126,17 +105,12 @@ model ClientInvoice {
   @@map("client_invoices")
 }
 
-// ============================================
-// VENDOR NORMALIZATION
-// Maps ~130 canonical vendors with ~800 aliases
-// ============================================
-
 model Vendor {
   id            String        @id @default(uuid())
   canonicalName String        @unique @map("canonical_name")
   createdAt     DateTime      @default(now()) @map("created_at")
-  aliases       VendorAlias[]
   invoices      Invoice[]
+  aliases       VendorAlias[]
   vendorBrands  VendorBrand[]
 
   @@map("vendors")
@@ -145,38 +119,32 @@ model Vendor {
 model VendorAlias {
   id        String @id @default(uuid())
   vendorId  String @map("vendor_id")
-  vendor    Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   aliasName String @unique @map("alias_name")
+  vendor    Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@index([aliasName])
   @@map("vendor_aliases")
 }
 
-// Junction table linking Vendors to the Brands they distribute
 model VendorBrand {
-  id             String         @id @default(uuid())
-  vendorId       String         @map("vendor_id")
-  vendor         Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  brandId        String         @map("brand_id")
-  brand          CanonicalBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  invoiceCount   Int            @default(0) @map("invoice_count")
-  totalUnits     Int            @default(0) @map("total_units")
-  totalCost      Decimal        @default(0) @map("total_cost") @db.Decimal(12, 2)
-  firstSeenAt    DateTime?      @map("first_seen_at")
-  lastSeenAt     DateTime?      @map("last_seen_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
+  id           String         @id @default(uuid())
+  vendorId     String         @map("vendor_id")
+  brandId      String         @map("brand_id")
+  invoiceCount Int            @default(0) @map("invoice_count")
+  totalUnits   Int            @default(0) @map("total_units")
+  totalCost    Decimal        @default(0) @map("total_cost") @db.Decimal(12, 2)
+  firstSeenAt  DateTime?      @map("first_seen_at")
+  lastSeenAt   DateTime?      @map("last_seen_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  brand        CanonicalBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  vendor       Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@unique([vendorId, brandId])
   @@index([vendorId])
   @@index([brandId])
   @@map("vendor_brands")
 }
-
-// ============================================
-// BRAND NORMALIZATION
-// Replaces S3 config/brand_product_mapping.json
-// ============================================
 
 model CanonicalBrand {
   id            String            @id @default(uuid())
@@ -187,7 +155,6 @@ model CanonicalBrand {
   brandRecords  BrandRecord[]
   lineItems     InvoiceLineItem[]
   vendorBrands  VendorBrand[]
-  products      Product[]
 
   @@map("canonical_brands")
 }
@@ -195,23 +162,17 @@ model CanonicalBrand {
 model BrandAlias {
   id          String         @id @default(uuid())
   brandId     String         @map("brand_id")
-  brand       CanonicalBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
   aliasName   String         @unique @map("alias_name")
   productType String?        @map("product_type")
+  brand       CanonicalBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@index([aliasName])
   @@map("brand_aliases")
 }
 
-// ============================================
-// SALES DATA
-// Replaces S3 raw-uploads/{store}/sales_*.csv
-// ============================================
-
 model SalesRecord {
   id             String      @id @default(uuid())
   storefrontId   String?     @map("storefront_id")
-  storefront     Storefront? @relation(fields: [storefrontId], references: [id])
   storeId        String      @map("store_id")
   storeName      String?     @map("store_name")
   date           DateTime    @db.Date
@@ -235,6 +196,7 @@ model SalesRecord {
   avgOrderValue  Decimal     @default(0) @map("avg_order_value") @db.Decimal(10, 2)
   avgOrderProfit Decimal     @default(0) @map("avg_order_profit") @db.Decimal(10, 2)
   createdAt      DateTime    @default(now()) @map("created_at")
+  storefront     Storefront? @relation(fields: [storefrontId], references: [id])
 
   @@unique([storeId, date])
   @@index([date])
@@ -242,19 +204,12 @@ model SalesRecord {
   @@map("sales_records")
 }
 
-// ============================================
-// BRAND PERFORMANCE DATA
-// Replaces S3 raw-uploads/{store}/brand_*.csv
-// ============================================
-
 model BrandRecord {
   id                 String          @id @default(uuid())
   storefrontId       String?         @map("storefront_id")
-  storefront         Storefront?     @relation(fields: [storefrontId], references: [id])
   storeId            String          @map("store_id")
   storeName          String?         @map("store_name")
   brandId            String?         @map("brand_id")
-  brand              CanonicalBrand? @relation(fields: [brandId], references: [id])
   originalBrandName  String          @map("original_brand_name")
   pctOfTotalNetSales Decimal         @default(0) @map("pct_of_total_net_sales") @db.Decimal(8, 4)
   grossMarginPct     Decimal         @default(0) @map("gross_margin_pct") @db.Decimal(6, 3)
@@ -263,21 +218,17 @@ model BrandRecord {
   uploadStartDate    DateTime?       @map("upload_start_date") @db.Date
   uploadEndDate      DateTime?       @map("upload_end_date") @db.Date
   createdAt          DateTime        @default(now()) @map("created_at")
+  brand              CanonicalBrand? @relation(fields: [brandId], references: [id])
+  storefront         Storefront?     @relation(fields: [storefrontId], references: [id])
 
   @@index([brandId])
   @@index([storeId])
   @@map("brand_records")
 }
 
-// ============================================
-// PRODUCT CATEGORY PERFORMANCE
-// Replaces S3 raw-uploads/{store}/product_*.csv
-// ============================================
-
 model ProductRecord {
   id                 String      @id @default(uuid())
   storefrontId       String?     @map("storefront_id")
-  storefront         Storefront? @relation(fields: [storefrontId], references: [id])
   storeId            String      @map("store_id")
   storeName          String?     @map("store_name")
   productType        String      @map("product_type")
@@ -285,22 +236,19 @@ model ProductRecord {
   grossMarginPct     Decimal     @default(0) @map("gross_margin_pct") @db.Decimal(6, 3)
   avgCostWoExcise    Decimal     @default(0) @map("avg_cost_wo_excise") @db.Decimal(10, 2)
   netSales           Decimal     @default(0) @map("net_sales") @db.Decimal(12, 2)
+  uploadStartDate    DateTime?   @map("upload_start_date") @db.Date
+  uploadEndDate      DateTime?   @map("upload_end_date") @db.Date
   createdAt          DateTime    @default(now()) @map("created_at")
+  storefront         Storefront? @relation(fields: [storefrontId], references: [id])
 
   @@index([storeId])
   @@index([productType])
   @@map("product_records")
 }
 
-// ============================================
-// CUSTOMER DATA
-// Replaces S3 raw-uploads/{store}/customers_*.csv
-// ============================================
-
 model Customer {
   id                   String      @id @default(uuid())
   storefrontId         String?     @map("storefront_id")
-  storefront           Storefront? @relation(fields: [storefrontId], references: [id])
   storeName            String      @map("store_name")
   customerId           String      @map("customer_id")
   name                 String?
@@ -316,6 +264,7 @@ model Customer {
   recencySegment       String?     @map("recency_segment")
   createdAt            DateTime    @default(now()) @map("created_at")
   updatedAt            DateTime    @updatedAt @map("updated_at")
+  storefront           Storefront? @relation(fields: [storefrontId], references: [id])
 
   @@unique([storeName, customerId])
   @@index([customerSegment])
@@ -324,11 +273,6 @@ model Customer {
   @@map("customers")
 }
 
-// ============================================
-// INVOICE DATA
-// Replaces DynamoDB retail-invoices table
-// ============================================
-
 model Invoice {
   id                 String            @id @default(uuid())
   invoiceId          String            @unique @map("invoice_id")
@@ -336,11 +280,9 @@ model Invoice {
   invoiceDate        DateTime?         @map("invoice_date") @db.Date
   downloadDate       DateTime?         @map("download_date") @db.Date
   vendorId           String?           @map("vendor_id")
-  vendor             Vendor?           @relation(fields: [vendorId], references: [id])
   originalVendorName String?           @map("original_vendor_name")
   customerName       String?           @map("customer_name")
   storefrontId       String?           @map("storefront_id")
-  storefront         Storefront?       @relation(fields: [storefrontId], references: [id])
   subtotal           Decimal           @default(0) @db.Decimal(12, 2)
   discount           Decimal           @default(0) @db.Decimal(12, 2)
   fees               Decimal           @default(0) @db.Decimal(12, 2)
@@ -358,6 +300,8 @@ model Invoice {
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
   lineItems          InvoiceLineItem[]
+  storefront         Storefront?       @relation(fields: [storefrontId], references: [id])
+  vendor             Vendor?           @relation(fields: [vendorId], references: [id])
 
   @@index([invoiceDate])
   @@index([vendorId])
@@ -366,18 +310,11 @@ model Invoice {
   @@map("invoices")
 }
 
-// ============================================
-// INVOICE LINE ITEMS
-// Replaces DynamoDB retail-invoice-line-items table
-// ============================================
-
 model InvoiceLineItem {
   id                  String          @id @default(uuid())
   invoiceId           String          @map("invoice_id")
-  invoice             Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   lineNumber          Int             @map("line_number")
   brandId             String?         @map("brand_id")
-  brand               CanonicalBrand? @relation(fields: [brandId], references: [id])
   originalBrandName   String          @map("original_brand_name")
   productName         String?         @map("product_name")
   productType         String?         @map("product_type")
@@ -392,17 +329,14 @@ model InvoiceLineItem {
   traceId             String?         @map("trace_id")
   isPromo             Boolean         @default(false) @map("is_promo")
   createdAt           DateTime        @default(now()) @map("created_at")
+  brand               CanonicalBrand? @relation(fields: [brandId], references: [id])
+  invoice             Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@unique([invoiceId, lineNumber])
   @@index([brandId])
   @@index([productType])
   @@map("invoice_line_items")
 }
-
-// ============================================
-// QR TRACKER
-// Replaces DynamoDB qr-tracker-qr-codes table
-// ============================================
 
 model QrCode {
   id          String    @id @default(uuid())
@@ -420,36 +354,25 @@ model QrCode {
   @@map("qr_codes")
 }
 
-// ============================================
-// QR CLICK EVENTS
-// Replaces DynamoDB qr-tracker-clicks table
-// ============================================
-
 model QrClick {
   id        String   @id @default(uuid())
   qrCodeId  String   @map("qr_code_id")
-  qrCode    QrCode   @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
   shortCode String   @map("short_code")
   ipAddress String?  @map("ip_address")
   userAgent String?  @map("user_agent")
   referrer  String?
   location  String?
   clickedAt DateTime @default(now()) @map("clicked_at")
+  qrCode    QrCode   @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
 
   @@index([shortCode])
   @@index([clickedAt])
   @@map("qr_clicks")
 }
 
-// ============================================
-// BUDTENDER PERFORMANCE DATA
-// Replaces S3 data/budtender_performance.csv
-// ============================================
-
 model BudtenderRecord {
   id             String      @id @default(uuid())
   storefrontId   String?     @map("storefront_id")
-  storefront     Storefront? @relation(fields: [storefrontId], references: [id])
   storeId        String      @map("store_id")
   storeName      String?     @map("store_name")
   employeeName   String      @map("employee_name")
@@ -461,17 +384,13 @@ model BudtenderRecord {
   avgOrderValue  Decimal     @default(0) @map("avg_order_value") @db.Decimal(10, 2)
   unitsSold      Int         @default(0) @map("units_sold")
   createdAt      DateTime    @default(now()) @map("created_at")
+  storefront     Storefront? @relation(fields: [storefrontId], references: [id])
 
   @@index([storeId])
   @@index([employeeName])
   @@index([date])
   @@map("budtender_records")
 }
-
-// ============================================
-// BUDTENDER STORE ASSIGNMENTS
-// Replaces S3 config/budtender_assignments.json
-// ============================================
 
 model BudtenderAssignment {
   id           String   @id @default(uuid())
@@ -482,26 +401,21 @@ model BudtenderAssignment {
   @@map("budtender_assignments")
 }
 
-// ============================================
-// AI KNOWLEDGE BASE
-// Persistent context for Claude analyses
-// ============================================
-
 model BusinessInsight {
-  id           String   @id @default(uuid())
-  category     String   // sales, brands, categories, customers, purchasing, market
-  subcategory  String?  // more specific classification
-  insight      String   @db.Text // the actual insight/finding
-  confidence   String   @default("medium") // high, medium, low
-  source       String   // which analysis generated this
-  sourceData   String?  @map("source_data") @db.Text // summary of data that led to insight
-  dataRange    String?  @map("data_range") // e.g., "2024-01-01 to 2024-03-31"
-  storefrontId String?  @map("storefront_id")
-  isActive     Boolean  @default(true) @map("is_active")
-  validatedAt  DateTime? @map("validated_at") // when a human confirmed this
-  expiresAt    DateTime? @map("expires_at") // some insights become stale
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(uuid())
+  category     String
+  subcategory  String?
+  insight      String
+  confidence   String    @default("medium")
+  source       String
+  sourceData   String?   @map("source_data")
+  dataRange    String?   @map("data_range")
+  storefrontId String?   @map("storefront_id")
+  isActive     Boolean   @default(true) @map("is_active")
+  validatedAt  DateTime? @map("validated_at")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@index([category])
   @@index([storefrontId])
@@ -512,13 +426,13 @@ model BusinessInsight {
 
 model BusinessRule {
   id          String   @id @default(uuid())
-  category    String   // margin_threshold, reorder_point, pricing, etc.
-  name        String   // human-readable name
-  description String   @db.Text
-  rule        String   @db.Text // the actual rule/guideline
-  priority    Int      @default(5) // 1-10, higher = more important
+  category    String
+  name        String
+  description String
+  rule        String
+  priority    Int      @default(5)
   isActive    Boolean  @default(true) @map("is_active")
-  createdBy   String?  @map("created_by") // "system" or user ID
+  createdBy   String?  @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -529,15 +443,15 @@ model BusinessRule {
 }
 
 model AnalysisHistory {
-  id              String   @id @default(uuid())
-  analysisType    String   @map("analysis_type") // sales, brands, categories, etc.
-  storefrontId    String?  @map("storefront_id")
-  inputSummary    String   @map("input_summary") @db.Text // hash or summary of input data
-  outputSummary   String   @map("output_summary") @db.Text // key points from analysis
-  insightsCount   Int      @default(0) @map("insights_count")
-  tokensUsed      Int?     @map("tokens_used")
-  model           String?  // which Claude model was used
-  createdAt       DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid())
+  analysisType  String   @map("analysis_type")
+  storefrontId  String?  @map("storefront_id")
+  inputSummary  String   @map("input_summary")
+  outputSummary String   @map("output_summary")
+  insightsCount Int      @default(0) @map("insights_count")
+  tokensUsed    Int?     @map("tokens_used")
+  model         String?
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([analysisType])
   @@index([storefrontId])
@@ -545,58 +459,42 @@ model AnalysisHistory {
   @@map("analysis_history")
 }
 
-// ============================================
-// AUTONOMOUS DAILY LEARNING SYSTEM
-// Runs daily to review data, generate questions,
-// research the web, and produce actionable digests
-// ============================================
-
 model DailyLearningJob {
-  id              String    @id @default(uuid())
-  startedAt       DateTime  @default(now()) @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-  status          String    @default("running") // running, completed, failed, partial
-  currentPhase    String?   @map("current_phase")
-
-  dataReviewDone      Boolean @default(false) @map("data_review_done")
-  questionGenDone     Boolean @default(false) @map("question_gen_done")
-  webResearchDone     Boolean @default(false) @map("web_research_done")
-  correlationDone     Boolean @default(false) @map("correlation_done")
-  digestGenDone       Boolean @default(false) @map("digest_gen_done")
-
-  inputTokens     Int      @default(0) @map("input_tokens")
-  outputTokens    Int      @default(0) @map("output_tokens")
-  searchesUsed    Int      @default(0) @map("searches_used")
-  estimatedCost   Decimal  @default(0) @map("estimated_cost") @db.Decimal(10, 4)
-
-  questionsGenerated  Int     @default(0) @map("questions_generated")
-  insightsDiscovered  Int     @default(0) @map("insights_discovered")
-  articlesAnalyzed    Int     @default(0) @map("articles_analyzed")
-
-  errorMessage    String?  @map("error_message") @db.Text
-  errorPhase      String?  @map("error_phase")
-
-  digestId        String?  @unique @map("digest_id")
-  digest          DailyDigest? @relation(fields: [digestId], references: [id])
+  id                 String       @id @default(uuid())
+  startedAt          DateTime     @default(now()) @map("started_at")
+  completedAt        DateTime?    @map("completed_at")
+  status             String       @default("running")
+  currentPhase       String?      @map("current_phase")
+  dataReviewDone     Boolean      @default(false) @map("data_review_done")
+  questionGenDone    Boolean      @default(false) @map("question_gen_done")
+  webResearchDone    Boolean      @default(false) @map("web_research_done")
+  correlationDone    Boolean      @default(false) @map("correlation_done")
+  digestGenDone      Boolean      @default(false) @map("digest_gen_done")
+  inputTokens        Int          @default(0) @map("input_tokens")
+  outputTokens       Int          @default(0) @map("output_tokens")
+  searchesUsed       Int          @default(0) @map("searches_used")
+  estimatedCost      Decimal      @default(0) @map("estimated_cost") @db.Decimal(10, 4)
+  questionsGenerated Int          @default(0) @map("questions_generated")
+  insightsDiscovered Int          @default(0) @map("insights_discovered")
+  articlesAnalyzed   Int          @default(0) @map("articles_analyzed")
+  errorMessage       String?      @map("error_message")
+  errorPhase         String?      @map("error_phase")
+  digestId           String?      @unique @map("digest_id")
+  digest             DailyDigest? @relation(fields: [digestId], references: [id])
 
   @@index([startedAt])
   @@index([status])
   @@map("daily_learning_jobs")
 }
 
-// ============================================
-// CUSTOM QUERY JOBS
-// Async processing for AI custom queries
-// ============================================
-
 model CustomQueryJob {
   id                  String    @id @default(uuid())
-  prompt              String    @db.Text
-  status              String    @default("pending") // pending, running, completed, failed
+  prompt              String
+  status              String    @default("pending")
   startedAt           DateTime  @default(now()) @map("started_at")
   completedAt         DateTime? @map("completed_at")
-  result              String?   @db.Text
-  errorMessage        String?   @map("error_message") @db.Text
+  result              String?
+  errorMessage        String?   @map("error_message")
   contextOptions      Json      @default("{}") @map("context_options")
   selectedResearchIds Json      @default("[]") @map("selected_research_ids")
 
@@ -606,44 +504,37 @@ model CustomQueryJob {
 }
 
 model DailyDigest {
-  id              String   @id @default(uuid())
-  createdAt       DateTime @default(now()) @map("created_at")
-  digestDate      DateTime @map("digest_date") @db.Date
+  id                   String            @id @default(uuid())
+  createdAt            DateTime          @default(now()) @map("created_at")
+  digestDate           DateTime          @unique @map("digest_date") @db.Date
+  executiveSummary     String            @map("executive_summary")
+  priorityActions      Json              @default("[]") @map("priority_actions")
+  quickWins            Json              @default("[]") @map("quick_wins")
+  watchItems           Json              @default("[]") @map("watch_items")
+  industryHighlights   Json              @default("[]") @map("industry_highlights")
+  regulatoryUpdates    Json              @default("[]") @map("regulatory_updates")
+  marketTrends         Json              @default("[]") @map("market_trends")
+  questionsForTomorrow Json              @default("[]") @map("questions_for_tomorrow")
+  correlatedInsights   Json              @default("[]") @map("correlated_insights")
+  dataHealthScore      Float             @default(0) @map("data_health_score")
+  confidenceScore      Float             @default(0) @map("confidence_score")
+  job                  DailyLearningJob?
 
-  executiveSummary    String  @map("executive_summary") @db.Text
-  priorityActions     Json    @default("[]") @map("priority_actions")
-  quickWins           Json    @default("[]") @map("quick_wins")
-  watchItems          Json    @default("[]") @map("watch_items")
-  industryHighlights  Json    @default("[]") @map("industry_highlights")
-  regulatoryUpdates   Json    @default("[]") @map("regulatory_updates")
-  marketTrends        Json    @default("[]") @map("market_trends")
-  questionsForTomorrow Json   @default("[]") @map("questions_for_tomorrow")
-  correlatedInsights  Json    @default("[]") @map("correlated_insights")
-
-  dataHealthScore     Float   @default(0) @map("data_health_score")
-  confidenceScore     Float   @default(0) @map("confidence_score")
-
-  job                 DailyLearningJob?
-
-  @@unique([digestDate])
   @@index([createdAt])
   @@map("daily_digests")
 }
 
 model WebResearchCache {
-  id              String   @id @default(uuid())
-  createdAt       DateTime @default(now()) @map("created_at")
-  expiresAt       DateTime @map("expires_at")
-
-  searchQuery     String   @map("search_query") @db.Text
-  queryHash       String   @unique @map("query_hash")
-
-  resultCount     Int      @default(0) @map("result_count")
-  resultsJson     Json     @default("[]") @map("results_json")
-  urlHashes       String[] @map("url_hashes")
-
-  searchEngine    String   @default("google") @map("search_engine")
-  pagesRetrieved  Int      @default(1) @map("pages_retrieved")
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now()) @map("created_at")
+  expiresAt      DateTime @map("expires_at")
+  searchQuery    String   @map("search_query")
+  queryHash      String   @unique @map("query_hash")
+  resultCount    Int      @default(0) @map("result_count")
+  resultsJson    Json     @default("[]") @map("results_json")
+  urlHashes      String[] @map("url_hashes")
+  searchEngine   String   @default("google") @map("search_engine")
+  pagesRetrieved Int      @default(1) @map("pages_retrieved")
 
   @@index([queryHash])
   @@index([expiresAt])
@@ -651,38 +542,29 @@ model WebResearchCache {
 }
 
 model CollectedUrl {
-  id              String    @id @default(uuid())
-  createdAt       DateTime  @default(now()) @map("created_at")
-
-  url             String    @db.Text
-  urlHash         String    @unique @map("url_hash")
-  domain          String
-
-  contentHash     String?   @map("content_hash")
-  title           String?   @db.Text
-  snippet         String?   @db.Text
-  fullContent     String?   @map("full_content") @db.Text
-  publishedDate   DateTime? @map("published_date")
-
-  relevanceScore  Float     @default(0) @map("relevance_score")
-  categories      String[]
-
-  isFetched       Boolean   @default(false) @map("is_fetched")
-  isAnalyzed      Boolean   @default(false) @map("is_analyzed")
-  fetchError      String?   @map("fetch_error")
-
-  sourceQuery     String?   @map("source_query") @db.Text
-  sourceJobId     String?   @map("source_job_id")
-
-  // Content analysis results (populated by content-fetcher service)
-  summaryText       String?   @map("summary_text") @db.Text
+  id                String    @id @default(uuid())
+  createdAt         DateTime  @default(now()) @map("created_at")
+  url               String
+  urlHash           String    @unique @map("url_hash")
+  domain            String
+  contentHash       String?   @map("content_hash")
+  title             String?
+  snippet           String?
+  fullContent       String?   @map("full_content")
+  publishedDate     DateTime? @map("published_date")
+  relevanceScore    Float     @default(0) @map("relevance_score")
+  categories        String[]
+  isFetched         Boolean   @default(false) @map("is_fetched")
+  isAnalyzed        Boolean   @default(false) @map("is_analyzed")
+  fetchError        String?   @map("fetch_error")
+  sourceQuery       String?   @map("source_query")
+  sourceJobId       String?   @map("source_job_id")
+  contentQuality    String?   @map("content_quality")
   keyPoints         String[]  @map("key_points")
-  mentionedEntities String[]  @map("mentioned_entities") // brands, companies, regulations mentioned
-
-  // Trust and quality scoring
-  trustScore        Float?    @map("trust_score") // 0-1 based on domain reputation
-  contentQuality    String?   @map("content_quality") // high, medium, low, garbage
   lastVerified      DateTime? @map("last_verified")
+  mentionedEntities String[]  @map("mentioned_entities")
+  summaryText       String?   @map("summary_text")
+  trustScore        Float?    @map("trust_score")
   verificationCount Int       @default(0) @map("verification_count")
 
   @@index([urlHash])
@@ -694,42 +576,31 @@ model CollectedUrl {
 }
 
 model LearningQuestion {
-  id              String    @id @default(uuid())
-  createdAt       DateTime  @default(now()) @map("created_at")
-
-  question        String    @db.Text
-  questionHash    String    @unique @map("question_hash")
-  category        String
-  priority        Int       @default(5)
-
-  requiresWebResearch Boolean @default(false) @map("requires_web_research")
-  requiresInternalData Boolean @default(true) @map("requires_internal_data")
-
-  generatedBy     String    @default("system") @map("generated_by")
-  sourceInsightId String?   @map("source_insight_id")
-
-  timesAsked      Int       @default(0) @map("times_asked")
-  lastAsked       DateTime? @map("last_asked")
-  lastAnswered    DateTime? @map("last_answered")
-
-  answerQuality   Float?    @map("answer_quality")
-  isActive        Boolean   @default(true) @map("is_active")
-
-  // Question Threading - enables investigation chains
-  parentQuestionId  String?            @map("parent_question_id")
-  parentQuestion    LearningQuestion?  @relation("QuestionThread", fields: [parentQuestionId], references: [id])
-  followUpQuestions LearningQuestion[] @relation("QuestionThread")
-  threadId          String?            @map("thread_id")
-  threadDepth       Int                @default(0) @map("thread_depth")
-  threadStatus      String             @default("open") @map("thread_status") // open, answered, needs_followup, closed
-
-  // Answer tracking for partial answer detection
-  answerSummary     String?   @map("answer_summary") @db.Text
-  partialAnswer     Boolean   @default(false) @map("partial_answer")
-  followUpReason    String?   @map("follow_up_reason") @db.Text
-
-  // Monthly strategic report sourcing
-  sourceMonthlyReportId String? @map("source_monthly_report_id")
+  id                    String             @id @default(uuid())
+  createdAt             DateTime           @default(now()) @map("created_at")
+  question              String
+  questionHash          String             @unique @map("question_hash")
+  category              String
+  priority              Int                @default(5)
+  requiresWebResearch   Boolean            @default(false) @map("requires_web_research")
+  requiresInternalData  Boolean            @default(true) @map("requires_internal_data")
+  generatedBy           String             @default("system") @map("generated_by")
+  sourceInsightId       String?            @map("source_insight_id")
+  timesAsked            Int                @default(0) @map("times_asked")
+  lastAsked             DateTime?          @map("last_asked")
+  lastAnswered          DateTime?          @map("last_answered")
+  answerQuality         Float?             @map("answer_quality")
+  isActive              Boolean            @default(true) @map("is_active")
+  answerSummary         String?            @map("answer_summary")
+  followUpReason        String?            @map("follow_up_reason")
+  parentQuestionId      String?            @map("parent_question_id")
+  partialAnswer         Boolean            @default(false) @map("partial_answer")
+  sourceMonthlyReportId String?            @map("source_monthly_report_id")
+  threadDepth           Int                @default(0) @map("thread_depth")
+  threadId              String?            @map("thread_id")
+  threadStatus          String             @default("open") @map("thread_status")
+  parentQuestion        LearningQuestion?  @relation("QuestionThread", fields: [parentQuestionId], references: [id])
+  followUpQuestions     LearningQuestion[] @relation("QuestionThread")
 
   @@index([category])
   @@index([priority])
@@ -741,132 +612,91 @@ model LearningQuestion {
 }
 
 model ApiUsageTracker {
-  id              String   @id @default(uuid())
-  monthYear       String   @unique @map("month_year")
-
-  serpApiSearches Int      @default(0) @map("serpapi_searches")
-  serpApiLimit    Int      @default(250) @map("serpapi_limit")
-
-  claudeInputTokens  Int   @default(0) @map("claude_input_tokens")
-  claudeOutputTokens Int   @default(0) @map("claude_output_tokens")
-
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  monthYear          String   @unique @map("month_year")
+  serpApiSearches    Int      @default(0) @map("serpapi_searches")
+  serpApiLimit       Int      @default(250) @map("serpapi_limit")
+  claudeInputTokens  Int      @default(0) @map("claude_input_tokens")
+  claudeOutputTokens Int      @default(0) @map("claude_output_tokens")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("api_usage_tracker")
 }
 
-// ============================================
-// MONTHLY OPUS STRATEGIC ANALYSIS
-// Deep strategic analysis using Claude Opus
-// Runs once per month for comprehensive review
-// ============================================
-
 model MonthlyAnalysisJob {
-  id              String    @id @default(uuid())
-  startedAt       DateTime  @default(now()) @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-  status          String    @default("running") // running, completed, failed
-  currentPhase    String?   @map("current_phase")
+  id                  String                  @id @default(uuid())
+  startedAt           DateTime                @default(now()) @map("started_at")
+  completedAt         DateTime?               @map("completed_at")
+  status              String                  @default("running")
+  currentPhase        String?                 @map("current_phase")
+  monthYear           String                  @unique @map("month_year")
+  dataAggregationDone Boolean                 @default(false) @map("data_aggregation_done")
+  trendAnalysisDone   Boolean                 @default(false) @map("trend_analysis_done")
+  strategyGenDone     Boolean                 @default(false) @map("strategy_gen_done")
+  reportGenDone       Boolean                 @default(false) @map("report_gen_done")
+  inputTokens         Int                     @default(0) @map("input_tokens")
+  outputTokens        Int                     @default(0) @map("output_tokens")
+  estimatedCost       Decimal                 @default(0) @map("estimated_cost") @db.Decimal(10, 4)
+  errorMessage        String?                 @map("error_message")
+  errorPhase          String?                 @map("error_phase")
+  reportId            String?                 @unique @map("report_id")
+  report              MonthlyStrategicReport? @relation(fields: [reportId], references: [id])
 
-  monthYear       String    @map("month_year") // e.g., "2025-01"
-
-  dataAggregationDone   Boolean @default(false) @map("data_aggregation_done")
-  trendAnalysisDone     Boolean @default(false) @map("trend_analysis_done")
-  strategyGenDone       Boolean @default(false) @map("strategy_gen_done")
-  reportGenDone         Boolean @default(false) @map("report_gen_done")
-
-  inputTokens     Int      @default(0) @map("input_tokens")
-  outputTokens    Int      @default(0) @map("output_tokens")
-  estimatedCost   Decimal  @default(0) @map("estimated_cost") @db.Decimal(10, 4)
-
-  errorMessage    String?  @map("error_message") @db.Text
-  errorPhase      String?  @map("error_phase")
-
-  reportId        String?  @unique @map("report_id")
-  report          MonthlyStrategicReport? @relation(fields: [reportId], references: [id])
-
-  @@unique([monthYear])
   @@index([startedAt])
   @@index([status])
   @@map("monthly_analysis_jobs")
 }
 
 model MonthlyStrategicReport {
-  id              String   @id @default(uuid())
-  createdAt       DateTime @default(now()) @map("created_at")
-  monthYear       String   @unique @map("month_year") // e.g., "2025-01"
-
-  // Executive Analysis
-  executiveSummary      String  @map("executive_summary") @db.Text
-  performanceGrade      String  @map("performance_grade") // A, B, C, D, F
-  monthOverMonthChange  Json    @map("mom_change") // { revenue: +5%, customers: -2%, etc }
-
-  // Strategic Analysis
-  strengthsAnalysis     Json    @default("[]") @map("strengths_analysis")
-  weaknessesAnalysis    Json    @default("[]") @map("weaknesses_analysis")
-  opportunitiesAnalysis Json    @default("[]") @map("opportunities_analysis")
-  threatsAnalysis       Json    @default("[]") @map("threats_analysis")
-
-  // Trend Analysis
-  salesTrends           Json    @default("[]") @map("sales_trends")
-  customerTrends        Json    @default("[]") @map("customer_trends")
-  brandTrends           Json    @default("[]") @map("brand_trends")
-  marketTrends          Json    @default("[]") @map("market_trends")
-
-  // Strategic Recommendations
-  strategicPriorities   Json    @default("[]") @map("strategic_priorities")
-  quarterlyGoals        Json    @default("[]") @map("quarterly_goals")
-  resourceAllocations   Json    @default("[]") @map("resource_allocations")
-  riskMitigations       Json    @default("[]") @map("risk_mitigations")
-
-  // Competitive & Market Analysis
-  competitiveLandscape  Json    @default("{}") @map("competitive_landscape")
-  marketPositioning     Json    @default("{}") @map("market_positioning")
-  regulatoryOutlook     Json    @default("{}") @map("regulatory_outlook")
-
-  // Forecasts
-  revenueProjections    Json    @default("[]") @map("revenue_projections")
-  growthOpportunities   Json    @default("[]") @map("growth_opportunities")
-  riskFactors           Json    @default("[]") @map("risk_factors")
-
-  // Questions for Next Month
-  keyQuestionsNext      Json    @default("[]") @map("key_questions_next")
-
-  // Metadata
-  dataHealthScore       Float   @default(0) @map("data_health_score")
-  confidenceScore       Float   @default(0) @map("confidence_score")
-  dailyDigestsIncluded  Int     @default(0) @map("daily_digests_included")
-
+  id                    String              @id @default(uuid())
+  createdAt             DateTime            @default(now()) @map("created_at")
+  monthYear             String              @unique @map("month_year")
+  executiveSummary      String              @map("executive_summary")
+  performanceGrade      String              @map("performance_grade")
+  monthOverMonthChange  Json                @map("mom_change")
+  strengthsAnalysis     Json                @default("[]") @map("strengths_analysis")
+  weaknessesAnalysis    Json                @default("[]") @map("weaknesses_analysis")
+  opportunitiesAnalysis Json                @default("[]") @map("opportunities_analysis")
+  threatsAnalysis       Json                @default("[]") @map("threats_analysis")
+  salesTrends           Json                @default("[]") @map("sales_trends")
+  customerTrends        Json                @default("[]") @map("customer_trends")
+  brandTrends           Json                @default("[]") @map("brand_trends")
+  marketTrends          Json                @default("[]") @map("market_trends")
+  strategicPriorities   Json                @default("[]") @map("strategic_priorities")
+  quarterlyGoals        Json                @default("[]") @map("quarterly_goals")
+  resourceAllocations   Json                @default("[]") @map("resource_allocations")
+  riskMitigations       Json                @default("[]") @map("risk_mitigations")
+  competitiveLandscape  Json                @default("{}") @map("competitive_landscape")
+  marketPositioning     Json                @default("{}") @map("market_positioning")
+  regulatoryOutlook     Json                @default("{}") @map("regulatory_outlook")
+  revenueProjections    Json                @default("[]") @map("revenue_projections")
+  growthOpportunities   Json                @default("[]") @map("growth_opportunities")
+  riskFactors           Json                @default("[]") @map("risk_factors")
+  keyQuestionsNext      Json                @default("[]") @map("key_questions_next")
+  dataHealthScore       Float               @default(0) @map("data_health_score")
+  confidenceScore       Float               @default(0) @map("confidence_score")
+  dailyDigestsIncluded  Int                 @default(0) @map("daily_digests_included")
   job                   MonthlyAnalysisJob?
 
   @@index([createdAt])
   @@map("monthly_strategic_reports")
 }
 
-// ============================================
-// BILLING & ACTION TRACKING
-// Tracks billable actions for organizations
-// ============================================
-
 model BillingEvent {
-  id              String   @id @default(uuid())
-  orgId           String   @map("org_id")
-  storefrontId    String?  @map("storefront_id")
-  userId          String?  @map("user_id")
-
-  eventType       String   @map("event_type") // aws_action, claude_action
-  actionCategory  String   @map("action_category") // data_import, data_load, ai_analysis, daily_learning, monthly_analysis, research
-  actionName      String   @map("action_name")
-
-  baseCost        Decimal  @map("base_cost") @db.Decimal(10, 6)
-  billedAmount    Decimal  @map("billed_amount") @db.Decimal(10, 4)
-  multiplier      Decimal  @default(1) @db.Decimal(4, 2)
-
-  billingMonth    String   @map("billing_month") // e.g., "2025-01"
-  metadata        Json?
-
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  storefrontId   String?  @map("storefront_id")
+  userId         String?  @map("user_id")
+  eventType      String   @map("event_type")
+  actionCategory String   @map("action_category")
+  actionName     String   @map("action_name")
+  baseCost       Decimal  @map("base_cost") @db.Decimal(10, 6)
+  billedAmount   Decimal  @map("billed_amount") @db.Decimal(10, 4)
+  multiplier     Decimal  @default(1) @db.Decimal(4, 2)
+  billingMonth   String   @map("billing_month")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([orgId])
   @@index([billingMonth])
@@ -875,25 +705,17 @@ model BillingEvent {
   @@map("billing_events")
 }
 
-// ============================================
-// SEO AUDIT SYSTEM
-// Stores website SEO audit results and page analysis
-// ============================================
-
 model SeoAudit {
-  id            String         @id @default(uuid())
-  domain        String
-  status        String         @default("pending") // pending, crawling, analyzing, completed, failed
-  createdAt     DateTime       @default(now()) @map("created_at")
-  completedAt   DateTime?      @map("completed_at")
-
-  config        Json           @default("{}") // { maxPages, includeSitemap, checkPerformance, etc. }
-  progress      Json           @default("{}") // { pagesDiscovered, pagesCrawled, pagesAnalyzed }
-
-  summary       Json?          // { healthScore, totalPages, criticalIssues, warnings, passed }
-  error         String?
-
-  pages         SeoAuditPage[]
+  id          String         @id @default(uuid())
+  domain      String
+  status      String         @default("pending")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  completedAt DateTime?      @map("completed_at")
+  config      Json           @default("{}")
+  progress    Json           @default("{}")
+  summary     Json?
+  error       String?
+  pages       SeoAuditPage[]
 
   @@index([domain])
   @@index([status])
@@ -902,50 +724,39 @@ model SeoAudit {
 }
 
 model SeoAuditPage {
-  id              String    @id @default(uuid())
-  auditId         String    @map("audit_id")
-  audit           SeoAudit  @relation(fields: [auditId], references: [id], onDelete: Cascade)
-
+  id              String   @id @default(uuid())
+  auditId         String   @map("audit_id")
   url             String
-  statusCode      Int       @map("status_code")
-
+  statusCode      Int      @map("status_code")
   title           String?
-  metaDescription String?   @map("meta_description")
+  metaDescription String?  @map("meta_description")
   canonical       String?
   robots          String?
-
-  headings        Json      @default("{}") // { h1: [], h2: [], h3: [] }
-  images          Json      @default("{}") // { total, withAlt, withoutAlt, issues }
-  links           Json      @default("{}") // { internal, external, broken }
-
-  performance     Json?     // { loadTime, contentSize, requests, coreWebVitals }
-  issues          Json      @default("[]") // [{ type, severity, message, recommendation }]
-
-  crawledAt       DateTime  @default(now()) @map("crawled_at")
+  headings        Json     @default("{}")
+  images          Json     @default("{}")
+  links           Json     @default("{}")
+  performance     Json?
+  issues          Json     @default("[]")
+  crawledAt       DateTime @default(now()) @map("crawled_at")
+  audit           SeoAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@unique([auditId, url])
   @@index([auditId])
   @@map("seo_audit_pages")
 }
 
-// ============================================
-// RESEARCH DOCUMENTS
-// Manually uploaded market research analyzed by AI
-// ============================================
-
 model ResearchDocument {
-  id              String   @id @default(uuid())
-  filename        String
-  category        String   // Product Innovation, Market Trends, Regulatory, Competition, etc.
-  sourceUrl       String?  @map("source_url")
-  summary         String   @db.Text
-  relevanceScore  String   @map("relevance_score") // high, medium, low
-  dateMentioned   DateTime? @map("date_mentioned") @db.Date
-  analyzedAt      DateTime @map("analyzed_at")
-  s3Key           String?  @map("s3_key")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  findings        ResearchFinding[]
+  id             String            @id @default(uuid())
+  filename       String
+  category       String
+  sourceUrl      String?           @map("source_url")
+  summary        String
+  relevanceScore String            @map("relevance_score")
+  dateMentioned  DateTime?         @map("date_mentioned") @db.Date
+  analyzedAt     DateTime          @map("analyzed_at")
+  s3Key          String?           @map("s3_key")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  findings       ResearchFinding[]
 
   @@index([category])
   @@index([analyzedAt])
@@ -956,13 +767,13 @@ model ResearchDocument {
 model ResearchFinding {
   id                String           @id @default(uuid())
   documentId        String           @map("document_id")
-  document          ResearchDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  finding           String           @db.Text
-  relevance         String           // high, medium, low
-  category          String           // products, market, competition, regulatory
+  finding           String
+  relevance         String
+  category          String
   actionRequired    Boolean          @default(false) @map("action_required")
-  recommendedAction String?          @map("recommended_action") @db.Text
+  recommendedAction String?          @map("recommended_action")
   createdAt         DateTime         @default(now()) @map("created_at")
+  document          ResearchDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@index([documentId])
   @@index([category])
@@ -970,51 +781,40 @@ model ResearchFinding {
   @@map("research_findings")
 }
 
-// ============================================
-// DOMAIN TRUST REGISTRY
-// Tracks reputation of web domains for research quality
-// ============================================
-
 model DomainTrustRegistry {
-  id              String   @id @default(uuid())
-  domain          String   @unique
-  trustScore      Float    @default(0.5) @map("trust_score") // 0-1 scale
-  category        String   // news, government, trade, blog, academic, unknown
-  isAuthoritative Boolean  @default(false) @map("is_authoritative")
-  urlsCollected   Int      @default(0) @map("urls_collected")
-  avgContentQuality Float? @map("avg_content_quality")
-  notes           String?  @db.Text
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid())
+  domain            String   @unique
+  trustScore        Float    @default(0.5) @map("trust_score")
+  category          String
+  isAuthoritative   Boolean  @default(false) @map("is_authoritative")
+  urlsCollected     Int      @default(0) @map("urls_collected")
+  avgContentQuality Float?   @map("avg_content_quality")
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@index([trustScore])
   @@index([category])
   @@map("domain_trust_registry")
 }
 
-// ============================================
-// RSS FEED INGESTION
-// External feeds for industry news and updates
-// ============================================
-
 model ExternalFeed {
-  id              String   @id @default(uuid())
-  name            String   @unique
-  feedUrl         String   @map("feed_url")
-  feedType        String   @default("rss") @map("feed_type") // rss, atom, json
-  category        String   // regulatory, market, industry, competitor
-  description     String?  @db.Text
-  isActive        Boolean  @default(true) @map("is_active")
-  lastFetched     DateTime? @map("last_fetched")
-  lastSuccessful  DateTime? @map("last_successful")
-  fetchFrequency  Int      @default(86400) @map("fetch_frequency") // seconds between fetches
-  itemsCount      Int      @default(0) @map("items_count")
-  errorCount      Int      @default(0) @map("error_count")
-  lastError       String?  @map("last_error")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  items           ExternalFeedItem[]
+  id             String             @id @default(uuid())
+  name           String             @unique
+  feedUrl        String             @map("feed_url")
+  feedType       String             @default("rss") @map("feed_type")
+  category       String
+  isActive       Boolean            @default(true) @map("is_active")
+  lastFetched    DateTime?          @map("last_fetched")
+  lastSuccessful DateTime?          @map("last_successful")
+  fetchFrequency Int                @default(86400) @map("fetch_frequency")
+  itemsCount     Int                @default(0) @map("items_count")
+  errorCount     Int                @default(0) @map("error_count")
+  lastError      String?            @map("last_error")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  description    String?
+  items          ExternalFeedItem[]
 
   @@index([category])
   @@index([isActive])
@@ -1022,26 +822,24 @@ model ExternalFeed {
 }
 
 model ExternalFeedItem {
-  id              String       @id @default(uuid())
-  feedId          String       @map("feed_id")
-  feed            ExternalFeed @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  guid            String       @unique // Unique identifier from feed
-  title           String
-  link            String
-  publishedAt     DateTime     @map("published_at")
-  summary         String?      @db.Text
-  content         String?      @db.Text
-  author          String?
-
-  isProcessed     Boolean      @default(false) @map("is_processed")
-  relevanceScore  Float?       @map("relevance_score")
-  categories      String[]
-  analyzedCategories String[]  @map("analyzed_categories")
-  businessImpact  String?      @map("business_impact") @db.Text
-  keyEntities     String[]     @map("key_entities")
-  extractedInsights String[]   @map("extracted_insights")
-
-  createdAt       DateTime     @default(now()) @map("created_at")
+  id                 String       @id @default(uuid())
+  feedId             String       @map("feed_id")
+  guid               String       @unique
+  title              String
+  link               String
+  publishedAt        DateTime     @map("published_at")
+  summary            String?
+  content            String?
+  author             String?
+  isProcessed        Boolean      @default(false) @map("is_processed")
+  relevanceScore     Float?       @map("relevance_score")
+  categories         String[]
+  extractedInsights  String[]     @map("extracted_insights")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  analyzedCategories String[]     @map("analyzed_categories")
+  businessImpact     String?      @map("business_impact")
+  keyEntities        String[]     @map("key_entities")
+  feed               ExternalFeed @relation(fields: [feedId], references: [id], onDelete: Cascade)
 
   @@index([feedId])
   @@index([publishedAt])
@@ -1050,168 +848,25 @@ model ExternalFeedItem {
   @@map("external_feed_items")
 }
 
-// ============================================
-// PRODUCT CATALOG
-// Treez product inventory synced from API
-// ============================================
-
-model Product {
-  id                String            @id @default(uuid())
-  treezProductId    String            @unique @map("treez_product_id")
-  storefrontId      String?           @map("storefront_id")
-  storefront        Storefront?       @relation(fields: [storefrontId], references: [id])
-  brandId           String?           @map("brand_id")
-  brand             CanonicalBrand?   @relation(fields: [brandId], references: [id])
-  originalBrandName String?           @map("original_brand_name")
-  productName       String            @map("product_name")
-  productType       String?           @map("product_type")
-  productSubtype    String?           @map("product_subtype")
-  category          String?
-  strain            String?
-  unitSize          String?           @map("unit_size")
-  thcContent        Decimal?          @map("thc_content") @db.Decimal(6, 3)
-  cbdContent        Decimal?          @map("cbd_content") @db.Decimal(6, 3)
-  retailPrice       Decimal?          @map("retail_price") @db.Decimal(10, 2)
-  wholesalePrice    Decimal?          @map("wholesale_price") @db.Decimal(10, 2)
-  quantityOnHand    Int               @default(0) @map("quantity_on_hand")
-  isActive          Boolean           @default(true) @map("is_active")
-  lastSyncedAt      DateTime?         @map("last_synced_at")
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
-
-  @@index([brandId])
-  @@index([productType])
-  @@index([isActive])
-  @@map("products")
-}
-
-// ============================================
-// METRC COMPLIANCE DATA
-// Inventory and transfer tracking from METRC API
-// ============================================
-
-model MetrcPackage {
-  id                String    @id @default(uuid())
-  metrcLabel        String    @unique @map("metrc_label")
-  storefrontId      String?   @map("storefront_id")
-  storefront        Storefront? @relation(fields: [storefrontId], references: [id])
-  itemName          String?   @map("item_name")
-  productCategory   String?   @map("product_category")
-  quantity          Decimal   @default(0) @db.Decimal(12, 4)
-  unitOfMeasure     String?   @map("unit_of_measure")
-  packageStatus     String?   @map("package_status") // active, on_hold, in_transit
-  sourceHarvestName String?   @map("source_harvest_name")
-  labTestState      String?   @map("lab_test_state")
-  labTestPassed     Boolean?  @map("lab_test_passed")
-  receivedFromFacility String? @map("received_from_facility")
-  receivedDateTime  DateTime? @map("received_date_time")
-  packagedDate      DateTime? @map("packaged_date") @db.Date
-  lastModifiedAt    DateTime? @map("last_modified_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-
-  @@index([packageStatus])
-  @@index([productCategory])
-  @@index([lastModifiedAt])
-  @@map("metrc_packages")
-}
-
-model MetrcTransfer {
-  id                  String    @id @default(uuid())
-  metrcTransferId     Int       @unique @map("metrc_transfer_id")
-  storefrontId        String?   @map("storefront_id")
-  storefront          Storefront? @relation(fields: [storefrontId], references: [id])
-  manifestNumber      String?   @map("manifest_number")
-  transferType        String?   @map("transfer_type") // incoming, outgoing
-  shipperFacility     String?   @map("shipper_facility")
-  shipperLicense      String?   @map("shipper_license")
-  recipientFacility   String?   @map("recipient_facility")
-  recipientLicense    String?   @map("recipient_license")
-  createdDateTime     DateTime? @map("created_date_time")
-  receivedDateTime    DateTime? @map("received_date_time")
-  packageCount        Int       @default(0) @map("package_count")
-  totalQuantity       Decimal   @default(0) @map("total_quantity") @db.Decimal(12, 4)
-  lastModifiedAt      DateTime? @map("last_modified_at")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
-
-  @@index([transferType])
-  @@index([manifestNumber])
-  @@index([lastModifiedAt])
-  @@map("metrc_transfers")
-}
-
-// ============================================
-// DATA DISCREPANCY FLAGS
-// Tracks data quality issues for manual review
-// ============================================
-
-model DataFlag {
-  id              String    @id @default(uuid())
-  storefrontId    String?   @map("storefront_id")
-  storefront      Storefront? @relation(fields: [storefrontId], references: [id])
-  flagType        String    @map("flag_type") // vendor_mismatch, brand_mismatch, duplicate_record, missing_link, data_anomaly
-  severity        String    @default("medium") // critical, high, medium, low
-  status          String    @default("pending") // pending, reviewed, resolved, ignored
-
-  sourceTable     String    @map("source_table") // invoices, invoice_line_items, products, etc.
-  sourceRecordId  String    @map("source_record_id")
-
-  title           String
-  description     String    @db.Text
-
-  rawValue        String?   @map("raw_value") // The original value that caused the flag
-  suggestedMatch  String?   @map("suggested_match") // Auto-suggested correction
-  suggestedMatchId String?  @map("suggested_match_id") // FK to suggested match record
-  similarityScore Decimal?  @map("similarity_score") @db.Decimal(5, 4) // 0-1 fuzzy match score
-
-  reviewedBy      String?   @map("reviewed_by")
-  reviewedAt      DateTime? @map("reviewed_at")
-  resolution      String?   @db.Text // What action was taken
-
-  metadata        Json      @default("{}") // Additional context
-
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  @@index([flagType])
-  @@index([severity])
-  @@index([status])
-  @@index([sourceTable])
-  @@index([createdAt])
-  @@map("data_flags")
-}
-
-// ============================================
-// REGULATORY CALENDAR
-// Tracks important regulatory dates and deadlines
-// ============================================
-
 model RegulatoryEvent {
-  id              String   @id @default(uuid())
-  title           String
-  description     String   @db.Text
-  eventType       String   @map("event_type") // deadline, hearing, effective_date, comment_period, license_renewal
-  eventDate       DateTime @map("event_date")
-  endDate         DateTime? @map("end_date") // For events with duration (comment periods)
-
-  jurisdiction    String   // CA, SF, Federal, County
-  agency          String   // DCC, FDA, SF_Planning, etc.
-
-  sourceUrl       String?  @map("source_url")
-  sourceDocument  String?  @map("source_document")
-
-  impactLevel     String   @default("medium") @map("impact_level") // critical, high, medium, low
-  impactAreas     String[] @map("impact_areas") // licensing, compliance, operations, etc.
-
-  reminderSent    Boolean  @default(false) @map("reminder_sent")
-  reminderDays    Int      @default(7) @map("reminder_days") // Days before event to send reminder
-
-  isActive        Boolean  @default(true) @map("is_active")
-  notes           String?  @db.Text
-
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  title          String
+  description    String
+  eventType      String    @map("event_type")
+  eventDate      DateTime  @map("event_date")
+  endDate        DateTime? @map("end_date")
+  jurisdiction   String
+  agency         String
+  sourceUrl      String?   @map("source_url")
+  sourceDocument String?   @map("source_document")
+  impactLevel    String    @default("medium") @map("impact_level")
+  impactAreas    String[]  @map("impact_areas")
+  reminderSent   Boolean   @default(false) @map("reminder_sent")
+  reminderDays   Int       @default(7) @map("reminder_days")
+  isActive       Boolean   @default(true) @map("is_active")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@index([eventDate])
   @@index([eventType])
