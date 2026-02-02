@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadAsMarkdown, openPrintWindow, formatDailyDigestAsMarkdown, DailyDigestExport } from '@/lib/export-utils';
+import { StepProgress, phaseToSteps } from './StepProgress';
 
 interface DailyDigest {
   executiveSummary: string;
@@ -390,32 +391,36 @@ export function LearningProgressTab() {
           </div>
         </div>
 
-        {/* Current Job Progress */}
+        {/* Current Job Progress - Step Indicator */}
         {currentStatus.isRunning && currentStatus.currentJob && (
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-blue-800">
-                {getPhaseLabel(currentStatus.currentJob.phase)}
+          <div className="mt-6 p-4 bg-[var(--paper)] rounded-lg border border-[var(--border)]">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm font-medium text-[var(--ink)]">
+                Learning in Progress
               </span>
               <div className="flex items-center gap-3">
                 {currentStatus.currentJob.runningForMinutes !== undefined && (
-                  <span className="text-xs text-blue-500">
+                  <span className="text-xs text-[var(--muted)]">
                     {currentStatus.currentJob.runningForMinutes < 60
-                      ? `${currentStatus.currentJob.runningForMinutes}m`
-                      : `${Math.floor(currentStatus.currentJob.runningForMinutes / 60)}h ${currentStatus.currentJob.runningForMinutes % 60}m`}
+                      ? `${currentStatus.currentJob.runningForMinutes}m elapsed`
+                      : `${Math.floor(currentStatus.currentJob.runningForMinutes / 60)}h ${currentStatus.currentJob.runningForMinutes % 60}m elapsed`}
                   </span>
                 )}
-                <span className="text-sm text-blue-600">
-                  {Math.round(currentStatus.currentJob.progress)}%
-                </span>
               </div>
             </div>
-            <div className="w-full bg-blue-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all"
-                style={{ width: `${currentStatus.currentJob.progress}%` }}
-              />
-            </div>
+            <StepProgress
+              steps={phaseToSteps(
+                currentStatus.currentJob.phase,
+                {
+                  dataReviewDone: currentStatus.currentJob.phase !== 'data_review' && currentStatus.currentJob.progress >= 20,
+                  questionGenDone: ['web_research', 'correlation', 'digest_gen'].includes(currentStatus.currentJob.phase) || currentStatus.currentJob.progress >= 40,
+                  webResearchDone: ['correlation', 'digest_gen'].includes(currentStatus.currentJob.phase) || currentStatus.currentJob.progress >= 60,
+                  correlationDone: currentStatus.currentJob.phase === 'digest_gen' || currentStatus.currentJob.progress >= 80,
+                  digestGenDone: currentStatus.currentJob.progress >= 100,
+                },
+                false // skipWebResearch - would need to be passed from job state
+              )}
+            />
           </div>
         )}
 

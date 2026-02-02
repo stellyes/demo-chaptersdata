@@ -8,9 +8,11 @@ import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { useFilteredSalesData, useNormalizedBrandDataCompat, useAppStore } from '@/store/app-store';
 import { calculateSalesSummary, calculateBrandSummary } from '@/lib/services/data-processor';
-import { Sparkles, TrendingUp, ShoppingBag, Users, RefreshCw, Loader2, FileText, Calendar, ChevronDown, MessageSquare, Check, Database, Brain, Download } from 'lucide-react';
+import { Sparkles, TrendingUp, ShoppingBag, Users, RefreshCw, Loader2, FileText, Calendar, ChevronDown, MessageSquare, Check, Database, Brain, Download, Lightbulb, ShoppingCart } from 'lucide-react';
 import { downloadAsMarkdown, openPrintWindow } from '@/lib/export-utils';
 import { LearningProgressTab } from '@/components/learning/LearningProgressTab';
+import { InsightInvestigationTab } from '@/components/insights/InsightInvestigationTab';
+import { BuyerInsightsTab } from '@/components/insights/BuyerInsightsTab';
 import { format } from 'date-fns';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -553,137 +555,16 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
 
   const tabs = [
     {
-      id: 'ai',
-      label: 'AI Analysis',
-      render: () => (
-        <div className="space-y-4 md:space-y-6">
-          {/* Analysis Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-            {analysisCards.map((card) => (
-              <Card key={card.type}>
-                <div className="flex items-start gap-3 md:gap-4">
-                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
-                    <card.icon className="w-5 h-5 md:w-6 md:h-6 text-[var(--accent)]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-serif text-base md:text-lg font-medium text-[var(--ink)] mb-1">
-                      {card.title}
-                    </h4>
-                    <p className="text-xs md:text-sm text-[var(--muted)] mb-3 md:mb-4">{card.description}</p>
-                    <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                      <button
-                        onClick={() => runAnalysis(card.type)}
-                        disabled={loading}
-                        className="flex items-center gap-2 px-3 md:px-4 py-2 bg-[var(--ink)] text-[var(--paper)] rounded text-xs md:text-sm font-medium disabled:opacity-50"
-                      >
-                        {loading && activeAnalysis === card.type ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Analyzing...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4" />
-                            Run Analysis
-                          </>
-                        )}
-                      </button>
-                      {analysisResults[card.type] && (
-                        <span className="text-xs text-[var(--accent)] font-medium">
-                          ✓ Generated
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          {/* Generated Report Section */}
-          {hasAnyResults && (
-            <Card>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <SectionLabel>Generated Report</SectionLabel>
-                  <SectionTitle>
-                    {latestResult ? `${analysisCards.find(c => c.type === latestResult.type)?.title}` : 'AI Analysis Results'}
-                  </SectionTitle>
-                </div>
-                {latestResult && (
-                  <button
-                    onClick={() => runAnalysis(latestResult.type)}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--paper)] rounded transition-colors"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    Regenerate
-                  </button>
-                )}
-              </div>
-
-              {/* Report tabs for switching between generated reports */}
-              {Object.entries(analysisResults).filter(([, content]) => content).length > 1 && (
-                <div className="flex gap-2 mb-4 pb-4 border-b border-[var(--border)]">
-                  {Object.entries(analysisResults)
-                    .filter(([, content]) => content)
-                    .map(([type]) => (
-                      <button
-                        key={type}
-                        onClick={() => setActiveAnalysis(type as AnalysisType)}
-                        className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                          activeAnalysis === type
-                            ? 'bg-[var(--ink)] text-[var(--paper)]'
-                            : 'bg-[var(--paper)] text-[var(--muted)] hover:text-[var(--ink)]'
-                        }`}
-                      >
-                        {analysisCards.find(c => c.type === type)?.title.replace(' Analysis', '')}
-                      </button>
-                    ))}
-                </div>
-              )}
-
-              {latestResult && (
-                <div className="prose prose-sm max-w-none text-[var(--ink)]">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{latestResult.content}</ReactMarkdown>
-                </div>
-              )}
-            </Card>
-          )}
-
-          {/* Data Summary */}
-          <Card>
-            <SectionLabel>Data Summary</SectionLabel>
-            <SectionTitle>Analysis Input Data</SectionTitle>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Sales Records</p>
-                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
-                  {salesData.length.toLocaleString()}
-                </p>
-              </div>
-              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Brand Records</p>
-                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
-                  {brandData.length.toLocaleString()}
-                </p>
-              </div>
-              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total Revenue</p>
-                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
-                  ${(salesSummary.totalRevenue / 1000).toFixed(0)}K
-                </p>
-              </div>
-              <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-                <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
-                <p className="text-lg md:text-xl font-semibold text-[var(--ink)] font-serif">
-                  {salesSummary.avgMargin.toFixed(1)}%
-                </p>
-              </div>
-            </div>
-          </Card>
-        </div>
-      ),
+      id: 'investigate',
+      label: 'Insight Investigation',
+      icon: Lightbulb,
+      render: () => <InsightInvestigationTab />,
+    },
+    {
+      id: 'buyer',
+      label: "Buyer's Insights",
+      icon: ShoppingCart,
+      render: () => <BuyerInsightsTab />,
     },
     {
       id: 'custom',

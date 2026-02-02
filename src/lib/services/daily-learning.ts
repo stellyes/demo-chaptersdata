@@ -109,6 +109,7 @@ export const DAILY_LEARNING_CONFIG = {
   maxIndustryHighlightsForContext: 10, // NEW: Include industry news from past digests
   maxRegulatoryUpdatesForContext: 10, // NEW: Include regulatory updates from past digests
   maxCollectedUrlsForContext: 15, // NEW: Include analyzed web research URLs
+  maxPastInvestigationsForContext: 10, // Include recent investigations for learning continuity
   questionRepeatCooldownDays: 7, // Don't repeat questions asked within this period
   lowQualityThreshold: 0.4, // Questions below this quality may be re-asked
 };
@@ -219,6 +220,13 @@ interface HistoricalLearningContext {
   strategicPriorities: Array<{
     priority: string;
     timeline?: string;
+  }>;
+  // NEW: Past investigations (user deep-dives) for learning continuity
+  pastInvestigations: Array<{
+    type: string;
+    summary: string;
+    analysis: string;
+    createdAt: Date;
   }>;
 }
 
@@ -669,6 +677,22 @@ Business priorities that should inform question generation:
 ${context.strategicPriorities
   .map((p, i) => `${i + 1}. ${p.priority}${p.timeline ? ` (Timeline: ${p.timeline})` : ''}`)
   .join('\n')}`);
+    }
+
+    // Past investigations - user deep-dives that should inform future learning
+    if (context.pastInvestigations.length > 0) {
+      sections.push(`## PAST USER INVESTIGATIONS (Deep-Dives)
+Users have conducted detailed investigations on these topics - build on their findings:
+${context.pastInvestigations
+  .slice(0, 5)
+  .map((inv, i) => {
+    const typeLabel = inv.type === 'buyer-investigation' ? 'Buyer/Procurement' : 'General';
+    // Extract key findings from analysis (first 200 chars)
+    const keyFinding = inv.analysis.substring(0, 200).replace(/\n/g, ' ').trim();
+    return `${i + 1}. [${typeLabel}] Topic: "${inv.summary}" - Key finding: "${keyFinding}..."`;
+  })
+  .join('\n')}
+IMPORTANT: Follow up on unresolved questions or recommendations from these investigations.`);
     }
 
     // Questions to AVOID (recently asked with good quality)
@@ -1759,7 +1783,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     cooldownDate.setDate(cooldownDate.getDate() - DAILY_LEARNING_CONFIG.questionRepeatCooldownDays);
 
     // Run all queries in parallel with timeouts to prevent any single query from blocking
-    const [pastQuestions, recentlyAskedQuestions, recentDigests, collectedUrls, monthlyContext] = await Promise.all([
+    const [pastQuestions, recentlyAskedQuestions, recentDigests, collectedUrls, pastInvestigations, monthlyContext] = await Promise.all([
       // Fetch past questions with their performance data
       safeQuery(
         () => prisma.learningQuestion.findMany({
@@ -1835,6 +1859,27 @@ Return ONLY valid JSON, no markdown or explanation.`;
         }),
         [],
         'collectedUrls'
+      ),
+
+      // Fetch past investigations (user deep-dives) for learning continuity
+      safeQuery(
+        () => prisma.analysisHistory.findMany({
+          where: {
+            analysisType: {
+              in: ['investigation', 'buyer-investigation'],
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: DAILY_LEARNING_CONFIG.maxPastInvestigationsForContext,
+          select: {
+            analysisType: true,
+            inputSummary: true,
+            outputSummary: true,
+            createdAt: true,
+          },
+        }),
+        [],
+        'pastInvestigations'
       ),
 
       // Fetch monthly strategic context
@@ -1931,6 +1976,13 @@ Return ONLY valid JSON, no markdown or explanation.`;
       })),
       monthlyStrategicQuestions,
       strategicPriorities,
+      // Include past user investigations for learning continuity
+      pastInvestigations: pastInvestigations.map(inv => ({
+        type: inv.analysisType,
+        summary: inv.inputSummary,
+        analysis: inv.outputSummary,
+        createdAt: inv.createdAt,
+      })),
     };
   }
 

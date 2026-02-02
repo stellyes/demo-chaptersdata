@@ -78,6 +78,7 @@ function SalesDataTab() {
     brandData,
     productData,
     dataStatus,
+    addNotification,
   } = useAppStore();
 
   const [uploadStore, setUploadStore] = useState<StoreId>('grass_roots');
@@ -87,8 +88,42 @@ function SalesDataTab() {
   const handleSalesUpload = async (file: File) => {
     const text = await file.text();
     const rawData = parseCSV<Record<string, string>>(text);
-    const cleaned = cleanSalesData(rawData);
+    // Pass uploadStore to ensure correct store assignment
+    const cleaned = cleanSalesData(rawData, uploadStore);
+
+    // Update frontend store
     setSalesData([...salesData, ...cleaned]);
+
+    // Also persist to database via API
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('store', uploadStore);
+    formData.append('startDate', startDate || cleaned[0]?.date || '');
+    formData.append('endDate', endDate || cleaned[cleaned.length - 1]?.date || '');
+
+    try {
+      const response = await fetch('/api/data/sales', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await response.json();
+      if (result.success) {
+        addNotification({
+          type: 'success',
+          title: 'Sales Data Saved',
+          message: `${result.data.recordCount} records saved to database.`,
+        });
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error('Failed to save sales data to database:', error);
+      addNotification({
+        type: 'warning',
+        title: 'Database Save Issue',
+        message: 'Data loaded locally but may not have saved to database.',
+      });
+    }
   };
 
   const handleBrandUpload = async (file: File) => {
@@ -98,14 +133,81 @@ function SalesDataTab() {
     const text = await file.text();
     const rawData = parseCSV<Record<string, string>>(text);
     const cleaned = cleanBrandData(rawData, uploadStore, startDate, endDate);
+
+    // Update frontend store
     setBrandData([...brandData, ...cleaned]);
+
+    // Also persist to database via API
+    try {
+      const response = await fetch('/api/data/load-aurora', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'brands',
+          storeId: uploadStore,
+          startDate,
+          endDate,
+          data: cleaned,
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        addNotification({
+          type: 'success',
+          title: 'Brand Data Saved',
+          message: `${result.recordCount || cleaned.length} brand records saved to database.`,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save brand data to database:', error);
+      addNotification({
+        type: 'warning',
+        title: 'Database Save Issue',
+        message: 'Data loaded locally but may not have saved to database.',
+      });
+    }
   };
 
   const handleProductUpload = async (file: File) => {
+    if (!startDate || !endDate) {
+      throw new Error('Please set the date range before uploading product data');
+    }
     const text = await file.text();
     const rawData = parseCSV<Record<string, string>>(text);
-    const cleaned = cleanProductData(rawData, uploadStore);
+    const cleaned = cleanProductData(rawData, uploadStore, startDate, endDate);
+
+    // Update frontend store
     setProductData([...productData, ...cleaned]);
+
+    // Also persist to database via API
+    try {
+      const response = await fetch('/api/data/load-aurora', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'products',
+          storeId: uploadStore,
+          startDate,
+          endDate,
+          data: cleaned,
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        addNotification({
+          type: 'success',
+          title: 'Product Data Saved',
+          message: `${result.recordCount || cleaned.length} product records saved to database.`,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save product data to database:', error);
+      addNotification({
+        type: 'warning',
+        title: 'Database Save Issue',
+        message: 'Data loaded locally but may not have saved to database.',
+      });
+    }
   };
 
   return (
@@ -155,72 +257,74 @@ function SalesDataTab() {
         </div>
       </Card>
 
-      {/* Sales by Store Upload */}
-      <Card>
-        <SectionLabel>Sales by Store</SectionLabel>
-        <SectionTitle>Upload Daily Sales Report</SectionTitle>
-        <p className="text-sm text-[var(--muted)] mb-4">
-          Upload the "Sales by Store" CSV export from Treez. This report contains daily sales,
-          transactions, margins, and other KPIs.
-        </p>
-        <FileUpload
-          onUpload={handleSalesUpload}
-          title="Drop Sales by Store CSV here"
-          description="Required columns: Date, Store, Net Sales, Tickets Count, Gross Margin %"
-        />
-        {dataStatus.sales.loaded && (
-          <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-[var(--success)]" />
-            <span className="text-sm text-[var(--success)]">
-              {dataStatus.sales.count} sales records loaded
-            </span>
-          </div>
-        )}
-      </Card>
+      {/* Upload Cards Grid - 3 columns */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Sales by Store Upload */}
+        <Card>
+          <SectionLabel>Sales by Store</SectionLabel>
+          <SectionTitle>Daily Sales Report</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Upload the "Sales by Store" CSV export from Treez.
+          </p>
+          <FileUpload
+            onUpload={handleSalesUpload}
+            title="Drop Sales CSV here"
+            description="Date, Store, Net Sales, Tickets, Margin %"
+          />
+          {dataStatus.sales.loaded && (
+            <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[var(--success)]" />
+              <span className="text-sm text-[var(--success)]">
+                {dataStatus.sales.count} records
+              </span>
+            </div>
+          )}
+        </Card>
 
-      {/* Brand Performance Upload */}
-      <Card>
-        <SectionLabel>Net Sales by Brand</SectionLabel>
-        <SectionTitle>Upload Brand Performance Report</SectionTitle>
-        <p className="text-sm text-[var(--muted)] mb-4">
-          Upload the "Net Sales by Brand" CSV export from Treez. Set the date range above first.
-        </p>
-        <FileUpload
-          onUpload={handleBrandUpload}
-          title="Drop Brand CSV here"
-          description="Required: Start and End dates set above"
-        />
-        {dataStatus.brands.loaded && (
-          <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-[var(--success)]" />
-            <span className="text-sm text-[var(--success)]">
-              {dataStatus.brands.count} brand records loaded
-            </span>
-          </div>
-        )}
-      </Card>
+        {/* Brand Performance Upload */}
+        <Card>
+          <SectionLabel>Net Sales by Brand</SectionLabel>
+          <SectionTitle>Brand Performance</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Upload the "Net Sales by Brand" CSV. Set dates above first.
+          </p>
+          <FileUpload
+            onUpload={handleBrandUpload}
+            title="Drop Brand CSV here"
+            description="Requires Start and End dates above"
+          />
+          {dataStatus.brands.loaded && (
+            <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[var(--success)]" />
+              <span className="text-sm text-[var(--success)]">
+                {dataStatus.brands.count} records
+              </span>
+            </div>
+          )}
+        </Card>
 
-      {/* Product Category Upload */}
-      <Card>
-        <SectionLabel>Net Sales by Product Type</SectionLabel>
-        <SectionTitle>Upload Product Category Report</SectionTitle>
-        <p className="text-sm text-[var(--muted)] mb-4">
-          Upload the "Net Sales by Product Type" CSV export from Treez for category analysis.
-        </p>
-        <FileUpload
-          onUpload={handleProductUpload}
-          title="Drop Product Type CSV here"
-          description="Required columns: Product Type, Net Sales, Gross Margin %"
-        />
-        {dataStatus.products.loaded && (
-          <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-[var(--success)]" />
-            <span className="text-sm text-[var(--success)]">
-              {dataStatus.products.count} product records loaded
-            </span>
-          </div>
-        )}
-      </Card>
+        {/* Product Category Upload */}
+        <Card>
+          <SectionLabel>Net Sales by Product Type</SectionLabel>
+          <SectionTitle>Product Categories</SectionTitle>
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Upload the "Net Sales by Product Type" CSV. Set dates above first.
+          </p>
+          <FileUpload
+            onUpload={handleProductUpload}
+            title="Drop Product CSV here"
+            description="Requires Start and End dates above"
+          />
+          {dataStatus.products.loaded && (
+            <div className="mt-4 p-3 bg-[var(--success)]/10 rounded flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[var(--success)]" />
+              <span className="text-sm text-[var(--success)]">
+                {dataStatus.products.count} records
+              </span>
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }
@@ -435,14 +539,43 @@ function InvoiceDataTab() {
 // CUSTOMER DATA TAB
 // ============================================
 function CustomerDataTab() {
-  const { setCustomerData, customerData, dataStatus } = useAppStore();
+  const { setCustomerData, customerData, dataStatus, addNotification } = useAppStore();
   const [uploadStore, setUploadStore] = useState<StoreId>('grass_roots');
 
   const handleCustomerUpload = async (file: File) => {
     const text = await file.text();
     const rawData = parseCSV<Record<string, string>>(text);
     const cleaned = cleanCustomerData(rawData);
+
+    // Update frontend store
     setCustomerData([...customerData, ...cleaned]);
+
+    // Also persist to database via API
+    try {
+      const response = await fetch('/api/data/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: uploadStore,
+          data: cleaned,
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        addNotification({
+          type: 'success',
+          title: 'Customer Data Saved',
+          message: `${result.recordCount || cleaned.length} customer records saved to database.`,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save customer data to database:', error);
+      addNotification({
+        type: 'warning',
+        title: 'Database Save Issue',
+        message: 'Data loaded locally but may not have saved to database.',
+      });
+    }
   };
 
   return (
@@ -524,6 +657,7 @@ function BudtenderPerformanceTab() {
     setPermanentEmployee,
     clearPermanentEmployees,
     dataStatus,
+    addNotification,
   } = useAppStore();
   const [filterStore, setFilterStore] = useState<StoreId | 'all'>('all');
   const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(false);
@@ -833,7 +967,36 @@ function BudtenderPerformanceTab() {
               avg_order_value: Number(String(row.avg_order_value || row.AOV || 0).replace(/[$,]/g, '')),
               units_sold: Number(row.units_sold || row.UnitsSold || row.Units || 0),
             }));
+
+            // Update frontend store
             setBudtenderData([...budtenderData, ...newRecords]);
+
+            // Also persist to database via API
+            try {
+              const response = await fetch('/api/data/load-aurora', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type: 'budtenders',
+                  data: newRecords,
+                }),
+              });
+              const result = await response.json();
+              if (result.success) {
+                addNotification({
+                  type: 'success',
+                  title: 'Budtender Data Saved',
+                  message: `${result.recordCount || newRecords.length} budtender records saved to database.`,
+                });
+              }
+            } catch (error) {
+              console.error('Failed to save budtender data to database:', error);
+              addNotification({
+                type: 'warning',
+                title: 'Database Save Issue',
+                message: 'Data loaded locally but may not have saved to database.',
+              });
+            }
           }}
           title="Drop Budtender Performance CSV here"
           description="Export from Treez: Reports > Budtender Performance Lifetime"
