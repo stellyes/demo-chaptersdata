@@ -64,6 +64,8 @@ interface ProductRecord {
   net_sales: number;
   store: string;
   store_id: string;
+  upload_start_date?: string;
+  upload_end_date?: string;
 }
 
 interface BudtenderRecord {
@@ -219,6 +221,8 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string, store
     net_sales: Number(r.netSales),
     store: r.storeName || r.storeId,
     store_id: r.storeId,
+    upload_start_date: r.uploadStartDate?.toISOString().split('T')[0],
+    upload_end_date: r.uploadEndDate?.toISOString().split('T')[0],
   }));
 
   // Transform budtender records

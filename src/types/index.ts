@@ -54,7 +54,7 @@ export interface BrandRecord {
 
 // Product data types
 export interface ProductRecord {
-  [key: string]: string | number | StoreId;
+  [key: string]: string | number | StoreId | undefined;
   product_type: string;
   pct_of_total_net_sales: number;
   gross_margin_pct: number;
@@ -62,6 +62,8 @@ export interface ProductRecord {
   net_sales: number;
   store: string;
   store_id: StoreId;
+  upload_start_date?: string;
+  upload_end_date?: string;
 }
 
 // Customer data types

@@ -205,13 +205,19 @@ export function toCompatibleBrandRecords(normalized: NormalizedBrandRecord[]): B
 
 // Parse CSV string to objects
 export function parseCSV<T>(csvString: string): T[] {
-  const result = Papa.parse<T>(csvString, {
+  // Strip BOM (Byte Order Mark) from the beginning of the CSV if present
+  // BOM can cause the first column header to be misread
+  const cleanedCsv = csvString.replace(/^\uFEFF/, '');
+
+  const result = Papa.parse<T>(cleanedCsv, {
     header: true,
     skipEmptyLines: true,
     transformHeader: (header) => {
       // Normalize headers: trim, lowercase, replace spaces with underscores
+      // Also remove any stray BOM characters that might appear mid-file
       return header
         .trim()
+        .replace(/\uFEFF/g, '')
         .toLowerCase()
         .replace(/\s+/g, '_')
         .replace(/[()%]/g, '')
@@ -229,11 +235,16 @@ export function toCSV<T extends Record<string, unknown>>(data: T[]): string {
 }
 
 // Clean and validate sales data
-export function cleanSalesData(rawData: Record<string, string>[]): SalesRecord[] {
+// If overrideStoreId is provided, it will be used for all records
+export function cleanSalesData(
+  rawData: Record<string, string>[],
+  overrideStoreId?: StoreId
+): SalesRecord[] {
   return rawData
     .map((row) => {
       const storeName = row.store || row.Store || '';
-      const storeId = STORE_NAME_TO_ID[storeName] || 'grass_roots';
+      // Use override if provided, otherwise try to detect from CSV, fallback to grass_roots
+      const storeId = overrideStoreId || STORE_NAME_TO_ID[storeName] || 'grass_roots';
 
       const record: SalesRecord = {
         date: formatDate(row.date || row.Date || ''),
@@ -310,7 +321,9 @@ export function cleanBrandData(
 // Clean and validate product data
 export function cleanProductData(
   rawData: Record<string, string>[],
-  storeId: StoreId
+  storeId: StoreId,
+  startDate?: string,
+  endDate?: string
 ): ProductRecord[] {
   return rawData
     .map((row) => {
@@ -322,6 +335,8 @@ export function cleanProductData(
         net_sales: parseNumber(row.net_sales || row['Net Sales'] || '0'),
         store: row.store || row.Store || '',
         store_id: storeId,
+        upload_start_date: startDate,
+        upload_end_date: endDate,
       };
 
       return record;

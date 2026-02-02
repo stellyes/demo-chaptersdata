@@ -70,6 +70,12 @@ import {
   toCompatibleBrandRecords,
   NormalizedBrandRecord,
 } from '@/lib/services/data-processor';
+import {
+  isCacheValid,
+  loadFromCache,
+  saveToCache,
+  clearCache as clearCustomerCache,
+} from '@/lib/services/customer-cache';
 
 // AI Recommendation type (kept here since it's store-specific)
 export interface AIRecommendation {
@@ -237,6 +243,7 @@ interface AppState {
   dataHash: string | null;
   setDataHash: (hash: string | null) => void;
   loadData: () => Promise<void>;
+  reloadCustomerData: () => Promise<void>;
 }
 
 const initialState = {
@@ -644,12 +651,56 @@ export const useAppStore = create<AppState>()(
             // Load budtender assignments (overrides localStorage - Aurora is source of truth)
             await useAppStore.getState().loadBudtenderAssignments();
 
-            // Load customer data in pages (large dataset - 93k+ records)
+            // Load customer data with smart caching
+            // 1. Check IndexedDB cache first
+            // 2. If cache is valid for requested date range, use it
+            // 3. Otherwise fetch from server and update cache
             const loadCustomerPages = async () => {
-              // Use smaller page size on iOS to avoid memory pressure
+              const { dateRange } = get();
+              const startDate = dateRange?.start || '';
+              const endDate = dateRange?.end || '';
+
+              console.log(`Loading customers for date range: ${startDate} to ${endDate}`);
+
+              // Check if we have valid cached data
+              if (startDate && endDate) {
+                try {
+                  const { valid, metadata } = await isCacheValid(startDate, endDate);
+
+                  if (valid && metadata) {
+                    console.log(`Cache hit! Loading ${metadata.recordCount} customers from IndexedDB cache`);
+                    const cachedCustomers = await loadFromCache();
+
+                    if (cachedCustomers && cachedCustomers.length > 0) {
+                      set((state) => ({
+                        customerData: cachedCustomers,
+                        dataStatus: {
+                          ...state.dataStatus,
+                          customers: {
+                            loaded: true,
+                            count: cachedCustomers.length,
+                            lastUpdated: metadata.cachedAt,
+                          },
+                        },
+                      }));
+                      console.log(`Loaded ${cachedCustomers.length} customers from cache (instant)`);
+                      return;
+                    }
+                  }
+                } catch (cacheErr) {
+                  console.warn('Cache check failed, falling back to server fetch:', cacheErr);
+                }
+              }
+
+              // Cache miss or invalid - fetch from server
+              console.log('Cache miss - fetching from server...');
+
               const isIOS = isIOSDevice();
-              const pageSize = isIOS ? 5000 : 10000;
-              const requestTimeout = isIOS ? 45000 : 30000; // Longer timeout for iOS
+              const pageSize = isIOS ? 10000 : 50000;
+              const requestTimeout = isIOS ? 90000 : 120000;
+              const dateParams = startDate && endDate
+                ? `&startDate=${startDate}&endDate=${endDate}`
+                : '';
 
               let allCustomers: CustomerRecord[] = [];
               let page = 1;
@@ -660,7 +711,7 @@ export const useAppStore = create<AppState>()(
               while (hasMore) {
                 try {
                   const res = await fetchWithTimeout(
-                    `/api/data/customers?page=${page}&pageSize=${pageSize}`,
+                    `/api/data/customers?page=${page}&pageSize=${pageSize}${dateParams}`,
                     requestTimeout
                   );
                   const result = await res.json();
@@ -669,9 +720,8 @@ export const useAppStore = create<AppState>()(
                     allCustomers = [...allCustomers, ...result.data];
                     hasMore = result.pagination?.hasMore || false;
                     page++;
-                    retryCount = 0; // Reset retry count on success
+                    retryCount = 0;
 
-                    // Update store with partial data as it loads
                     set((state) => ({
                       customerData: allCustomers,
                       dataStatus: {
@@ -684,7 +734,6 @@ export const useAppStore = create<AppState>()(
                       },
                     }));
 
-                    // Yield to browser between pages to allow GC (especially important on iOS)
                     if (hasMore) {
                       await yieldToBrowser();
                     }
@@ -694,13 +743,11 @@ export const useAppStore = create<AppState>()(
                 } catch (err) {
                   console.error(`Error loading customer page ${page}:`, err);
 
-                  // Retry logic with exponential backoff
                   if (retryCount < maxRetries) {
                     retryCount++;
                     const backoffMs = Math.min(1000 * Math.pow(2, retryCount), 10000);
                     console.log(`Retrying customer page ${page} in ${backoffMs}ms (attempt ${retryCount}/${maxRetries})`);
                     await new Promise(resolve => setTimeout(resolve, backoffMs));
-                    // Don't increment page, retry same page
                   } else {
                     console.error(`Failed to load customer page ${page} after ${maxRetries} retries`);
                     hasMore = false;
@@ -708,7 +755,16 @@ export const useAppStore = create<AppState>()(
                 }
               }
 
-              console.log(`Loaded ${allCustomers.length} customers in ${page - 1} pages`);
+              console.log(`Loaded ${allCustomers.length} customers in ${page - 1} pages from server`);
+
+              // Save to IndexedDB cache for next time
+              if (startDate && endDate && allCustomers.length > 0) {
+                try {
+                  await saveToCache(allCustomers, startDate, endDate);
+                } catch (cacheErr) {
+                  console.warn('Failed to save to cache:', cacheErr);
+                }
+              }
             };
 
             loadCustomerPages().catch(err => {
@@ -870,6 +926,126 @@ export const useAppStore = create<AppState>()(
           console.error('Error loading data:', error);
         }
       },
+
+      // Reload customer data with current date range (called when date range changes)
+      // Uses smart caching - checks IndexedDB first, then fetches from server if needed
+      reloadCustomerData: async () => {
+        const { dateRange } = get();
+        const startDate = dateRange?.start || '';
+        const endDate = dateRange?.end || '';
+
+        console.log(`Reloading customers for date range: ${startDate} to ${endDate}`);
+
+        // Check cache first
+        if (startDate && endDate) {
+          try {
+            const { valid, metadata } = await isCacheValid(startDate, endDate);
+
+            if (valid && metadata) {
+              console.log(`Cache hit on reload! Loading ${metadata.recordCount} customers from cache`);
+              const cachedCustomers = await loadFromCache();
+
+              if (cachedCustomers && cachedCustomers.length > 0) {
+                set((state) => ({
+                  customerData: cachedCustomers,
+                  dataStatus: {
+                    ...state.dataStatus,
+                    customers: {
+                      loaded: true,
+                      count: cachedCustomers.length,
+                      lastUpdated: metadata.cachedAt,
+                    },
+                  },
+                }));
+                console.log(`Loaded ${cachedCustomers.length} customers from cache (instant)`);
+                return;
+              }
+            }
+          } catch (cacheErr) {
+            console.warn('Cache check failed on reload:', cacheErr);
+          }
+        }
+
+        // Cache miss - fetch from server
+        console.log('Cache miss on reload - fetching from server...');
+
+        const isIOS = isIOSDevice();
+        const pageSize = isIOS ? 10000 : 50000;
+        const requestTimeout = isIOS ? 90000 : 120000;
+        const dateParams = startDate && endDate
+          ? `&startDate=${startDate}&endDate=${endDate}`
+          : '';
+
+        let allCustomers: CustomerRecord[] = [];
+        let page = 1;
+        let hasMore = true;
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        // Clear existing data while loading
+        set((state) => ({
+          customerData: [],
+          dataStatus: {
+            ...state.dataStatus,
+            customers: { ...state.dataStatus.customers, loaded: false },
+          },
+        }));
+
+        while (hasMore) {
+          try {
+            const res = await fetchWithTimeout(
+              `/api/data/customers?page=${page}&pageSize=${pageSize}${dateParams}`,
+              requestTimeout
+            );
+            const result = await res.json();
+
+            if (result.success && result.data) {
+              allCustomers = [...allCustomers, ...result.data];
+              hasMore = result.pagination?.hasMore || false;
+              page++;
+              retryCount = 0;
+
+              set((state) => ({
+                customerData: allCustomers,
+                dataStatus: {
+                  ...state.dataStatus,
+                  customers: {
+                    loaded: true,
+                    count: result.pagination?.totalCount || allCustomers.length,
+                    lastUpdated: new Date().toISOString(),
+                  },
+                },
+              }));
+
+              if (hasMore) {
+                await yieldToBrowser();
+              }
+            } else {
+              hasMore = false;
+            }
+          } catch (err) {
+            console.error(`Error reloading customer page ${page}:`, err);
+            if (retryCount < maxRetries) {
+              retryCount++;
+              const backoffMs = Math.min(1000 * Math.pow(2, retryCount), 10000);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
+            } else {
+              hasMore = false;
+            }
+          }
+        }
+
+        console.log(`Reloaded ${allCustomers.length} customers in ${page - 1} pages from server`);
+
+        // Save to cache for next time
+        if (startDate && endDate && allCustomers.length > 0) {
+          try {
+            await saveToCache(allCustomers, startDate, endDate);
+          } catch (cacheErr) {
+            console.warn('Failed to save to cache on reload:', cacheErr);
+          }
+        }
+      },
     }),
     {
       name: 'chapters-app-store',
@@ -928,7 +1104,7 @@ export const useFilteredSalesData = () => {
 };
 
 export const useFilteredBrandData = () => {
-  const { brandData, selectedStore } = useAppStore();
+  const { brandData, selectedStore, dateRange } = useAppStore();
   const deferredBrandData = useDeferredValue(brandData);
 
   return useMemo(() => {
@@ -936,28 +1112,50 @@ export const useFilteredBrandData = () => {
       if (selectedStore !== 'combined' && record.store_id !== selectedStore) {
         return false;
       }
+      // Filter by date range if brand has upload dates
+      if (dateRange && record.upload_start_date && record.upload_end_date) {
+        const brandStart = new Date(record.upload_start_date);
+        const brandEnd = new Date(record.upload_end_date);
+        const filterStart = new Date(dateRange.start);
+        const filterEnd = new Date(dateRange.end);
+        // Include if date ranges overlap
+        if (brandEnd < filterStart || brandStart > filterEnd) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [deferredBrandData, selectedStore]);
+  }, [deferredBrandData, selectedStore, dateRange]);
 };
 
 // Get normalized brand data (consolidated by canonical brand name)
 export const useNormalizedBrandData = (): NormalizedBrandRecord[] => {
-  const { brandData, brandMappings, selectedStore } = useAppStore();
+  const { brandData, brandMappings, selectedStore, dateRange } = useAppStore();
   const deferredBrandData = useDeferredValue(brandData);
 
   return useMemo(() => {
-    // First filter by store
+    // First filter by store and date range
     const filtered = deferredBrandData.filter((record) => {
       if (selectedStore !== 'combined' && record.store_id !== selectedStore) {
         return false;
+      }
+      // Filter by date range if brand has upload dates
+      if (dateRange && record.upload_start_date && record.upload_end_date) {
+        const brandStart = new Date(record.upload_start_date);
+        const brandEnd = new Date(record.upload_end_date);
+        const filterStart = new Date(dateRange.start);
+        const filterEnd = new Date(dateRange.end);
+        // Include if date ranges overlap
+        if (brandEnd < filterStart || brandStart > filterEnd) {
+          return false;
+        }
       }
       return true;
     });
 
     // Then normalize using brand mappings
     return normalizeBrandData(filtered, brandMappings);
-  }, [deferredBrandData, brandMappings, selectedStore]);
+  }, [deferredBrandData, brandMappings, selectedStore, dateRange]);
 };
 
 // Get normalized brand data as BrandRecord[] for backward compatibility
@@ -967,7 +1165,7 @@ export const useNormalizedBrandDataCompat = (): BrandRecord[] => {
 };
 
 export const useFilteredProductData = () => {
-  const { productData, selectedStore } = useAppStore();
+  const { productData, selectedStore, dateRange } = useAppStore();
   const deferredProductData = useDeferredValue(productData);
 
   return useMemo(() => {
@@ -975,9 +1173,86 @@ export const useFilteredProductData = () => {
       if (selectedStore !== 'combined' && record.store_id !== selectedStore) {
         return false;
       }
+      // Filter by date range - exclude records without dates when filtering
+      if (dateRange) {
+        // If record doesn't have upload dates, exclude it when date filtering is active
+        if (!record.upload_start_date || !record.upload_end_date) {
+          return false;
+        }
+        const productStart = new Date(record.upload_start_date);
+        const productEnd = new Date(record.upload_end_date);
+        const filterStart = new Date(dateRange.start);
+        const filterEnd = new Date(dateRange.end);
+        // Include if date ranges overlap
+        if (productEnd < filterStart || productStart > filterEnd) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [deferredProductData, selectedStore]);
+  }, [deferredProductData, selectedStore, dateRange]);
+};
+
+// Filtered budtender data by store and date range
+// Only includes budtenders who have been assigned in permanentEmployees
+export const useFilteredBudtenderData = () => {
+  const { budtenderData, selectedStore, dateRange, permanentEmployees } = useAppStore();
+  const deferredBudtenderData = useDeferredValue(budtenderData);
+
+  return useMemo(() => {
+    // Get list of assigned employee names for quick lookup
+    const assignedEmployees = new Set(Object.keys(permanentEmployees));
+
+    return deferredBudtenderData.filter((record) => {
+      // Only include budtenders who have been assigned
+      if (!assignedEmployees.has(record.employee_name)) {
+        return false;
+      }
+
+      // Filter by store using permanent assignments
+      if (selectedStore !== 'combined') {
+        const assignedStore = permanentEmployees[record.employee_name];
+        if (assignedStore !== selectedStore) {
+          return false;
+        }
+      }
+
+      // Filter by date range
+      if (dateRange && record.date) {
+        const recordDate = new Date(record.date);
+        const startDate = new Date(dateRange.start);
+        const endDate = new Date(dateRange.end);
+        if (recordDate < startDate || recordDate > endDate) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [deferredBudtenderData, selectedStore, dateRange, permanentEmployees]);
+};
+
+// Filtered customer data by store only
+// Note: Date filtering is now done server-side for performance (830k+ records)
+export const useFilteredCustomerData = () => {
+  const { customerData, selectedStore } = useAppStore();
+  const deferredCustomerData = useDeferredValue(customerData);
+
+  return useMemo(() => {
+    return deferredCustomerData.filter((record) => {
+      // Filter by store (customer has store_name, not store_id)
+      // For now, include all customers when combined, or filter by store name match
+      if (selectedStore !== 'combined') {
+        const storeNameLower = record.store_name.toLowerCase();
+        if (selectedStore === 'grass_roots' && !storeNameLower.includes('grass')) {
+          return false;
+        }
+        if (selectedStore === 'barbary_coast' && !storeNameLower.includes('barbary')) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [deferredCustomerData, selectedStore]);
 };
 
 // Hook to auto-load data when user is logged in
@@ -999,4 +1274,30 @@ export const useAutoLoadData = () => {
       hasLoaded.current = false;
     }
   }, [user]);
+};
+
+// Hook to reload customer data when date range changes
+// This is needed because customer data is filtered server-side for performance
+export const useReloadCustomersOnDateChange = () => {
+  const { dateRange, dataStatus, reloadCustomerData } = useAppStore();
+  const previousDateRange = useRef<{ start: string; end: string } | null>(null);
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    // Skip initial mount - data is already loaded with the initial date range
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      previousDateRange.current = dateRange;
+      return;
+    }
+
+    // Only reload if date range actually changed and customers are already loaded
+    const dateChanged = dateRange?.start !== previousDateRange.current?.start ||
+                        dateRange?.end !== previousDateRange.current?.end;
+
+    if (dateChanged && dataStatus.customers.loaded) {
+      previousDateRange.current = dateRange;
+      reloadCustomerData();
+    }
+  }, [dateRange, dataStatus.customers.loaded, reloadCustomerData]);
 };

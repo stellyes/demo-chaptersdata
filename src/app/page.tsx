@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useAppStore, useAutoLoadData } from '@/store/app-store';
+import { useAppStore, useAutoLoadData, useReloadCustomersOnDateChange } from '@/store/app-store';
 import { useAuth } from '@/hooks/useAuth';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { DashboardPage } from '@/components/pages/DashboardPage';
@@ -30,6 +30,9 @@ export default function App() {
 
   // Auto-load data from S3 when user is logged in
   useAutoLoadData();
+
+  // Reload customer data when date range changes (server-side filtering for 830k+ customers)
+  useReloadCustomersOnDateChange();
 
   // Sync fresh organization data from useAuth to the store
   // This ensures localStorage user gets updated with current org data

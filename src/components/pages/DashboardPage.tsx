@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, memo } from 'react';
-import { DollarSign, Target, TrendingUp, Activity } from 'lucide-react';
+import { DollarSign, Target, TrendingUp, Activity, Users, User, Award } from 'lucide-react';
 import { Header } from '@/components/ui/Header';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { Card } from '@/components/ui/Card';
@@ -9,8 +9,8 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { SalesChart, TransactionChart } from '@/components/charts/SalesChart';
 import { CategoryPieChart } from '@/components/charts/PieChart';
-import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat } from '@/store/app-store';
-import { calculateSalesSummary } from '@/lib/services/data-processor';
+import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat, useFilteredBudtenderData, useFilteredCustomerData } from '@/store/app-store';
+import { calculateSalesSummary, calculateCustomerSummary } from '@/lib/services/data-processor';
 import { format } from 'date-fns';
 
 export const DashboardPage = memo(function DashboardPage() {
@@ -19,8 +19,48 @@ export const DashboardPage = memo(function DashboardPage() {
   // Use normalized brand data - consolidates aliases under canonical brand names
   const brandData = useNormalizedBrandDataCompat();
   const productData = useFilteredProductData();
+  const budtenderData = useFilteredBudtenderData();
+  const customerData = useFilteredCustomerData();
 
   const summary = useMemo(() => calculateSalesSummary(salesData), [salesData]);
+  const customerSummary = useMemo(() => calculateCustomerSummary(customerData), [customerData]);
+
+  // Budtender performance summary
+  const budtenderSummary = useMemo(() => {
+    if (budtenderData.length === 0) return null;
+
+    // Aggregate by employee
+    const byEmployee: Record<string, { sales: number; units: number; margin: number; count: number }> = {};
+    for (const record of budtenderData) {
+      if (!byEmployee[record.employee_name]) {
+        byEmployee[record.employee_name] = { sales: 0, units: 0, margin: 0, count: 0 };
+      }
+      byEmployee[record.employee_name].sales += record.net_sales;
+      byEmployee[record.employee_name].units += record.units_sold;
+      byEmployee[record.employee_name].margin += record.gross_margin_pct;
+      byEmployee[record.employee_name].count += 1;
+    }
+
+    // Calculate averages and find top performers
+    const employees = Object.entries(byEmployee).map(([name, stats]) => ({
+      name,
+      sales: stats.sales,
+      units: stats.units,
+      avgMargin: stats.margin / stats.count,
+      revenuePerUnit: stats.units > 0 ? stats.sales / stats.units : 0,
+    }));
+
+    const topBySales = [...employees].sort((a, b) => b.sales - a.sales).slice(0, 5);
+    const totalSales = employees.reduce((sum, e) => sum + e.sales, 0);
+    const totalUnits = employees.reduce((sum, e) => sum + e.units, 0);
+
+    return {
+      totalEmployees: employees.length,
+      totalSales,
+      totalUnits,
+      topBySales,
+    };
+  }, [budtenderData]);
 
   // Prepare sales chart data
   const salesChartData = useMemo(() => {
@@ -286,6 +326,143 @@ export const DashboardPage = memo(function DashboardPage() {
               </p>
             </div>
           </div>
+        </Card>
+      </div>
+
+      {/* Budtender Performance Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6 md:mt-8">
+        <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <User className="w-5 h-5 text-[var(--accent)]" />
+            <div>
+              <SectionLabel>Team Performance</SectionLabel>
+              <SectionTitle>Top Budtenders</SectionTitle>
+            </div>
+          </div>
+          {budtenderSummary && budtenderSummary.topBySales.length > 0 ? (
+            <div className="space-y-3">
+              {budtenderSummary.topBySales.map((employee, index) => (
+                <div
+                  key={employee.name}
+                  className="flex items-center justify-between p-3 bg-[var(--paper)] rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+                      index === 0 ? 'bg-[var(--accent)]/20 text-[var(--accent)]' : 'bg-[var(--muted)]/10 text-[var(--muted)]'
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="font-medium text-[var(--ink)]">{employee.name}</p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {employee.units.toLocaleString()} units sold
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold font-serif text-[var(--ink)]">
+                      {formatCurrency(employee.sales)}
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {employee.avgMargin.toFixed(1)}% margin
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <div className="pt-3 border-t border-[var(--border)] grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-lg font-semibold font-serif">{budtenderSummary.totalEmployees}</p>
+                  <p className="text-xs text-[var(--muted)]">Active Staff</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold font-serif">{formatCurrency(budtenderSummary.totalSales)}</p>
+                  <p className="text-xs text-[var(--muted)]">Total Sales</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold font-serif">{budtenderSummary.totalUnits.toLocaleString()}</p>
+                  <p className="text-xs text-[var(--muted)]">Units Sold</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-[var(--muted)]">
+              <div className="text-center">
+                <User className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p>No budtender data for selected period</p>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Customer Analytics Section */}
+        <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-5 h-5 text-[var(--accent)]" />
+            <div>
+              <SectionLabel>Customer Insights</SectionLabel>
+              <SectionTitle>Active Customers</SectionTitle>
+            </div>
+          </div>
+          {customerSummary.totalCustomers > 0 ? (
+            <div className="space-y-4">
+              {/* Customer Segment Distribution */}
+              <div>
+                <p className="text-sm font-medium text-[var(--muted)] mb-2">By Value Segment</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {Object.entries(customerSummary.segmentBreakdown)
+                    .filter(([, count]) => count > 0)
+                    .slice(0, 5)
+                    .map(([segment, count]) => (
+                      <div key={segment} className="p-2 bg-[var(--paper)] rounded text-center">
+                        <p className="text-lg font-semibold font-serif">{count.toLocaleString()}</p>
+                        <p className="text-xs text-[var(--muted)] truncate">{segment}</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Recency Distribution */}
+              <div>
+                <p className="text-sm font-medium text-[var(--muted)] mb-2">By Recency</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {Object.entries(customerSummary.recencyBreakdown)
+                    .filter(([, count]) => count > 0)
+                    .slice(0, 5)
+                    .map(([segment, count]) => (
+                      <div key={segment} className="p-2 bg-[var(--paper)] rounded text-center">
+                        <p className="text-lg font-semibold font-serif">{count.toLocaleString()}</p>
+                        <p className="text-xs text-[var(--muted)] truncate">{segment}</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="pt-3 border-t border-[var(--border)] grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-lg font-semibold font-serif">{customerSummary.totalCustomers.toLocaleString()}</p>
+                  <p className="text-xs text-[var(--muted)]">Total Customers</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold font-serif">{formatCurrency(customerSummary.avgLifetimeValue)}</p>
+                  <p className="text-xs text-[var(--muted)]">Avg LTV</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold font-serif">
+                    {((customerSummary.segmentBreakdown['VIP'] || 0) + (customerSummary.segmentBreakdown['Whale'] || 0)).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-[var(--muted)]">VIP/Whale</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-[var(--muted)]">
+              <div className="text-center">
+                <Users className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p>No customer data for selected period</p>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </div>
