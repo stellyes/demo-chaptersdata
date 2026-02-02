@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Invalidate cache
-    customerCache = null;
+    customerCacheByKey.clear();
 
     return Response.json({
       success: true,
