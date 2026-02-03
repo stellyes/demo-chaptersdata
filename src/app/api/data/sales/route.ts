@@ -8,6 +8,16 @@ import { prisma } from '@/lib/prisma';
 import { parseCSV, cleanSalesData } from '@/lib/services/data-processor';
 import { StoreId, SalesRecord } from '@/types';
 
+// Helper to normalize margin percentage
+// If value is <= 1 and >= -1, it's stored as a decimal (e.g., 0.55 for 55%) and needs to be multiplied by 100
+// If value is > 1 or < -1, it's already a percentage (e.g., 55 for 55%)
+function normalizeMarginPct(value: number): number {
+  if (value <= 1 && value >= -1) {
+    return value * 100;
+  }
+  return value;
+}
+
 // GET - Load all sales data from Aurora
 export async function GET() {
   try {
@@ -33,9 +43,9 @@ export async function GET() {
       gross_receipts: Number(r.grossReceipts),
       cogs_with_excise: Number(r.cogsWithExcise),
       gross_income: Number(r.grossIncome),
-      gross_margin_pct: Number(r.grossMarginPct),
-      discount_pct: Number(r.discountPct),
-      cost_pct: Number(r.costPct),
+      gross_margin_pct: normalizeMarginPct(Number(r.grossMarginPct)),
+      discount_pct: normalizeMarginPct(Number(r.discountPct)),
+      cost_pct: normalizeMarginPct(Number(r.costPct)),
       avg_basket_size: Number(r.avgBasketSize),
       avg_order_value: Number(r.avgOrderValue),
       avg_order_profit: Number(r.avgOrderProfit),
