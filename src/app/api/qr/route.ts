@@ -8,9 +8,9 @@ import { prisma } from '@/lib/prisma';
 
 // Get the base URL for tracking redirects
 function getTrackingBaseUrl(): string {
-  // Use environment variable if set, otherwise derive from NEXTAUTH_URL or default
+  // Use environment variable if set, otherwise default to production URL
   return (
-    process.env.QR_TRACKING_BASE_URL ||
+    process.env.QR_REDIRECT_BASE_URL ||
     process.env.NEXTAUTH_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     'https://bcsf.chaptersdata.com'
