@@ -1,6 +1,105 @@
 -- ============================================
--- DAILY LEARNING SYSTEM - DATABASE MIGRATION
--- Run this against your PostgreSQL database
+-- CHAPTERS DATA - COMPLETE DATABASE MIGRATION
+-- Run this against your Aurora PostgreSQL database
+-- ============================================
+
+-- ============================================
+-- MULTI-TENANT FOUNDATION
+-- Organizations, storefronts, users, and profiles
+-- ============================================
+
+-- Organizations table
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(500) NOT NULL,
+    type VARCHAR(100) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    location VARCHAR(500),
+    monthly_billing DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Storefronts table
+CREATE TABLE IF NOT EXISTS storefronts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    storefront_id VARCHAR(255) NOT NULL UNIQUE,
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name VARCHAR(500) NOT NULL,
+    type VARCHAR(100) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    location VARCHAR(500),
+    address VARCHAR(500),
+    city VARCHAR(255),
+    state VARCHAR(100),
+    zip_code VARCHAR(20),
+    phone VARCHAR(50),
+    monthly_billing DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    dashboard_url VARCHAR(1000),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User Mappings table (user-to-organization assignments)
+CREATE TABLE IF NOT EXISTS user_mappings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id VARCHAR(255) NOT NULL,
+    user_email VARCHAR(500),
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL DEFAULT 'member',
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, org_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_mappings_user_id ON user_mappings(user_id);
+
+-- User Profiles table
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id VARCHAR(255) NOT NULL UNIQUE,
+    display_name VARCHAR(255),
+    organization_name VARCHAR(500),
+    organization_type VARCHAR(100),
+    license_number VARCHAR(255),
+    address VARCHAR(500),
+    city VARCHAR(255),
+    state VARCHAR(100),
+    zip_code VARCHAR(20),
+    phone VARCHAR(50),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
+-- CLIENT BILLING INVOICES
+-- Invoices sent TO clients
+-- ============================================
+
+-- Client Invoices table
+CREATE TABLE IF NOT EXISTS client_invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invoice_number VARCHAR(100) NOT NULL UNIQUE,
+    org_id VARCHAR(255) NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    amount_paid DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    status VARCHAR(50) NOT NULL DEFAULT 'unpaid',
+    description TEXT,
+    due_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    pdf_key VARCHAR(1000),
+    pdf_url VARCHAR(1000),
+    pdf_file_name VARCHAR(500),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    paid_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_invoices_org_id ON client_invoices(org_id);
+CREATE INDEX IF NOT EXISTS idx_client_invoices_status ON client_invoices(status);
+CREATE INDEX IF NOT EXISTS idx_client_invoices_due_date ON client_invoices(due_date);
+
+-- ============================================
+-- DAILY LEARNING SYSTEM
 -- ============================================
 
 -- Daily Learning Jobs table
@@ -217,3 +316,55 @@ CREATE INDEX IF NOT EXISTS idx_monthly_strategic_reports_created_at ON monthly_s
 ALTER TABLE monthly_analysis_jobs
 ADD CONSTRAINT fk_monthly_analysis_jobs_report
 FOREIGN KEY (report_id) REFERENCES monthly_strategic_reports(id);
+
+-- ============================================
+-- BLOG SYSTEM TABLES
+-- Blog posts and tags for the website
+-- ============================================
+
+-- Blog Posts table
+CREATE TABLE IF NOT EXISTS blog_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug VARCHAR(255) NOT NULL UNIQUE,
+    title VARCHAR(500) NOT NULL,
+    excerpt TEXT NOT NULL,
+    content TEXT NOT NULL,
+    cover_image VARCHAR(1000),
+
+    -- SEO fields
+    meta_title VARCHAR(500),
+    meta_description TEXT,
+    keywords TEXT[] DEFAULT '{}',
+
+    -- Categorization
+    category VARCHAR(100) NOT NULL DEFAULT 'insights',
+    tags TEXT[] DEFAULT '{}',
+
+    -- Author info
+    author_name VARCHAR(255) NOT NULL DEFAULT 'Chapters Data Team',
+    author_role VARCHAR(255),
+
+    -- Publishing
+    status VARCHAR(50) NOT NULL DEFAULT 'draft',
+    featured BOOLEAN NOT NULL DEFAULT FALSE,
+    published_at TIMESTAMP WITH TIME ZONE,
+
+    -- Engagement metrics
+    view_count INTEGER NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_blog_posts_status ON blog_posts(status);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_category ON blog_posts(category);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_published_at ON blog_posts(published_at);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_featured ON blog_posts(featured);
+
+-- Blog Tags table
+CREATE TABLE IF NOT EXISTS blog_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL UNIQUE,
+    slug VARCHAR(255) NOT NULL UNIQUE,
+    count INTEGER NOT NULL DEFAULT 0
+);
