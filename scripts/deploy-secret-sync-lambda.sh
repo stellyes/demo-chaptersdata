@@ -37,7 +37,7 @@ aws iam put-role-policy \
       },
       {
         "Effect": "Allow",
-        "Action": ["amplify:GetApp", "amplify:UpdateApp", "amplify:StartJob"],
+        "Action": ["amplify:GetApp", "amplify:UpdateApp"],
         "Resource": [
           "arn:aws:amplify:'"$REGION"':'"$ACCOUNT_ID"':apps/d2a3nxrtmkt6i2",
           "arn:aws:amplify:'"$REGION"':'"$ACCOUNT_ID"':apps/d2a3nxrtmkt6i2/*",
@@ -98,9 +98,8 @@ def handler(event, context):
             current_env["DATABASE_URL"] = database_url
 
             amplify.update_app(appId=app_id, environmentVariables=current_env)
-            amplify.start_job(appId=app_id, branchName="main", jobType="RELEASE")
 
-            print(f"Successfully updated app {app_id}")
+            print(f"Successfully updated DATABASE_URL env var for app {app_id} (no redeployment needed - apps fetch credentials from Secrets Manager at runtime)")
         except Exception as e:
             print(f"Error updating app {app_id}: {str(e)}")
             raise

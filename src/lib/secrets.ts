@@ -6,6 +6,7 @@
  */
 
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { fromContainerMetadata } from '@aws-sdk/credential-providers';
 
 const RDS_SECRET_ARN = 'arn:aws:secretsmanager:us-west-1:716121312511:secret:rds!cluster-f89505b1-a495-4483-b282-15d58e2df95e-vOlOPD';
 const DB_HOST = 'chapters-data-cluster.cluster-crcoymcou3hf.us-west-1.rds.amazonaws.com';
@@ -37,7 +38,16 @@ export async function getDatabaseUrl(): Promise<string> {
   }
 
   try {
-    const client = new SecretsManagerClient({ region: 'us-west-1' });
+    // In Amplify SSR compute, use the IAM compute role credentials via the
+    // container metadata endpoint. This bypasses the static S3 IAM user keys
+    // in AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY that would otherwise take
+    // precedence in the default credential chain.
+    const client = new SecretsManagerClient({
+      region: 'us-west-1',
+      ...(process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
+        ? { credentials: fromContainerMetadata() }
+        : {}),
+    });
     const command = new GetSecretValueCommand({ SecretId: RDS_SECRET_ARN });
     const response = await client.send(command);
 
