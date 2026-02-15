@@ -12,6 +12,7 @@ import { webSearchService, SearchResult } from './web-search';
 import { saveInsights, InsightInput } from './knowledge-base';
 import { dataCorrelationsService, CorrelationSummary } from './data-correlations';
 import { CLAUDE_CONFIG } from '@/lib/config';
+import { parseClaudeJson, ParseJsonResult } from '@/lib/utils/json-response';
 
 // Default org ID for autonomous learning (set via env var or use fallback)
 const DEFAULT_LEARNING_ORG_ID = process.env.DEFAULT_ORG_ID || 'chapters-primary';
@@ -95,11 +96,12 @@ async function withRetry<T>(
 export const DAILY_LEARNING_CONFIG = {
   maxSearchesPerDay: 8,
   maxPagesPerSearch: 5,
-  phase1TokenBudget: 8000,
-  phase2TokenBudget: 10000, // Increased for expanded historical context
-  phase3TokenBudget: 10000,
-  phase4TokenBudget: 16000,
-  phase5TokenBudget: 12000,
+  // ISSUE #5 FIX: Increased token budgets for better JSON response quality & accuracy
+  phase1TokenBudget: 16000, // Doubled: large data input requires space for thorough analysis
+  phase2TokenBudget: 12000, // Increased: progressive context continues to grow
+  phase3TokenBudget: 12000, // Increased: better analysis of search results
+  phase4TokenBudget: 20000, // Increased: complex cross-correlation work (Sonnet)
+  phase5TokenBudget: 16000, // Increased: critical digest output quality
   questionsPerCycle: 10,
   maxWebResearchQuestions: 5,
   // Progressive learning settings
@@ -114,6 +116,17 @@ export const DAILY_LEARNING_CONFIG = {
   lowQualityThreshold: 0.4, // Questions below this quality may be re-asked
 };
 
+// ISSUE #5 FIX: System prompt for enforcing valid JSON responses
+const JSON_SYSTEM_PROMPT = `You are a precise cannabis retail data analyst. Your responses must be valid JSON only.
+
+CRITICAL JSON RULES:
+1. Return ONLY valid JSON - no markdown, no code blocks, no explanation text
+2. Start your response with { or [ as appropriate
+3. Ensure all strings are properly escaped (use \\" for quotes inside strings)
+4. Do not include any text before or after the JSON
+5. All property names must be in double quotes
+6. Do not truncate your response - complete the full JSON structure`;
+
 // Job metadata for tracking runtime state and quota issues
 export interface JobMetadata {
   webResearchSkipped: boolean;
@@ -126,6 +139,13 @@ export interface JobMetadata {
     skippedChecks?: string[];
   };
   phaseTimings?: Record<string, { start: string; end?: string; durationMs?: number }>;
+  // ISSUE #5 FIX: Track JSON parse issues for observability
+  jsonParseIssues?: Array<{
+    phase: string;
+    timestamp: string;
+    fallbackUsed: boolean;
+    error?: string;
+  }>;
 }
 
 interface DailyLearningJobState {
@@ -672,12 +692,16 @@ Return JSON:
   "suggestedQuestionTopics": []
 }`;
 
-    // Add retry with timeout to Claude API call to handle transient failures
+    // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
     const response = await withRetry(
       () => this.client.messages.create({
         model: CLAUDE_CONFIG.haiku,
         max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
-        messages: [{ role: 'user', content: prompt }],
+        system: JSON_SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: '{' }, // Prefill to ensure JSON object start
+        ],
       }),
       'phase1DataReview'
     );
@@ -686,56 +710,41 @@ Return JSON:
     state.outputTokens += response.usage.output_tokens;
 
     const textContent = response.content.find(c => c.type === 'text');
-    const responseText = textContent?.type === 'text' ? textContent.text : '';
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Failed to parse data review response');
+    // Prepend the prefilled '{' since it won't be in the response
+    const responseText = '{' + (textContent?.type === 'text' ? textContent.text : '');
 
-    try {
-      return JSON.parse(jsonMatch[0]) as DataReviewResult;
-    } catch (parseError) {
-      // If JSON parsing fails, try to clean up common issues
-      console.error('JSON parse error in phase1DataReview, attempting cleanup...');
-      console.error('Parse error details:', parseError instanceof Error ? parseError.message : 'Unknown');
+    // ISSUE #5 FIX: Use centralized JSON parsing utility
+    const parseResult = parseClaudeJson<DataReviewResult>(responseText, false);
 
-      let cleanedJson = jsonMatch[0]
-        .replace(/,\s*}/g, '}')  // Remove trailing commas before }
-        .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
-        .replace(/[\x00-\x1F\x7F]/g, ' ')  // Remove control characters
-        .replace(/\n\s*\n/g, '\n')  // Remove extra newlines
-        .replace(/"\s*\n\s*"/g, '", "')  // Fix missing commas between string elements
-        .replace(/}\s*\n\s*{/g, '}, {')  // Fix missing commas between objects
-        .replace(/]\s*\n\s*\[/g, '], [');  // Fix missing commas between arrays
-
-      try {
-        return JSON.parse(cleanedJson) as DataReviewResult;
-      } catch (secondError) {
-        // Last resort: try to extract just the structure we need
-        console.error('JSON cleanup failed, attempting manual extraction...');
-        console.error('Raw response preview:', responseText.substring(0, 1000));
-
-        // Try a more forgiving approach: extract key fields manually
-        try {
-          const summaryMatch = responseText.match(/"summary"\s*:\s*"([^"]*(?:\\"[^"]*)*)"/);
-          const result: DataReviewResult = {
-            summary: summaryMatch ? summaryMatch[1].replace(/\\"/g, '"') : 'Failed to parse summary',
-            keyMetrics: {
-              salesTrend: 'Unable to parse',
-              topBrands: [],
-              customerActivity: 'Unable to parse',
-              recentChanges: [],
-            },
-            areasOfConcern: [],
-            areasOfOpportunity: [],
-            anomalies: [],
-            suggestedQuestionTopics: ['Data quality', 'Sales trends', 'Customer engagement'],
-          };
-          console.warn('Using fallback parsed result due to JSON errors');
-          return result;
-        } catch (fallbackError) {
-          throw new Error(`Failed to parse data review JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
-        }
+    if (!parseResult.success || !parseResult.data) {
+      // Track parse issue in job metadata
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
       }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase1DataReview',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+        error: parseResult.error,
+      });
+
+      throw new Error(`Failed to parse data review JSON: ${parseResult.error}`);
     }
+
+    // Track if fallback parsing was used (for observability)
+    if (parseResult.fallbackUsed) {
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase1DataReview',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+      });
+      console.warn('[phase1DataReview] Used fallback JSON parsing');
+    }
+
+    return parseResult.data;
   }
 
   private async phase2QuestionGeneration(
@@ -775,12 +784,16 @@ ${progressiveContext}
 Return JSON array:
 [{ "question": "", "category": "sales|brands|customers|market|regulatory|operations", "priority": 1-10, "requiresWebResearch": boolean, "requiresInternalData": boolean, "context": "why this question matters based on learning history" }]`;
 
-    // Add retry with timeout to Claude API call to handle transient failures
+    // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
     const response = await withRetry(
       () => this.client.messages.create({
         model: CLAUDE_CONFIG.haiku,
         max_tokens: DAILY_LEARNING_CONFIG.phase2TokenBudget,
-        messages: [{ role: 'user', content: prompt }],
+        system: JSON_SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: '[' }, // Prefill to ensure JSON array start
+        ],
       }),
       'phase2QuestionGeneration'
     );
@@ -789,11 +802,41 @@ Return JSON array:
     state.outputTokens += response.usage.output_tokens;
 
     const textContent = response.content.find(c => c.type === 'text');
-    const responseText = textContent?.type === 'text' ? textContent.text : '';
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
+    // Prepend the prefilled '[' since it won't be in the response
+    const responseText = '[' + (textContent?.type === 'text' ? textContent.text : '');
 
-    const questions = JSON.parse(jsonMatch[0]) as GeneratedQuestion[];
+    // ISSUE #5 FIX: Use centralized JSON parsing utility
+    const parseResult = parseClaudeJson<GeneratedQuestion[]>(responseText, true);
+
+    if (!parseResult.success || !parseResult.data) {
+      // Track parse issue in job metadata
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase2QuestionGeneration',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+        error: parseResult.error,
+      });
+      console.error('[phase2QuestionGeneration] JSON parse failed:', parseResult.error);
+      return [];
+    }
+
+    // Track if fallback parsing was used
+    if (parseResult.fallbackUsed) {
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase2QuestionGeneration',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+      });
+      console.warn('[phase2QuestionGeneration] Used fallback JSON parsing');
+    }
+
+    const questions = parseResult.data;
 
     // Update question tracking in database - run in parallel with timeouts
     await Promise.all(
@@ -1398,12 +1441,16 @@ Return JSON array:
 
 Generate 5-10 high-quality correlations.`;
 
-    // Add retry with timeout to Claude API call to handle transient failures
+    // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
     const response = await withRetry(
       () => this.client.messages.create({
         model: CLAUDE_CONFIG.defaultModel,
         max_tokens: DAILY_LEARNING_CONFIG.phase4TokenBudget,
-        messages: [{ role: 'user', content: prompt }],
+        system: JSON_SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: '[' }, // Prefill to ensure JSON array start
+        ],
       }),
       'phase4Correlation'
     );
@@ -1412,11 +1459,41 @@ Generate 5-10 high-quality correlations.`;
     state.outputTokens += response.usage.output_tokens;
 
     const textContent = response.content.find(c => c.type === 'text');
-    const responseText = textContent?.type === 'text' ? textContent.text : '';
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
+    // Prepend the prefilled '[' since it won't be in the response
+    const responseText = '[' + (textContent?.type === 'text' ? textContent.text : '');
 
-    return JSON.parse(jsonMatch[0]) as CorrelatedInsight[];
+    // ISSUE #5 FIX: Use centralized JSON parsing utility
+    const parseResult = parseClaudeJson<CorrelatedInsight[]>(responseText, true);
+
+    if (!parseResult.success || !parseResult.data) {
+      // Track parse issue in job metadata
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase4Correlation',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+        error: parseResult.error,
+      });
+      console.error('[phase4Correlation] JSON parse failed:', parseResult.error);
+      return [];
+    }
+
+    // Track if fallback parsing was used
+    if (parseResult.fallbackUsed) {
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase4Correlation',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+      });
+      console.warn('[phase4Correlation] Used fallback JSON parsing');
+    }
+
+    return parseResult.data;
   }
 
   /**
@@ -1592,12 +1669,16 @@ Generate 2-4 items for industryHighlights, regulatoryUpdates, marketTrends, and 
 If web research was not conducted, base industryHighlights, regulatoryUpdates, and marketTrends on general cannabis industry knowledge.
 Return ONLY valid JSON, no markdown or explanation.`;
 
-    // Add retry with timeout to Claude API call to handle transient failures
+    // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
     const response = await withRetry(
       () => this.client.messages.create({
         model: CLAUDE_CONFIG.defaultModel,
         max_tokens: DAILY_LEARNING_CONFIG.phase5TokenBudget,
-        messages: [{ role: 'user', content: prompt }],
+        system: JSON_SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: '{' }, // Prefill to ensure JSON object start
+        ],
       }),
       'phase5DigestGeneration'
     );
@@ -1606,11 +1687,41 @@ Return ONLY valid JSON, no markdown or explanation.`;
     state.outputTokens += response.usage.output_tokens;
 
     const textContent = response.content.find(c => c.type === 'text');
-    const responseText = textContent?.type === 'text' ? textContent.text : '';
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Failed to parse digest response');
+    // Prepend the prefilled '{' since it won't be in the response
+    const responseText = '{' + (textContent?.type === 'text' ? textContent.text : '');
 
-    return JSON.parse(jsonMatch[0]) as DailyDigestContent;
+    // ISSUE #5 FIX: Use centralized JSON parsing utility
+    const parseResult = parseClaudeJson<DailyDigestContent>(responseText, false);
+
+    if (!parseResult.success || !parseResult.data) {
+      // Track parse issue in job metadata
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase5DigestGeneration',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+        error: parseResult.error,
+      });
+
+      throw new Error(`Failed to parse digest JSON: ${parseResult.error}`);
+    }
+
+    // Track if fallback parsing was used
+    if (parseResult.fallbackUsed) {
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase5DigestGeneration',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+      });
+      console.warn('[phase5DigestGeneration] Used fallback JSON parsing');
+    }
+
+    return parseResult.data;
   }
 
   private async updateJobPhase(jobId: string, phase: string): Promise<void> {
