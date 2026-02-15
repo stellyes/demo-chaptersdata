@@ -970,50 +970,62 @@ export class DailyLearningService {
       }
     };
 
-    // Load data sources with tracking
-    // ISSUE #9 FIX: Run in two batches to reduce connection pool pressure
-    // Batch 1: Simple queries that don't trigger nested queries
-    // Batch 2: Correlation query (triggers 7 nested queries internally)
-    console.log('[Phase1] Starting data source loading...');
+    // Load data sources SEQUENTIALLY to debug connection issues
+    // Each query runs one at a time with heartbeat updates
+    console.log('[Phase1] Starting data source loading (sequential mode)...');
 
-    // Batch 1: Simple data sources (9 queries in parallel)
-    const [
-      salesData,
-      brandData,
-      customerData,
-      invoiceData,
-      qrData,
-      seoData,
-      budtenderData,
-      productData,
-      researchData,
-    ] = await Promise.all([
-      trackDataSource('sales', () => this.loadRecentSalesData(), {}),
-      trackDataSource('brands', () => this.loadRecentBrandData(), {}),
-      trackDataSource('customers', () => this.loadRecentCustomerData(), {}),
-      trackDataSource('invoices', () => this.loadRecentInvoiceData(), {}),
-      trackDataSource('qr_codes', () => this.loadQrCodeData(), {}),
-      trackDataSource('seo_audits', () => this.loadSeoAuditData(), {}),
-      trackDataSource('budtenders', () => this.loadBudtenderData(), {}),
-      trackDataSource('products', () => this.loadProductData(), {}),
-      trackDataSource('research', () => this.loadResearchData(), {}),
-    ]);
+    // Helper to update heartbeat between queries
+    const updateHeartbeat = async () => {
+      await prisma.dailyLearningJob.update({
+        where: { id: state.jobId },
+        data: { lastHeartbeat: new Date() },
+      });
+    };
 
-    console.log('[Phase1] Batch 1 complete, loading correlations...');
+    // Run queries sequentially with heartbeats between each
+    console.log('[Phase1] Loading sales...');
+    const salesData = await trackDataSource('sales', () => this.loadRecentSalesData(), {});
+    await updateHeartbeat();
 
-    // Update heartbeat after Batch 1 to track progress
-    await prisma.dailyLearningJob.update({
-      where: { id: state.jobId },
-      data: { lastHeartbeat: new Date() },
-    });
+    console.log('[Phase1] Loading brands...');
+    const brandData = await trackDataSource('brands', () => this.loadRecentBrandData(), {});
+    await updateHeartbeat();
 
-    // Batch 2: Correlation query (triggers 7 nested queries via getAllCorrelations)
-    // Run after Batch 1 to avoid connection pool exhaustion
+    console.log('[Phase1] Loading customers...');
+    const customerData = await trackDataSource('customers', () => this.loadRecentCustomerData(), {});
+    await updateHeartbeat();
+
+    console.log('[Phase1] Loading invoices...');
+    const invoiceData = await trackDataSource('invoices', () => this.loadRecentInvoiceData(), {});
+    await updateHeartbeat();
+
+    console.log('[Phase1] Loading qr_codes...');
+    const qrData = await trackDataSource('qr_codes', () => this.loadQrCodeData(), {});
+    await updateHeartbeat();
+
+    console.log('[Phase1] Loading seo_audits...');
+    const seoData = await trackDataSource('seo_audits', () => this.loadSeoAuditData(), {});
+    await updateHeartbeat();
+
+    console.log('[Phase1] Loading budtenders...');
+    const budtenderData = await trackDataSource('budtenders', () => this.loadBudtenderData(), {});
+    await updateHeartbeat();
+
+    console.log('[Phase1] Loading products...');
+    const productData = await trackDataSource('products', () => this.loadProductData(), {});
+    await updateHeartbeat();
+
+    console.log('[Phase1] Loading research...');
+    const researchData = await trackDataSource('research', () => this.loadResearchData(), {});
+    await updateHeartbeat();
+
+    console.log('[Phase1] Loading correlations...');
     const correlationSummary = await trackDataSource(
       'correlations',
       () => dataCorrelationsService.getCorrelationSummaryForAI(),
       ''
     );
+    await updateHeartbeat();
 
     // Log data source summary
     console.log(`[Phase1] Data sources - Loaded: ${dataSources.loaded.length}, Failed: ${dataSources.failed.length}`);
