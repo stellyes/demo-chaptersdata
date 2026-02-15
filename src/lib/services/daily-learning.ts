@@ -940,6 +940,10 @@ export class DailyLearningService {
     // Uses parallel loading like the original working implementation
     console.log('[Phase1] Starting data source loading...');
 
+    // Ensure Prisma is initialized before querying
+    await initializePrisma();
+    console.log('[Phase1] Prisma initialized, starting queries...');
+
     const [
       salesData,
       brandData,
