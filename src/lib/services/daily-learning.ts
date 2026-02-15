@@ -944,29 +944,21 @@ export class DailyLearningService {
     await initializePrisma();
     console.log('[Phase1] Prisma initialized, starting queries...');
 
-    const [
-      salesData,
-      brandData,
-      customerData,
-      invoiceData,
-      qrData,
-      seoData,
-      budtenderData,
-      productData,
-      researchData,
-      correlationSummary,
-    ] = await Promise.all([
-      safeQuery(() => this.loadRecentSalesData(), {}, 'loadRecentSalesData'),
-      safeQuery(() => this.loadRecentBrandData(), {}, 'loadRecentBrandData'),
-      safeQuery(() => this.loadRecentCustomerData(), {}, 'loadRecentCustomerData'),
-      safeQuery(() => this.loadRecentInvoiceData(), {}, 'loadRecentInvoiceData'),
-      safeQuery(() => this.loadQrCodeData(), {}, 'loadQrCodeData'),
-      safeQuery(() => this.loadSeoAuditData(), {}, 'loadSeoAuditData'),
-      safeQuery(() => this.loadBudtenderData(), {}, 'loadBudtenderData'),
-      safeQuery(() => this.loadProductData(), {}, 'loadProductData'),
-      safeQuery(() => this.loadResearchData(), {}, 'loadResearchData'),
-      safeQuery(() => dataCorrelationsService.getCorrelationSummaryForAI(), '', 'getCorrelationSummaryForAI'),
-    ]);
+    // TEMPORARY: Test with single query to debug hang
+    console.log('[Phase1] Loading just sales data as test...');
+    const salesData = await safeQuery(() => this.loadRecentSalesData(), {}, 'loadRecentSalesData');
+    console.log('[Phase1] Sales data loaded successfully!');
+
+    // Use empty defaults for other data sources during testing
+    const brandData = {};
+    const customerData = {};
+    const invoiceData = {};
+    const qrData = {};
+    const seoData = {};
+    const budtenderData = {};
+    const productData = {};
+    const researchData = {};
+    const correlationSummary = '';
 
     // Track which data sources succeeded or failed for metrics
     const dataSourceNames = ['sales', 'brands', 'customers', 'invoices', 'qr_codes', 'seo_audits', 'budtenders', 'products', 'research', 'correlations'];
