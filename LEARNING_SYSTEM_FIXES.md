@@ -188,31 +188,29 @@ The additional cost is justified by the critical nature of the correlation phase
 
 ---
 
-### Issue #7: Stale Job Timeout Too Long (1 Hour)
+### Issue #7: Stale Job Timeout Too Long (1 Hour) ✅ FIXED
 
 **Problem:** Jobs running >1 hour are marked failed, but Lambda timeout is 15 minutes.
 
 **Impact:** Legitimate failures hang for 45+ minutes before detection.
 
-**Solution Plan:**
-1. Reduce stale timeout to 20 minutes (Lambda timeout + buffer):
-```typescript
-// daily-learning.ts:109
-private readonly STALE_JOB_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
-```
-2. Add phase-level heartbeat updates to track progress:
-```typescript
-async updateJobHeartbeat(jobId: string, phase: string): Promise<void> {
-  await prisma.dailyLearningJob.update({
-    where: { id: jobId },
-    data: { lastHeartbeat: new Date(), currentPhase: phase }
-  });
-}
-```
+**Solution Implemented:**
+1. Reduced stale timeout from 1 hour to 20 minutes (Lambda timeout + buffer)
+2. Added `lastHeartbeat` field to `DailyLearningJob` schema
+3. Enhanced `updateJobPhase()` to also update heartbeat timestamp
+4. Updated stale detection logic to check `lastHeartbeat` (if available) instead of just `startedAt`
+5. Added standalone `updateJobHeartbeat()` method for future use
 
-**Files to modify:**
-- `src/lib/services/daily-learning.ts` - Reduce timeout, add heartbeat
-- `prisma/schema.prisma` - Add `lastHeartbeat DateTime?` field to DailyLearningJob (if not present)
+**Key Changes:**
+- Stale timeout reduced: 60 min → 20 min
+- Detection now checks time since last heartbeat, not total job age
+- Jobs making progress (updating phases) won't be falsely marked stale
+- Jobs that crash mid-phase are detected within 20 minutes
+
+**Files modified:**
+- `src/lib/services/daily-learning.ts` - Timeout, heartbeat method, stale detection
+- `prisma/schema.prisma` - Added `lastHeartbeat DateTime?` field
+- `prisma/migrations/20260215_add_last_heartbeat/migration.sql` - Schema migration
 
 ---
 

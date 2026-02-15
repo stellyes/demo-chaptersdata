@@ -1731,8 +1731,15 @@ Return ONLY valid JSON, no markdown or explanation.`;
     return parseResult.data;
   }
 
+  // ISSUE #7 FIX: Also updates lastHeartbeat to track job activity
   private async updateJobPhase(jobId: string, phase: string): Promise<void> {
-    await prisma.dailyLearningJob.update({ where: { id: jobId }, data: { currentPhase: phase } });
+    await prisma.dailyLearningJob.update({
+      where: { id: jobId },
+      data: {
+        currentPhase: phase,
+        lastHeartbeat: new Date(),
+      },
+    });
   }
 
   private async markPhaseComplete(
@@ -2524,9 +2531,10 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     }));
   }
 
-  // Maximum time a job can run before being considered stale (2 hours)
-  // Jobs should complete within 15-30 minutes normally
-  private static readonly STALE_JOB_TIMEOUT_MS = 1 * 60 * 60 * 1000; // 1 hour (reduced from 2)
+  // Maximum time a job can run before being considered stale
+  // Lambda/Amplify timeout is 15 minutes, so 20 minutes allows for buffer
+  // ISSUE #7 FIX: Reduced from 1 hour to detect failures faster
+  private static readonly STALE_JOB_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
   async getCurrentJobStatus(): Promise<{
     isRunning: boolean;
@@ -2539,17 +2547,25 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
 
     if (!runningJob) return { isRunning: false, currentJob: null };
 
-    // Check if the job is stale (running for too long without completion)
-    const jobAge = Date.now() - runningJob.startedAt.getTime();
-    if (jobAge > DailyLearningService.STALE_JOB_TIMEOUT_MS) {
+    // ISSUE #7 FIX: Check if the job is stale based on lastHeartbeat (if available) or startedAt
+    // This allows long-running but active jobs to continue, while detecting crashed jobs faster
+    const lastActivity = runningJob.lastHeartbeat || runningJob.startedAt;
+    const timeSinceActivity = Date.now() - lastActivity.getTime();
+    const totalJobAge = Date.now() - runningJob.startedAt.getTime();
+
+    if (timeSinceActivity > DailyLearningService.STALE_JOB_TIMEOUT_MS) {
       // Auto-recover: Mark stale job as failed
-      console.warn(`Stale job detected: ${runningJob.id} has been running for ${Math.round(jobAge / 60000)} minutes. Auto-recovering.`);
+      const hasHeartbeat = !!runningJob.lastHeartbeat;
+      console.warn(
+        `Stale job detected: ${runningJob.id} - no activity for ${Math.round(timeSinceActivity / 60000)} minutes ` +
+        `(total age: ${Math.round(totalJobAge / 60000)} min, heartbeat: ${hasHeartbeat}). Auto-recovering.`
+      );
       await prisma.dailyLearningJob.update({
         where: { id: runningJob.id },
         data: {
           status: 'failed',
           completedAt: new Date(),
-          errorMessage: `Job stalled and was auto-recovered after ${Math.round(jobAge / 60000)} minutes`,
+          errorMessage: `Job stalled - no activity for ${Math.round(timeSinceActivity / 60000)} minutes (phase: ${runningJob.currentPhase || 'unknown'})`,
           errorPhase: runningJob.currentPhase || 'unknown',
         },
       });
@@ -2577,18 +2593,46 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
   }
 
   /**
+   * Updates the heartbeat timestamp for a running job.
+   * ISSUE #7 FIX: Called at the start of each phase to track progress.
+   * This allows stale job detection to differentiate between:
+   * - Jobs that crashed (no heartbeat updates)
+   * - Jobs that are legitimately taking time (recent heartbeat)
+   */
+  async updateJobHeartbeat(jobId: string, phase: string): Promise<void> {
+    try {
+      await prisma.dailyLearningJob.update({
+        where: { id: jobId },
+        data: {
+          lastHeartbeat: new Date(),
+          currentPhase: phase,
+        },
+      });
+    } catch (error) {
+      // Don't fail the job if heartbeat update fails, just log it
+      console.warn(`[heartbeat] Failed to update heartbeat for job ${jobId}:`, error);
+    }
+  }
+
+  /**
    * Cleans up any stale jobs that have been running for too long.
+   * ISSUE #7 FIX: Uses lastHeartbeat when available to determine staleness.
    * This should be called before starting a new job to ensure we don't
    * block on jobs that crashed or stalled.
    */
   async cleanupStaleJobs(): Promise<number> {
     const staleThreshold = new Date(Date.now() - DailyLearningService.STALE_JOB_TIMEOUT_MS);
 
-    const staleJobs = await prisma.dailyLearningJob.findMany({
-      where: {
-        status: 'running',
-        startedAt: { lt: staleThreshold },
-      },
+    // Find all running jobs (we'll filter by activity time in application code
+    // since we need to check lastHeartbeat OR startedAt)
+    const runningJobs = await prisma.dailyLearningJob.findMany({
+      where: { status: 'running' },
+    });
+
+    // Filter to truly stale jobs (no activity within threshold)
+    const staleJobs = runningJobs.filter(job => {
+      const lastActivity = job.lastHeartbeat || job.startedAt;
+      return lastActivity < staleThreshold;
     });
 
     if (staleJobs.length === 0) return 0;
@@ -2596,17 +2640,20 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     console.warn(`Found ${staleJobs.length} stale job(s). Auto-recovering...`);
 
     for (const job of staleJobs) {
-      const jobAge = Date.now() - job.startedAt.getTime();
+      const lastActivity = job.lastHeartbeat || job.startedAt;
+      const timeSinceActivity = Date.now() - lastActivity.getTime();
+      const totalJobAge = Date.now() - job.startedAt.getTime();
+
       await prisma.dailyLearningJob.update({
         where: { id: job.id },
         data: {
           status: 'failed',
           completedAt: new Date(),
-          errorMessage: `Job stalled and was auto-recovered after ${Math.round(jobAge / 60000)} minutes`,
+          errorMessage: `Job stalled - no activity for ${Math.round(timeSinceActivity / 60000)} minutes (total: ${Math.round(totalJobAge / 60000)} min)`,
           errorPhase: job.currentPhase || 'unknown',
         },
       });
-      console.warn(`Recovered stale job ${job.id} (was in phase: ${job.currentPhase || 'unknown'})`);
+      console.warn(`Recovered stale job ${job.id} (was in phase: ${job.currentPhase || 'unknown'}, no activity for ${Math.round(timeSinceActivity / 60000)} min)`);
     }
 
     return staleJobs.length;

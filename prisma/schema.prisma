@@ -467,6 +467,7 @@ model DailyLearningJob {
   completedAt        DateTime?    @map("completed_at")
   status             String       @default("running")
   currentPhase       String?      @map("current_phase")
+  lastHeartbeat      DateTime?    @map("last_heartbeat")
   dataReviewDone     Boolean      @default(false) @map("data_review_done")
   questionGenDone    Boolean      @default(false) @map("question_gen_done")
   webResearchDone    Boolean      @default(false) @map("web_research_done")
