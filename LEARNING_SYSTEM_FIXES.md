@@ -34,7 +34,7 @@ This document outlines issues found during the audit of the 5-phase autonomous l
 
 ---
 
-### Issue #2: Async Jobs Fail Silently (Fire-and-Forget)
+### Issue #2: Async Jobs Fail Silently (Fire-and-Forget) ✅ FIXED
 
 **Problem:** Both API routes start the learning job without awaiting, using fire-and-forget pattern:
 ```typescript
@@ -47,33 +47,25 @@ return NextResponse.json({ success: true }); // Returns before job completes
 
 **Impact:** Client believes job is running when it may have already failed. No error propagation.
 
-**Solution Plan:**
-1. Modify `runDailyLearning()` to persist errors to database immediately on failure
-2. Add a `startupValidation()` method that runs synchronously before returning success
-3. Return job ID immediately, but ensure startup errors are caught:
-```typescript
-// New pattern
-try {
-  const jobId = await dailyLearningService.createJob(); // Sync - creates DB record
-  await dailyLearningService.validateStartupRequirements(); // Sync - checks env vars, quotas
+**Solution Implemented:**
+1. Added `validateStartupRequirements()` method that runs synchronously before returning success
+2. Added `validateEnvironment()` method to check required env vars upfront
+3. Added `persistJobError()` method for persisting errors to database
+4. Added `createJob()` method for explicit job creation with metadata
+5. Added `updateJobMetadata()` method for tracking runtime state
+6. Updated run route to validate synchronously before fire-and-forget:
+   - Catches env var and quota issues before returning success
+   - Returns warnings in response when quota is low
+   - Errors are persisted to DB via `runDailyLearning` catch block
 
-  // Only now fire-and-forget
-  dailyLearningService.executeJob(jobId)
-    .catch(error => dailyLearningService.persistJobError(jobId, error));
-
-  return NextResponse.json({ success: true, jobId });
-} catch (error) {
-  return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-}
-```
-
-**Files to modify:**
-- `src/lib/services/daily-learning.ts` - Add `createJob()`, `validateStartupRequirements()`, `persistJobError()` methods
-- `src/app/api/ai/learning/run/route.ts` - Use new pattern
+**Files modified:**
+- `src/lib/services/daily-learning.ts` - Added validation methods and metadata tracking
+- `src/app/api/ai/learning/run/route.ts` - Added sync validation before async execution
+- `prisma/schema.prisma` - Added `jobMetadata` JSON field to DailyLearningJob
 
 ---
 
-### Issue #3: Environment Variables Validated Too Late
+### Issue #3: Environment Variables Validated Too Late ✅ FIXED
 
 **Problem:** SerpAPI key check happens at Phase 3 execution, not at startup:
 ```typescript
@@ -86,31 +78,21 @@ if (!apiKey) {
 
 **Impact:** Phases 1 & 2 complete (consuming Claude tokens) before Phase 3 fails.
 
-**Solution Plan:**
-1. Add a `validateEnvironment()` function in `daily-learning.ts`:
-```typescript
-private validateEnvironment(): void {
-  const required = [
-    'ANTHROPIC_API_KEY',
-    'SERPAPI_API_KEY',
-    'DATABASE_URL'
-  ];
+**Solution Implemented:**
+1. Added `validateEnvironment(skipWebResearch)` method that checks:
+   - `ANTHROPIC_API_KEY` (always required)
+   - `DATABASE_URL` (always required)
+   - `SERPAPI_API_KEY` (required only if !skipWebResearch)
+2. Called at the start of `runDailyLearning()` BEFORE any phases execute
+3. Also called by `validateStartupRequirements()` for API route validation
+4. Validation result tracked in job metadata (`envValidation` field)
 
-  const missing = required.filter(key => !process.env[key]);
-  if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-  }
-}
-```
-2. Call this in constructor or at job start (before Phase 1)
-3. Add optional `skipWebResearch` flag to bypass SerpAPI requirement when intentionally skipping
-
-**Files to modify:**
-- `src/lib/services/daily-learning.ts` - Add validation in constructor or `runDailyLearning()`
+**Files modified:**
+- `src/lib/services/daily-learning.ts` - Added `validateEnvironment()` called at job start
 
 ---
 
-### Issue #4: SerpAPI Quota Exhaustion Fails Silently
+### Issue #4: SerpAPI Quota Exhaustion Fails Silently ✅ FIXED
 
 **Problem:** When monthly limit (250 searches) is exhausted, Phase 3 returns empty array silently:
 ```typescript
@@ -120,22 +102,31 @@ if (availableSearches <= 0) return [];  // Silent failure
 
 **Impact:** Web research skipped without warning, digest generated with incomplete data.
 
-**Solution Plan:**
-1. Add quota status to job metadata:
+**Solution Implemented:**
+1. Added `JobMetadata` interface with quota tracking:
 ```typescript
 interface JobMetadata {
   webResearchSkipped: boolean;
-  webResearchSkipReason?: 'quota_exhausted' | 'api_key_missing' | 'user_requested';
-  quotaRemaining?: number;
+  webResearchSkipReason?: 'quota_exhausted' | 'api_key_missing' | 'user_requested' | 'low_quota';
+  quotaAtStart?: number;
+  quotaWarning?: string;
+  envValidation?: { validated: boolean; timestamp: string; skippedChecks?: string[] };
+  phaseTimings?: Record<string, { start: string; end?: string; durationMs?: number }>;
 }
 ```
-2. Include warning in Phase 5 digest when web research was skipped
-3. Pre-check quota before Phase 1 and warn if <10 searches remaining
-4. Add quota warnings at 80%, 90%, 100% thresholds (log + persist to job)
+2. Pre-check quota in `validateStartupRequirements()` before job creation:
+   - If quota exhausted: automatically skips web research with reason
+   - If <3 searches: skips web research with 'low_quota' reason
+   - If 80-90% used: logs warning and includes in metadata
+   - If 90-100% used: logs critical warning
+3. Phase 3 now logs when skipped and updates job metadata
+4. API route returns `warnings` array when quota is low
+5. Added `jobMetadata` JSON field to DailyLearningJob table
 
-**Files to modify:**
-- `src/lib/services/daily-learning.ts` - Add quota pre-check, metadata tracking
-- `src/lib/services/web-search.ts` - Add `getQuotaStatus()` method with warning thresholds
+**Files modified:**
+- `src/lib/services/daily-learning.ts` - Added `JobMetadata` type, quota pre-check, metadata tracking
+- `src/app/api/ai/learning/run/route.ts` - Returns warnings in response
+- `prisma/schema.prisma` - Added `jobMetadata` field
 
 ---
 

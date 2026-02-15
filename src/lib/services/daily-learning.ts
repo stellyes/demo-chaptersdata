@@ -114,11 +114,26 @@ export const DAILY_LEARNING_CONFIG = {
   lowQualityThreshold: 0.4, // Questions below this quality may be re-asked
 };
 
+// Job metadata for tracking runtime state and quota issues
+export interface JobMetadata {
+  webResearchSkipped: boolean;
+  webResearchSkipReason?: 'quota_exhausted' | 'api_key_missing' | 'user_requested' | 'low_quota';
+  quotaAtStart?: number;
+  quotaWarning?: string;
+  envValidation?: {
+    validated: boolean;
+    timestamp: string;
+    skippedChecks?: string[];
+  };
+  phaseTimings?: Record<string, { start: string; end?: string; durationMs?: number }>;
+}
+
 interface DailyLearningJobState {
   jobId: string;
   inputTokens: number;
   outputTokens: number;
   searchesUsed: number;
+  metadata: JobMetadata;
 }
 
 interface DataReviewResult {
@@ -251,15 +266,185 @@ export class DailyLearningService {
     this.client = getAnthropicClient();
   }
 
+  /**
+   * Validates that all required environment variables are present.
+   * Called before starting any phases to fail fast and save API tokens.
+   *
+   * @param skipWebResearch - If true, SERPAPI_API_KEY is not required
+   * @throws Error if required environment variables are missing
+   */
+  validateEnvironment(skipWebResearch: boolean = false): void {
+    const required: string[] = [
+      'ANTHROPIC_API_KEY',
+      'DATABASE_URL',
+    ];
+
+    // Only require SERPAPI_API_KEY if we're doing web research
+    if (!skipWebResearch) {
+      required.push('SERPAPI_API_KEY');
+    }
+
+    const missing = required.filter(key => !process.env[key]);
+
+    if (missing.length > 0) {
+      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+  }
+
+  /**
+   * Validates startup requirements before creating a job.
+   * Checks environment, quota status, and other prerequisites.
+   *
+   * @returns Quota status and warnings for job metadata
+   * @throws Error if validation fails
+   */
+  async validateStartupRequirements(skipWebResearch: boolean = false): Promise<{
+    quotaStatus: { remaining: number; isLow: boolean; warning?: string };
+  }> {
+    // Validate environment variables first
+    this.validateEnvironment(skipWebResearch);
+
+    // Check quota status
+    const throttleStatus = await webSearchService.getThrottleStatus();
+    const remaining = throttleStatus.searchesRemaining;
+
+    let warning: string | undefined;
+    let isLow = false;
+
+    if (!skipWebResearch) {
+      // Check quota thresholds
+      const percentUsed = (throttleStatus.searchesUsed / throttleStatus.limit) * 100;
+
+      if (remaining <= 0) {
+        warning = `SerpAPI quota exhausted (${throttleStatus.searchesUsed}/${throttleStatus.limit} searches used this month). Web research will be skipped.`;
+        isLow = true;
+      } else if (percentUsed >= 90) {
+        warning = `SerpAPI quota critical: only ${remaining} searches remaining (${Math.round(percentUsed)}% used)`;
+        isLow = true;
+      } else if (percentUsed >= 80) {
+        warning = `SerpAPI quota warning: ${remaining} searches remaining (${Math.round(percentUsed)}% used)`;
+        isLow = true;
+      } else if (remaining < 10) {
+        warning = `SerpAPI quota low: only ${remaining} searches remaining`;
+        isLow = true;
+      }
+
+      if (warning) {
+        console.warn(`[Learning Job] ${warning}`);
+      }
+    }
+
+    return {
+      quotaStatus: { remaining, isLow, warning },
+    };
+  }
+
+  /**
+   * Creates a new learning job record in the database.
+   * This is separated from execution to allow proper error handling in async mode.
+   *
+   * @param metadata - Initial job metadata
+   * @returns The created job ID
+   */
+  async createJob(metadata: JobMetadata): Promise<string> {
+    const job = await prisma.dailyLearningJob.create({
+      data: {
+        status: 'running',
+        currentPhase: 'initializing',
+        jobMetadata: metadata as object,
+      },
+    });
+    return job.id;
+  }
+
+  /**
+   * Persists an error to a job record. Used for fire-and-forget error handling.
+   *
+   * @param jobId - The job ID to update
+   * @param error - The error that occurred
+   * @param phase - The phase where the error occurred
+   */
+  async persistJobError(jobId: string, error: Error | unknown, phase?: string): Promise<void> {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorPhase = phase || 'unknown';
+
+    try {
+      await prisma.dailyLearningJob.update({
+        where: { id: jobId },
+        data: {
+          status: 'failed',
+          completedAt: new Date(),
+          errorMessage,
+          errorPhase,
+        },
+      });
+      console.error(`[Learning Job ${jobId}] Failed in phase '${errorPhase}': ${errorMessage}`);
+    } catch (dbError) {
+      // If we can't even persist the error, log it
+      console.error(`[Learning Job ${jobId}] Failed to persist error:`, dbError);
+      console.error(`[Learning Job ${jobId}] Original error:`, errorMessage);
+    }
+  }
+
+  /**
+   * Updates job metadata with additional information.
+   */
+  async updateJobMetadata(jobId: string, updates: Partial<JobMetadata>): Promise<void> {
+    const job = await prisma.dailyLearningJob.findUnique({
+      where: { id: jobId },
+      select: { jobMetadata: true },
+    });
+
+    const currentMetadata = (job?.jobMetadata as unknown as Partial<JobMetadata>) || {};
+    const newMetadata: JobMetadata = {
+      webResearchSkipped: currentMetadata.webResearchSkipped ?? false,
+      webResearchSkipReason: currentMetadata.webResearchSkipReason,
+      quotaAtStart: currentMetadata.quotaAtStart,
+      quotaWarning: currentMetadata.quotaWarning,
+      envValidation: currentMetadata.envValidation,
+      phaseTimings: currentMetadata.phaseTimings,
+      ...updates,
+    };
+
+    await prisma.dailyLearningJob.update({
+      where: { id: jobId },
+      data: { jobMetadata: newMetadata as object },
+    });
+  }
+
   async runDailyLearning(options?: {
     forceRun?: boolean;
     skipWebResearch?: boolean;
   }): Promise<{ jobId: string; digest: DailyDigestContent | null }> {
-    const { forceRun = false, skipWebResearch = false } = options || {};
+    const { forceRun = false, skipWebResearch: userSkipWebResearch = false } = options || {};
 
     // Initialize Prisma with proper connection pool settings
     // This ensures connection pool params (connection_limit, pool_timeout) are applied
     await initializePrisma();
+
+    // ISSUE #3 FIX: Validate environment variables BEFORE consuming any API tokens
+    // This prevents wasting Claude tokens on Phases 1-2 if Phase 3 would fail anyway
+    this.validateEnvironment(userSkipWebResearch);
+
+    // Check quota status for metadata tracking (Issue #4)
+    const { quotaStatus } = await this.validateStartupRequirements(userSkipWebResearch);
+
+    // Determine if we should skip web research due to quota exhaustion
+    let skipWebResearch = userSkipWebResearch;
+    let webResearchSkipReason: JobMetadata['webResearchSkipReason'] | undefined;
+
+    if (userSkipWebResearch) {
+      webResearchSkipReason = 'user_requested';
+    } else if (quotaStatus.remaining <= 0) {
+      skipWebResearch = true;
+      webResearchSkipReason = 'quota_exhausted';
+      console.warn(`[Learning Job] Skipping web research: quota exhausted`);
+    } else if (quotaStatus.remaining < 3) {
+      // Less than 3 searches - not enough for meaningful research
+      skipWebResearch = true;
+      webResearchSkipReason = 'low_quota';
+      console.warn(`[Learning Job] Skipping web research: only ${quotaStatus.remaining} searches remaining`);
+    }
 
     // Clean up any stale jobs before checking for existing jobs
     await this.cleanupStaleJobs();
@@ -280,8 +465,26 @@ export class DailyLearningService {
       }
     }
 
+    // ISSUE #2 FIX: Initialize metadata to track job state
+    const initialMetadata: JobMetadata = {
+      webResearchSkipped: skipWebResearch,
+      webResearchSkipReason,
+      quotaAtStart: quotaStatus.remaining,
+      quotaWarning: quotaStatus.warning,
+      envValidation: {
+        validated: true,
+        timestamp: new Date().toISOString(),
+        skippedChecks: skipWebResearch ? ['SERPAPI_API_KEY'] : undefined,
+      },
+      phaseTimings: {},
+    };
+
     const job = await prisma.dailyLearningJob.create({
-      data: { status: 'running', currentPhase: 'data_review' },
+      data: {
+        status: 'running',
+        currentPhase: 'data_review',
+        jobMetadata: initialMetadata as object,
+      },
     });
 
     const state: DailyLearningJobState = {
@@ -289,30 +492,45 @@ export class DailyLearningService {
       inputTokens: 0,
       outputTokens: 0,
       searchesUsed: 0,
+      metadata: initialMetadata,
     };
 
     try {
+      // Track phase timings
+      state.metadata.phaseTimings!['data_review'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'data_review');
       const dataReview = await this.phase1DataReview(state);
+      state.metadata.phaseTimings!['data_review'].end = new Date().toISOString();
       await this.markPhaseComplete(state.jobId, 'dataReviewDone');
 
+      state.metadata.phaseTimings!['question_gen'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'question_gen');
       const questions = await this.phase2QuestionGeneration(state, dataReview);
+      state.metadata.phaseTimings!['question_gen'].end = new Date().toISOString();
       await this.markPhaseComplete(state.jobId, 'questionGenDone');
 
       let webResearchResults: WebResearchResult[] = [];
       if (!skipWebResearch) {
+        state.metadata.phaseTimings!['web_research'] = { start: new Date().toISOString() };
         await this.updateJobPhase(state.jobId, 'web_research');
         webResearchResults = await this.phase3WebResearch(state, questions);
+        state.metadata.phaseTimings!['web_research'].end = new Date().toISOString();
+        await this.markPhaseComplete(state.jobId, 'webResearchDone');
+      } else {
+        // Mark web research as done even though skipped (for progress tracking)
         await this.markPhaseComplete(state.jobId, 'webResearchDone');
       }
 
+      state.metadata.phaseTimings!['correlation'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'correlation');
       const correlatedInsights = await this.phase4Correlation(state, dataReview, webResearchResults);
+      state.metadata.phaseTimings!['correlation'].end = new Date().toISOString();
       await this.markPhaseComplete(state.jobId, 'correlationDone');
 
+      state.metadata.phaseTimings!['digest_gen'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'digest_gen');
       const digest = await this.phase5DigestGeneration(state, dataReview, questions, webResearchResults, correlatedInsights);
+      state.metadata.phaseTimings!['digest_gen'].end = new Date().toISOString();
       await this.markPhaseComplete(state.jobId, 'digestGenDone');
 
       const digestData = {
@@ -345,6 +563,13 @@ export class DailyLearningService {
       const savedInsightsCount = await this.extractAndSaveInsights(digest, state.jobId);
       console.log(`Saved ${savedInsightsCount} insights to knowledge base`);
 
+      // Calculate phase durations
+      for (const [phase, timing] of Object.entries(state.metadata.phaseTimings || {})) {
+        if (timing.start && timing.end) {
+          timing.durationMs = new Date(timing.end).getTime() - new Date(timing.start).getTime();
+        }
+      }
+
       await prisma.dailyLearningJob.update({
         where: { id: state.jobId },
         data: {
@@ -358,19 +583,22 @@ export class DailyLearningService {
           articlesAnalyzed: webResearchResults.reduce((sum, r) => sum + r.findings.length, 0),
           digestId: digestRecord.id,
           estimatedCost: this.calculateCost(state.inputTokens, state.outputTokens),
+          jobMetadata: state.metadata as object,
         },
       });
 
       return { jobId: state.jobId, digest };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const currentJob = await prisma.dailyLearningJob.findUnique({ where: { id: state.jobId } });
       await prisma.dailyLearningJob.update({
         where: { id: state.jobId },
         data: {
           status: 'failed',
           completedAt: new Date(),
           errorMessage,
-          errorPhase: (await prisma.dailyLearningJob.findUnique({ where: { id: state.jobId } }))?.currentPhase || 'unknown',
+          errorPhase: currentJob?.currentPhase || 'unknown',
+          jobMetadata: state.metadata as object,
           inputTokens: state.inputTokens,
           outputTokens: state.outputTokens,
           searchesUsed: state.searchesUsed,
@@ -967,7 +1195,25 @@ Return ONLY valid JSON.`;
       DAILY_LEARNING_CONFIG.maxSearchesPerDay - state.searchesUsed
     );
 
-    if (availableSearches <= 0) return [];
+    // ISSUE #4 FIX: Don't fail silently when quota is exhausted during phase 3
+    if (availableSearches <= 0) {
+      const reason = throttleStatus.searchesRemaining <= 0 ? 'quota_exhausted' : 'daily_limit_reached';
+      console.warn(`[Learning Job ${state.jobId}] Phase 3 skipped: ${reason} (${throttleStatus.searchesUsed}/${throttleStatus.limit} monthly searches used)`);
+
+      // Update job metadata to reflect the skip reason
+      state.metadata.webResearchSkipped = true;
+      state.metadata.webResearchSkipReason = 'quota_exhausted';
+      await this.updateJobMetadata(state.jobId, {
+        webResearchSkipped: true,
+        webResearchSkipReason: 'quota_exhausted',
+        quotaWarning: `Web research skipped: ${throttleStatus.searchesUsed}/${throttleStatus.limit} monthly searches used`,
+      });
+
+      return [];
+    }
+
+    // Log available budget
+    console.log(`[Learning Job ${state.jobId}] Phase 3: ${availableSearches} searches available for ${webQuestions.length} questions`);
 
     const results: WebResearchResult[] = [];
     let searchesUsed = 0;

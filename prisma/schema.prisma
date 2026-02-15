@@ -481,6 +481,7 @@ model DailyLearningJob {
   articlesAnalyzed   Int          @default(0) @map("articles_analyzed")
   errorMessage       String?      @map("error_message")
   errorPhase         String?      @map("error_phase")
+  jobMetadata        Json?        @map("job_metadata") // Tracks runtime info: quota warnings, skipped phases, etc.
   digestId           String?      @unique @map("digest_id")
   digest             DailyDigest? @relation(fields: [digestId], references: [id])
 

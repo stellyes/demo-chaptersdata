@@ -30,7 +30,27 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
-    // If sync mode requested, wait for completion (for local testing)
+    // ISSUE #2 & #3 FIX: Validate startup requirements SYNCHRONOUSLY before starting
+    // This catches env var issues and quota problems before returning success
+    let startupValidation;
+    try {
+      startupValidation = await dailyLearningService.validateStartupRequirements(skipWebResearch);
+    } catch (validationError) {
+      const errorMessage = validationError instanceof Error ? validationError.message : 'Startup validation failed';
+      return NextResponse.json({
+        success: false,
+        error: errorMessage,
+        data: { phase: 'startup_validation' },
+      }, { status: 400 });
+    }
+
+    // Include quota warnings in response if applicable
+    const warnings: string[] = [];
+    if (startupValidation.quotaStatus.warning) {
+      warnings.push(startupValidation.quotaStatus.warning);
+    }
+
+    // If sync mode requested, wait for completion (for local testing / Lambda)
     if (sync) {
       const result = await dailyLearningService.runDailyLearning({
         forceRun,
@@ -43,14 +63,19 @@ export async function POST(request: NextRequest) {
           jobId: result.jobId,
           hasDigest: !!result.digest,
           digest: result.digest,
+          warnings: warnings.length > 0 ? warnings : undefined,
         },
       });
     }
 
     // Default: Async mode - start job and return immediately (for Lambda/scheduled triggers)
+    // The job now handles its own error persistence via persistJobError
     dailyLearningService.runDailyLearning({ forceRun, skipWebResearch })
       .then(result => console.log(`Learning job completed: ${result.jobId}, hasDigest: ${!!result.digest}`))
-      .catch(error => console.error('Learning job failed:', error));
+      .catch(error => {
+        // Error is already persisted to DB by runDailyLearning, just log here
+        console.error('Learning job failed:', error instanceof Error ? error.message : error);
+      });
 
     // Get the newly created job status
     const newStatus = await dailyLearningService.getCurrentJobStatus();
@@ -60,6 +85,7 @@ export async function POST(request: NextRequest) {
       data: {
         message: 'Learning job started',
         job: newStatus.currentJob,
+        warnings: warnings.length > 0 ? warnings : undefined,
       },
     });
   } catch (error) {
