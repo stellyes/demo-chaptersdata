@@ -1,0 +1,767 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Progressive Learning System using AWS Step Functions
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL connection string
+
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Description: Anthropic API key for Claude
+
+  SerpApiKey:
+    Type: String
+    NoEcho: true
+    Description: SerpAPI key for web search
+
+Resources:
+  # ============================================
+  # IAM ROLE FOR LAMBDA FUNCTIONS
+  # ============================================
+  LearningLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'learning-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: LearningLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  # ============================================
+  # IAM ROLE FOR STEP FUNCTIONS
+  # ============================================
+  StepFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'learning-stepfunctions-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt InitJobFunction.Arn
+                  - !GetAtt DataReviewFunction.Arn
+                  - !GetAtt QuestionGenFunction.Arn
+                  - !GetAtt WebResearchFunction.Arn
+                  - !GetAtt CorrelationFunction.Arn
+                  - !GetAtt DigestGenFunction.Arn
+                  - !GetAtt FinalizeJobFunction.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: '*'
+
+  # ============================================
+  # LAMBDA LAYER FOR SHARED DEPENDENCIES
+  # ============================================
+  # Note: In production, create a layer with @anthropic-ai/sdk, @prisma/client, etc.
+
+  # ============================================
+  # LAMBDA FUNCTIONS FOR EACH PHASE
+  # ============================================
+
+  # Phase 0: Initialize Job
+  InitJobFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'learning-init-job-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LearningLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          const https = require('https');
+
+          exports.handler = async (event) => {
+            console.log('InitJob:', JSON.stringify(event));
+
+            const jobId = `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const startedAt = new Date().toISOString();
+
+            // In production, this would create a job record in the database
+            // For now, we pass the job state through the Step Function
+
+            return {
+              jobId,
+              startedAt,
+              forceRun: event.forceRun || false,
+              skipWebResearch: event.skipWebResearch || false,
+              phases: {
+                init: { status: 'completed', completedAt: startedAt },
+                dataReview: { status: 'pending' },
+                questionGen: { status: 'pending' },
+                webResearch: { status: 'pending' },
+                correlation: { status: 'pending' },
+                digestGen: { status: 'pending' }
+              },
+              metrics: {
+                inputTokens: 0,
+                outputTokens: 0,
+                searchesUsed: 0,
+                questionsGenerated: 0,
+                insightsDiscovered: 0
+              }
+            };
+          };
+
+  # Phase 1: Data Review
+  DataReviewFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'learning-data-review-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LearningLambdaRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('DataReview:', JSON.stringify(event));
+
+            const startTime = Date.now();
+
+            // Update phase status
+            event.phases.dataReview = {
+              status: 'in_progress',
+              startedAt: new Date().toISOString()
+            };
+
+            // Simulate data review (in production, call Claude API)
+            await new Promise(r => setTimeout(r, 2000));
+
+            // Mark complete
+            event.phases.dataReview = {
+              status: 'completed',
+              startedAt: event.phases.dataReview.startedAt,
+              completedAt: new Date().toISOString(),
+              durationMs: Date.now() - startTime
+            };
+
+            event.dataReview = {
+              summary: 'Data review completed successfully',
+              keyMetrics: {
+                salesTrend: 'stable',
+                topBrands: ['Brand A', 'Brand B'],
+                customerActivity: 'moderate'
+              },
+              areasOfConcern: ['Data freshness'],
+              areasOfOpportunity: ['Premium products'],
+              suggestedQuestionTopics: ['pricing', 'inventory']
+            };
+
+            event.metrics.inputTokens += 5000;
+            event.metrics.outputTokens += 2000;
+
+            return event;
+          };
+
+  # Phase 2: Question Generation
+  QuestionGenFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'learning-question-gen-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LearningLambdaRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('QuestionGen:', JSON.stringify(event));
+
+            const startTime = Date.now();
+
+            event.phases.questionGen = {
+              status: 'in_progress',
+              startedAt: new Date().toISOString()
+            };
+
+            // Simulate question generation
+            await new Promise(r => setTimeout(r, 2000));
+
+            event.phases.questionGen = {
+              status: 'completed',
+              startedAt: event.phases.questionGen.startedAt,
+              completedAt: new Date().toISOString(),
+              durationMs: Date.now() - startTime
+            };
+
+            event.questions = [
+              { question: 'What pricing strategies work best?', category: 'pricing', requiresWebResearch: true },
+              { question: 'Which products need restocking?', category: 'inventory', requiresWebResearch: false },
+              { question: 'What are competitor trends?', category: 'market', requiresWebResearch: true }
+            ];
+
+            event.metrics.questionsGenerated = event.questions.length;
+            event.metrics.inputTokens += 3000;
+            event.metrics.outputTokens += 1500;
+
+            return event;
+          };
+
+  # Phase 3: Web Research
+  WebResearchFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'learning-web-research-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LearningLambdaRole.Arn
+      Timeout: 600
+      MemorySize: 512
+      Environment:
+        Variables:
+          SERPAPI_API_KEY: !Ref SerpApiKey
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('WebResearch:', JSON.stringify(event));
+
+            const startTime = Date.now();
+
+            event.phases.webResearch = {
+              status: 'in_progress',
+              startedAt: new Date().toISOString()
+            };
+
+            if (event.skipWebResearch) {
+              event.phases.webResearch = {
+                status: 'skipped',
+                startedAt: event.phases.webResearch.startedAt,
+                completedAt: new Date().toISOString(),
+                reason: 'Skipped by user request'
+              };
+              event.webResearchResults = [];
+              return event;
+            }
+
+            // Simulate web research
+            await new Promise(r => setTimeout(r, 3000));
+
+            event.phases.webResearch = {
+              status: 'completed',
+              startedAt: event.phases.webResearch.startedAt,
+              completedAt: new Date().toISOString(),
+              durationMs: Date.now() - startTime
+            };
+
+            event.webResearchResults = [
+              { question: 'What pricing strategies work best?', summary: 'Premium pricing with value positioning works well' },
+              { question: 'What are competitor trends?', summary: 'Competitors focusing on loyalty programs' }
+            ];
+
+            event.metrics.searchesUsed = 2;
+            event.metrics.inputTokens += 8000;
+            event.metrics.outputTokens += 4000;
+
+            return event;
+          };
+
+  # Phase 4: Correlation Analysis
+  CorrelationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'learning-correlation-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LearningLambdaRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Correlation:', JSON.stringify(event));
+
+            const startTime = Date.now();
+
+            event.phases.correlation = {
+              status: 'in_progress',
+              startedAt: new Date().toISOString()
+            };
+
+            // Simulate correlation analysis
+            await new Promise(r => setTimeout(r, 2000));
+
+            event.phases.correlation = {
+              status: 'completed',
+              startedAt: event.phases.correlation.startedAt,
+              completedAt: new Date().toISOString(),
+              durationMs: Date.now() - startTime
+            };
+
+            event.correlatedInsights = [
+              {
+                internalObservation: 'Premium products have higher margins',
+                externalEvidence: 'Market trend toward quality over quantity',
+                correlation: 'Premium positioning aligns with market trends',
+                confidence: 0.85,
+                category: 'pricing'
+              }
+            ];
+
+            event.metrics.insightsDiscovered = event.correlatedInsights.length;
+            event.metrics.inputTokens += 4000;
+            event.metrics.outputTokens += 2000;
+
+            return event;
+          };
+
+  # Phase 5: Digest Generation
+  DigestGenFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'learning-digest-gen-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LearningLambdaRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('DigestGen:', JSON.stringify(event));
+
+            const startTime = Date.now();
+
+            event.phases.digestGen = {
+              status: 'in_progress',
+              startedAt: new Date().toISOString()
+            };
+
+            // Simulate digest generation
+            await new Promise(r => setTimeout(r, 2000));
+
+            event.phases.digestGen = {
+              status: 'completed',
+              startedAt: event.phases.digestGen.startedAt,
+              completedAt: new Date().toISOString(),
+              durationMs: Date.now() - startTime
+            };
+
+            event.digest = {
+              executiveSummary: 'Business performance is stable with opportunities in premium products.',
+              priorityActions: [
+                { action: 'Expand premium product line', timeframe: '30 days', impact: 'High', category: 'Products' }
+              ],
+              quickWins: [
+                { action: 'Update pricing on top sellers', effort: 'Low', impact: 'Medium' }
+              ],
+              watchItems: [
+                { item: 'Competitor pricing changes', reason: 'Market dynamics', monitorUntil: '90 days' }
+              ],
+              industryHighlights: [],
+              regulatoryUpdates: [],
+              marketTrends: [],
+              questionsForTomorrow: event.questions?.filter(q => !q.requiresWebResearch) || [],
+              correlatedInsights: event.correlatedInsights || [],
+              dataHealthScore: 75,
+              confidenceScore: 0.8
+            };
+
+            event.metrics.inputTokens += 6000;
+            event.metrics.outputTokens += 3000;
+
+            return event;
+          };
+
+  # Phase 6: Finalize Job
+  FinalizeJobFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'learning-finalize-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LearningLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('FinalizeJob:', JSON.stringify(event));
+
+            const completedAt = new Date().toISOString();
+
+            // Calculate total duration
+            const startTime = new Date(event.startedAt).getTime();
+            const endTime = new Date(completedAt).getTime();
+            const totalDurationMs = endTime - startTime;
+
+            // In production, save digest to database
+
+            return {
+              jobId: event.jobId,
+              status: 'completed',
+              startedAt: event.startedAt,
+              completedAt,
+              totalDurationMs,
+              phases: event.phases,
+              metrics: event.metrics,
+              digest: event.digest,
+              success: true
+            };
+          };
+
+  # ============================================
+  # STEP FUNCTIONS STATE MACHINE
+  # ============================================
+  LearningStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub 'progressive-learning-${Environment}'
+      RoleArn: !GetAtt StepFunctionsRole.Arn
+      TracingConfiguration:
+        Enabled: true
+      LoggingConfiguration:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "Progressive Learning System - 5 Phase Pipeline",
+          "StartAt": "InitJob",
+          "States": {
+            "InitJob": {
+              "Type": "Task",
+              "Resource": "${InitJobFunction.Arn}",
+              "ResultPath": "$",
+              "Next": "DataReview",
+              "Catch": [{
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "HandleError"
+              }]
+            },
+            "DataReview": {
+              "Type": "Task",
+              "Resource": "${DataReviewFunction.Arn}",
+              "ResultPath": "$",
+              "Next": "QuestionGeneration",
+              "Retry": [{
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }],
+              "Catch": [{
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "HandleError"
+              }]
+            },
+            "QuestionGeneration": {
+              "Type": "Task",
+              "Resource": "${QuestionGenFunction.Arn}",
+              "ResultPath": "$",
+              "Next": "WebResearch",
+              "Retry": [{
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }],
+              "Catch": [{
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "HandleError"
+              }]
+            },
+            "WebResearch": {
+              "Type": "Task",
+              "Resource": "${WebResearchFunction.Arn}",
+              "ResultPath": "$",
+              "Next": "CorrelationAnalysis",
+              "Retry": [{
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }],
+              "Catch": [{
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "HandleError"
+              }]
+            },
+            "CorrelationAnalysis": {
+              "Type": "Task",
+              "Resource": "${CorrelationFunction.Arn}",
+              "ResultPath": "$",
+              "Next": "DigestGeneration",
+              "Retry": [{
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }],
+              "Catch": [{
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "HandleError"
+              }]
+            },
+            "DigestGeneration": {
+              "Type": "Task",
+              "Resource": "${DigestGenFunction.Arn}",
+              "ResultPath": "$",
+              "Next": "FinalizeJob",
+              "Retry": [{
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }],
+              "Catch": [{
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "HandleError"
+              }]
+            },
+            "FinalizeJob": {
+              "Type": "Task",
+              "Resource": "${FinalizeJobFunction.Arn}",
+              "ResultPath": "$",
+              "End": true,
+              "Catch": [{
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "HandleError"
+              }]
+            },
+            "HandleError": {
+              "Type": "Pass",
+              "Parameters": {
+                "jobId.$": "$.jobId",
+                "status": "failed",
+                "error.$": "$.error",
+                "phases.$": "$.phases"
+              },
+              "End": true
+            }
+          }
+        }
+
+  # ============================================
+  # CLOUDWATCH LOG GROUP FOR STATE MACHINE
+  # ============================================
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/stepfunctions/progressive-learning-${Environment}'
+      RetentionInDays: 30
+
+  # ============================================
+  # EVENTBRIDGE RULE FOR DAILY SCHEDULE
+  # ============================================
+  DailyLearningSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'sfn-daily-learning-${Environment}'
+      Description: Triggers daily learning at 5 AM PST
+      ScheduleExpression: 'cron(0 13 * * ? *)'
+      State: ENABLED
+      Targets:
+        - Id: LearningStateMachine
+          Arn: !GetAtt LearningStateMachine.Arn
+          RoleArn: !GetAtt EventBridgeRole.Arn
+          Input: '{"forceRun": false, "skipWebResearch": false, "source": "daily-schedule"}'
+
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'learning-eventbridge-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StartStateMachine
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !GetAtt LearningStateMachine.Arn
+
+  # ============================================
+  # API GATEWAY FOR MANUAL TRIGGERS
+  # ============================================
+  LearningApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'learning-api-${Environment}'
+      Description: API for triggering and monitoring learning jobs
+
+  TriggerResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref LearningApi
+      ParentId: !GetAtt LearningApi.RootResourceId
+      PathPart: trigger
+
+  TriggerMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref LearningApi
+      ResourceId: !Ref TriggerResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:states:action/StartExecution'
+        Credentials: !GetAtt ApiGatewayRole.Arn
+        RequestTemplates:
+          application/json: !Sub |
+            {
+              "input": "$util.escapeJavaScript($input.json('$'))",
+              "stateMachineArn": "${LearningStateMachine.Arn}"
+            }
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: |
+                {
+                  "executionArn": $input.json('$.executionArn'),
+                  "startDate": $input.json('$.startDate')
+                }
+      MethodResponses:
+        - StatusCode: 200
+
+  ApiGatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'learning-apigateway-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StartExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !GetAtt LearningStateMachine.Arn
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: TriggerMethod
+    Properties:
+      RestApiId: !Ref LearningApi
+      StageName: !Ref Environment
+
+Outputs:
+  StateMachineArn:
+    Description: ARN of the Learning State Machine
+    Value: !GetAtt LearningStateMachine.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-StateMachineArn'
+
+  ApiEndpoint:
+    Description: API Gateway endpoint for triggering learning
+    Value: !Sub 'https://${LearningApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/trigger'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiEndpoint'
+
+  InitJobFunctionArn:
+    Value: !GetAtt InitJobFunction.Arn
+  DataReviewFunctionArn:
+    Value: !GetAtt DataReviewFunction.Arn
+  QuestionGenFunctionArn:
+    Value: !GetAtt QuestionGenFunction.Arn
+  WebResearchFunctionArn:
+    Value: !GetAtt WebResearchFunction.Arn
+  CorrelationFunctionArn:
+    Value: !GetAtt CorrelationFunction.Arn
+  DigestGenFunctionArn:
+    Value: !GetAtt DigestGenFunction.Arn
+  FinalizeJobFunctionArn:
+    Value: !GetAtt FinalizeJobFunction.Arn

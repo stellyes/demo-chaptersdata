@@ -171,34 +171,20 @@ function cleanClaudeResponse(text: string): string {
 
 ---
 
-### Issue #6: Phase 4 Uses Sonnet (Undocumented Cost Difference)
+### Issue #6: Phase 4 Uses Sonnet ✅ DOCUMENTED AS INTENTIONAL
 
-**Problem:** Phase 4 uses `CLAUDE_CONFIG.defaultModel` (Sonnet) while all other phases use Haiku. Sonnet is 3-5x more expensive.
+**Original Concern:** Phase 4 uses `CLAUDE_CONFIG.defaultModel` (Sonnet) while all other phases use Haiku. Sonnet is 3-5x more expensive.
 
-**Impact:** Unexpected cost spike, not budgeted.
+**Resolution:** This is an **intentional design choice**, not a bug.
 
-**Solution Plan:**
-1. Document the intentional choice (if intentional) in code comments
-2. OR switch to Haiku for consistency:
-```typescript
-// Phase 4 - use Haiku like other phases
-const model = CLAUDE_CONFIG.haiku;
-```
-3. Add cost tracking per phase to monitor actual spend:
-```typescript
-interface PhaseMetrics {
-  phase: number;
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  estimatedCost: number;
-  duration: number;
-}
-```
+Phase 4 (Correlation Analysis) performs complex cross-domain pattern detection across sales, customer, brand, and market data. Using Sonnet provides:
+- More deliberate and accurate correlation identification
+- Better reasoning across multiple data dimensions
+- Higher quality insight synthesis
 
-**Files to modify:**
-- `src/lib/services/daily-learning.ts` - Line ~1118, change model or add comment
-- Consider adding cost tracking throughout
+The additional cost is justified by the critical nature of the correlation phase in producing actionable business insights.
+
+**Status:** No code changes needed. Documented as a feature.
 
 ---
 

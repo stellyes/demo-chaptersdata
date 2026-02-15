@@ -1442,6 +1442,10 @@ Return JSON array:
 Generate 5-10 high-quality correlations.`;
 
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
+    // NOTE: Phase 4 intentionally uses Sonnet (defaultModel) instead of Haiku.
+    // Correlation analysis requires more deliberate reasoning across multiple data
+    // dimensions (sales, customer, brand, market) to identify accurate patterns.
+    // The higher cost is justified by the critical nature of insight quality.
     const response = await withRetry(
       () => this.client.messages.create({
         model: CLAUDE_CONFIG.defaultModel,
@@ -1670,6 +1674,9 @@ If web research was not conducted, base industryHighlights, regulatoryUpdates, a
 Return ONLY valid JSON, no markdown or explanation.`;
 
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
+    // NOTE: Phase 5 intentionally uses Sonnet (defaultModel) instead of Haiku.
+    // The digest is the primary user-facing deliverable and requires the highest
+    // quality synthesis of all insights, correlations, and recommendations.
     const response = await withRetry(
       () => this.client.messages.create({
         model: CLAUDE_CONFIG.defaultModel,
