@@ -5,11 +5,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { dailyLearningService } from '@/lib/services/daily-learning';
+import { isLearningApiAuthorized, unauthorizedResponse } from '../auth';
 
 // Extend function timeout to 900 seconds (15 minutes) for long-running learning jobs
 export const maxDuration = 900;
 
 export async function POST(request: NextRequest) {
+  // Verify authorization before allowing job triggers
+  if (!isLearningApiAuthorized(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
     const { skipWebResearch = false, forceRun = true, sync = false } = body;

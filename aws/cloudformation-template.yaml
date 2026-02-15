@@ -78,13 +78,13 @@ Resources:
               throw new Error('Missing required environment variables');
             }
 
-            const url = new URL('/api/learning/daily', apiEndpoint);
+            const url = new URL('/api/ai/learning/run', apiEndpoint);
             const isHttps = url.protocol === 'https:';
             const client = isHttps ? https : http;
 
-            // Use run_sync to wait for job completion (Amplify now supports 900s timeout)
+            // Use sync mode to wait for job completion (Amplify now supports 900s timeout)
             const requestBody = JSON.stringify({
-              action: 'run_sync',
+              sync: true,
               forceRun: false,
               skipWebResearch: false
             });
@@ -179,13 +179,13 @@ Resources:
               throw new Error('Missing required environment variables');
             }
 
-            const url = new URL('/api/learning/daily', apiEndpoint);
+            const url = new URL('/api/ai/learning/run', apiEndpoint);
             const isHttps = url.protocol === 'https:';
             const client = isHttps ? https : http;
 
-            // Use run_sync to wait for job completion (Amplify now supports 900s timeout)
+            // Use sync mode to wait for job completion (Amplify now supports 900s timeout)
             const requestBody = JSON.stringify({
-              action: 'run_sync',
+              sync: true,
               forceRun,
               skipWebResearch
             });

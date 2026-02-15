@@ -5,8 +5,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isLearningApiAuthorized, unauthorizedResponse } from '../auth';
 
 export async function POST(request: NextRequest) {
+  // Verify authorization before allowing job cancellation
+  if (!isLearningApiAuthorized(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
     const { jobId } = body;

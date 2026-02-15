@@ -1,16 +1,28 @@
 // ============================================
 // LEARNING STATUS API ROUTE
 // Get current learning job status with stale detection
+// Includes search budget information for monitoring quota usage
 // ============================================
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { webSearchService } from '@/lib/services/web-search';
 
 // Maximum time a job can run before being considered stale (1 hour - reduced for faster recovery)
 const STALE_JOB_TIMEOUT_MS = 1 * 60 * 60 * 1000;
 
 export async function GET() {
   try {
+    // Get search quota status for monitoring
+    const throttleStatus = await webSearchService.getThrottleStatus();
+    const searchBudget = {
+      searchesUsed: throttleStatus.searchesUsed,
+      searchesRemaining: throttleStatus.searchesRemaining,
+      monthlyLimit: throttleStatus.limit,
+      dailyBudget: throttleStatus.dailyBudget,
+      isThrottled: throttleStatus.isThrottled,
+    };
+
     // Check for any running job
     const runningJob = await prisma.dailyLearningJob.findFirst({
       where: { status: 'running' },
@@ -33,6 +45,7 @@ export async function GET() {
         data: {
           isRunning: false,
           currentJob: null,
+          searchBudget,
         },
       });
     }
@@ -59,6 +72,7 @@ export async function GET() {
         data: {
           isRunning: false,
           currentJob: null,
+          searchBudget,
           recovered: {
             jobId: runningJob.id,
             message: `Stale job was auto-recovered after running for ${Math.round(jobAge / 60000)} minutes`,
@@ -89,6 +103,7 @@ export async function GET() {
           progress,
           runningForMinutes: Math.round(jobAge / 60000),
         },
+        searchBudget,
       },
     });
   } catch (error) {
