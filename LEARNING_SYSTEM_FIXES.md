@@ -230,31 +230,65 @@ The additional cost is justified by the critical nature of the correlation phase
 
 ---
 
-### Issue #9: No Observability/Metrics
+### Issue #9: No Observability/Metrics ✅ FIXED
 
 **Problem:** No logging of data failures, no token tracking, no phase duration metrics.
 
-**Solution Plan:**
-1. Add structured logging for each phase:
+**Impact:** Difficult to debug failures, understand system health, or optimize performance.
+
+**Solution Implemented:**
+1. Added `PhaseMetric` interface for structured phase-level metrics:
 ```typescript
-interface PhaseLog {
-  jobId: string;
-  phase: number;
-  startTime: Date;
-  endTime: Date;
-  success: boolean;
-  tokensUsed?: number;
+interface PhaseMetric {
+  phase: string;
+  status: 'success' | 'failed' | 'skipped';
+  startTime: string;
+  endTime?: string;
+  durationMs?: number;
+  inputTokens: number;
+  outputTokens: number;
   error?: string;
-  dataSourcesLoaded?: string[];
-  dataSourcesFailed?: string[];
+  dataSources?: { loaded: string[]; failed: string[] };
+  itemsProcessed?: number;
 }
 ```
-2. Persist to `AnalysisHistory` table or new `LearningMetrics` table
-3. Add dashboard component to visualize learning health
 
-**Files to modify:**
-- `src/lib/services/daily-learning.ts` - Add logging throughout
-- Consider new Prisma model for metrics
+2. Extended `JobMetadata` with:
+   - `phaseMetrics` array for per-phase tracking
+   - `healthSummary` for aggregate job health stats
+
+3. Created `LearningPhaseMetric` Prisma model for persisting phase metrics to database
+
+4. Added observability helper methods:
+   - `startPhaseMetric()` - Begin tracking a phase
+   - `completePhaseMetric()` - Finalize phase with status and stats
+   - `persistPhaseMetric()` - Save to database for historical analysis
+   - `calculateHealthSummary()` - Aggregate metrics across phases
+   - `logDataSourceResult()` - Structured logging for data source loads
+
+5. Updated `phase1DataReviewWithMetrics()` to track:
+   - Which data sources loaded successfully
+   - Which data sources failed
+   - Per-source timing
+
+6. Enhanced status API (`/api/ai/learning/status`):
+   - GET: Returns current job metrics (tokens, phases, data sources)
+   - POST: Returns metrics history for dashboard visualization
+   - Includes aggregate metrics across recent jobs
+
+**Key Metrics Now Tracked:**
+- Per-phase token usage (input/output)
+- Per-phase duration in milliseconds
+- Phase success/failure/skipped status
+- Data sources loaded vs failed
+- Items processed per phase (questions, insights, articles)
+- Overall job health summary
+
+**Files modified:**
+- `src/lib/services/daily-learning.ts` - Added PhaseMetric interface, observability helpers, metrics tracking
+- `src/app/api/ai/learning/status/route.ts` - Enhanced with metrics endpoints
+- `prisma/schema.prisma` - Added LearningPhaseMetric model
+- `prisma/migrations/20260215_add_learning_phase_metrics/migration.sql` - New migration
 
 ---
 

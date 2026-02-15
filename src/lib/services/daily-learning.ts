@@ -127,6 +127,24 @@ CRITICAL JSON RULES:
 5. All property names must be in double quotes
 6. Do not truncate your response - complete the full JSON structure`;
 
+// ISSUE #9: Phase metric interface for structured observability
+export interface PhaseMetric {
+  phase: string;
+  status: 'success' | 'failed' | 'skipped';
+  startTime: string;
+  endTime?: string;
+  durationMs?: number;
+  inputTokens: number;
+  outputTokens: number;
+  error?: string;
+  // Phase-specific data
+  dataSources?: {
+    loaded: string[];
+    failed: string[];
+  };
+  itemsProcessed?: number; // questions generated, insights found, etc.
+}
+
 // Job metadata for tracking runtime state and quota issues
 export interface JobMetadata {
   webResearchSkipped: boolean;
@@ -146,6 +164,19 @@ export interface JobMetadata {
     fallbackUsed: boolean;
     error?: string;
   }>;
+  // ISSUE #9 FIX: Structured phase metrics for observability
+  phaseMetrics?: PhaseMetric[];
+  // ISSUE #9 FIX: Overall job health summary
+  healthSummary?: {
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalDurationMs: number;
+    phasesSucceeded: number;
+    phasesFailed: number;
+    phasesSkipped: number;
+    dataSourcesLoaded: number;
+    dataSourcesFailed: number;
+  };
 }
 
 interface DailyLearningJobState {
@@ -432,6 +463,155 @@ export class DailyLearningService {
     });
   }
 
+  // ============================================
+  // ISSUE #9: OBSERVABILITY & METRICS HELPERS
+  // Structured logging and metric persistence
+  // ============================================
+
+  /**
+   * Starts tracking metrics for a phase.
+   * Returns a PhaseMetric object to be updated as the phase progresses.
+   */
+  private startPhaseMetric(phase: string): PhaseMetric {
+    const metric: PhaseMetric = {
+      phase,
+      status: 'success', // Will be updated if failure occurs
+      startTime: new Date().toISOString(),
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+    console.log(`[Phase Start] ${phase} - ${metric.startTime}`);
+    return metric;
+  }
+
+  /**
+   * Completes a phase metric with final timing and status.
+   */
+  private completePhaseMetric(
+    metric: PhaseMetric,
+    status: 'success' | 'failed' | 'skipped',
+    options?: {
+      error?: string;
+      itemsProcessed?: number;
+      dataSources?: { loaded: string[]; failed: string[] };
+    }
+  ): PhaseMetric {
+    metric.endTime = new Date().toISOString();
+    metric.durationMs = new Date(metric.endTime).getTime() - new Date(metric.startTime).getTime();
+    metric.status = status;
+
+    if (options?.error) metric.error = options.error;
+    if (options?.itemsProcessed !== undefined) metric.itemsProcessed = options.itemsProcessed;
+    if (options?.dataSources) metric.dataSources = options.dataSources;
+
+    // Structured log output
+    const logData = {
+      phase: metric.phase,
+      status: metric.status,
+      durationMs: metric.durationMs,
+      inputTokens: metric.inputTokens,
+      outputTokens: metric.outputTokens,
+      ...(metric.error && { error: metric.error }),
+      ...(metric.itemsProcessed !== undefined && { itemsProcessed: metric.itemsProcessed }),
+      ...(metric.dataSources && {
+        dataSourcesLoaded: metric.dataSources.loaded.length,
+        dataSourcesFailed: metric.dataSources.failed.length,
+      }),
+    };
+
+    if (status === 'failed') {
+      console.error(`[Phase Failed] ${metric.phase}`, JSON.stringify(logData));
+    } else if (status === 'skipped') {
+      console.log(`[Phase Skipped] ${metric.phase}`, JSON.stringify(logData));
+    } else {
+      console.log(`[Phase Complete] ${metric.phase}`, JSON.stringify(logData));
+    }
+
+    return metric;
+  }
+
+  /**
+   * Persists a phase metric to the database for later analysis.
+   */
+  private async persistPhaseMetric(jobId: string, metric: PhaseMetric): Promise<void> {
+    try {
+      await prisma.learningPhaseMetric.create({
+        data: {
+          jobId,
+          phase: metric.phase,
+          status: metric.status,
+          startTime: new Date(metric.startTime),
+          endTime: metric.endTime ? new Date(metric.endTime) : undefined,
+          durationMs: metric.durationMs,
+          inputTokens: metric.inputTokens,
+          outputTokens: metric.outputTokens,
+          errorMessage: metric.error,
+          dataSources: metric.dataSources || undefined,
+          itemsProcessed: metric.itemsProcessed,
+        },
+      });
+    } catch (error) {
+      // Don't fail the job if metric persistence fails
+      console.warn(`[Metrics] Failed to persist phase metric for ${metric.phase}:`, error);
+    }
+  }
+
+  /**
+   * Calculates and returns the health summary from phase metrics.
+   */
+  private calculateHealthSummary(metrics: PhaseMetric[]): JobMetadata['healthSummary'] {
+    const summary = {
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalDurationMs: 0,
+      phasesSucceeded: 0,
+      phasesFailed: 0,
+      phasesSkipped: 0,
+      dataSourcesLoaded: 0,
+      dataSourcesFailed: 0,
+    };
+
+    for (const metric of metrics) {
+      summary.totalInputTokens += metric.inputTokens;
+      summary.totalOutputTokens += metric.outputTokens;
+      summary.totalDurationMs += metric.durationMs || 0;
+
+      if (metric.status === 'success') summary.phasesSucceeded++;
+      else if (metric.status === 'failed') summary.phasesFailed++;
+      else if (metric.status === 'skipped') summary.phasesSkipped++;
+
+      if (metric.dataSources) {
+        summary.dataSourcesLoaded += metric.dataSources.loaded.length;
+        summary.dataSourcesFailed += metric.dataSources.failed.length;
+      }
+    }
+
+    return summary;
+  }
+
+  /**
+   * Logs a structured data source loading result.
+   */
+  private logDataSourceResult(
+    sourceName: string,
+    success: boolean,
+    recordCount?: number,
+    durationMs?: number
+  ): void {
+    const logData = {
+      source: sourceName,
+      success,
+      ...(recordCount !== undefined && { records: recordCount }),
+      ...(durationMs !== undefined && { durationMs }),
+    };
+
+    if (success) {
+      console.log(`[DataSource] Loaded ${sourceName}`, JSON.stringify(logData));
+    } else {
+      console.warn(`[DataSource] Failed to load ${sourceName}`, JSON.stringify(logData));
+    }
+  }
+
   async runDailyLearning(options?: {
     forceRun?: boolean;
     skipWebResearch?: boolean;
@@ -515,43 +695,162 @@ export class DailyLearningService {
       metadata: initialMetadata,
     };
 
+    // ISSUE #9 FIX: Initialize phase metrics array for observability
+    state.metadata.phaseMetrics = [];
+
     try {
-      // Track phase timings
+      // ============================================
+      // PHASE 1: Data Review
+      // ============================================
+      const phase1Metric = this.startPhaseMetric('data_review');
+      const tokensBefore1 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['data_review'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'data_review');
-      const dataReview = await this.phase1DataReview(state);
+
+      let dataReview: DataReviewResult;
+      let phase1DataSources: { loaded: string[]; failed: string[] } | undefined;
+      try {
+        const { result, dataSources } = await this.phase1DataReviewWithMetrics(state);
+        dataReview = result;
+        phase1DataSources = dataSources;
+        phase1Metric.inputTokens = state.inputTokens - tokensBefore1.input;
+        phase1Metric.outputTokens = state.outputTokens - tokensBefore1.output;
+        this.completePhaseMetric(phase1Metric, 'success', { dataSources: phase1DataSources });
+      } catch (error) {
+        phase1Metric.inputTokens = state.inputTokens - tokensBefore1.input;
+        phase1Metric.outputTokens = state.outputTokens - tokensBefore1.output;
+        this.completePhaseMetric(phase1Metric, 'failed', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          dataSources: phase1DataSources,
+        });
+        throw error;
+      }
       state.metadata.phaseTimings!['data_review'].end = new Date().toISOString();
+      state.metadata.phaseMetrics.push(phase1Metric);
+      await this.persistPhaseMetric(state.jobId, phase1Metric);
       await this.markPhaseComplete(state.jobId, 'dataReviewDone');
 
+      // ============================================
+      // PHASE 2: Question Generation
+      // ============================================
+      const phase2Metric = this.startPhaseMetric('question_gen');
+      const tokensBefore2 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['question_gen'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'question_gen');
-      const questions = await this.phase2QuestionGeneration(state, dataReview);
+
+      let questions: GeneratedQuestion[];
+      try {
+        questions = await this.phase2QuestionGeneration(state, dataReview);
+        phase2Metric.inputTokens = state.inputTokens - tokensBefore2.input;
+        phase2Metric.outputTokens = state.outputTokens - tokensBefore2.output;
+        this.completePhaseMetric(phase2Metric, 'success', { itemsProcessed: questions.length });
+      } catch (error) {
+        phase2Metric.inputTokens = state.inputTokens - tokensBefore2.input;
+        phase2Metric.outputTokens = state.outputTokens - tokensBefore2.output;
+        this.completePhaseMetric(phase2Metric, 'failed', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw error;
+      }
       state.metadata.phaseTimings!['question_gen'].end = new Date().toISOString();
+      state.metadata.phaseMetrics.push(phase2Metric);
+      await this.persistPhaseMetric(state.jobId, phase2Metric);
       await this.markPhaseComplete(state.jobId, 'questionGenDone');
 
+      // ============================================
+      // PHASE 3: Web Research
+      // ============================================
       let webResearchResults: WebResearchResult[] = [];
+      const phase3Metric = this.startPhaseMetric('web_research');
+      const tokensBefore3 = { input: state.inputTokens, output: state.outputTokens };
+
       if (!skipWebResearch) {
         state.metadata.phaseTimings!['web_research'] = { start: new Date().toISOString() };
         await this.updateJobPhase(state.jobId, 'web_research');
-        webResearchResults = await this.phase3WebResearch(state, questions);
+        try {
+          webResearchResults = await this.phase3WebResearch(state, questions);
+          phase3Metric.inputTokens = state.inputTokens - tokensBefore3.input;
+          phase3Metric.outputTokens = state.outputTokens - tokensBefore3.output;
+          const articlesFound = webResearchResults.reduce((sum, r) => sum + r.findings.length, 0);
+          this.completePhaseMetric(phase3Metric, 'success', { itemsProcessed: articlesFound });
+        } catch (error) {
+          phase3Metric.inputTokens = state.inputTokens - tokensBefore3.input;
+          phase3Metric.outputTokens = state.outputTokens - tokensBefore3.output;
+          this.completePhaseMetric(phase3Metric, 'failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+          throw error;
+        }
         state.metadata.phaseTimings!['web_research'].end = new Date().toISOString();
         await this.markPhaseComplete(state.jobId, 'webResearchDone');
       } else {
-        // Mark web research as done even though skipped (for progress tracking)
+        // Mark web research as skipped with reason
+        this.completePhaseMetric(phase3Metric, 'skipped', {
+          error: webResearchSkipReason || 'user_requested',
+        });
         await this.markPhaseComplete(state.jobId, 'webResearchDone');
       }
+      state.metadata.phaseMetrics.push(phase3Metric);
+      await this.persistPhaseMetric(state.jobId, phase3Metric);
 
+      // ============================================
+      // PHASE 4: Correlation Analysis
+      // ============================================
+      const phase4Metric = this.startPhaseMetric('correlation');
+      const tokensBefore4 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['correlation'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'correlation');
-      const correlatedInsights = await this.phase4Correlation(state, dataReview, webResearchResults);
+
+      let correlatedInsights: CorrelatedInsight[];
+      try {
+        correlatedInsights = await this.phase4Correlation(state, dataReview, webResearchResults);
+        phase4Metric.inputTokens = state.inputTokens - tokensBefore4.input;
+        phase4Metric.outputTokens = state.outputTokens - tokensBefore4.output;
+        this.completePhaseMetric(phase4Metric, 'success', { itemsProcessed: correlatedInsights.length });
+      } catch (error) {
+        phase4Metric.inputTokens = state.inputTokens - tokensBefore4.input;
+        phase4Metric.outputTokens = state.outputTokens - tokensBefore4.output;
+        this.completePhaseMetric(phase4Metric, 'failed', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw error;
+      }
       state.metadata.phaseTimings!['correlation'].end = new Date().toISOString();
+      state.metadata.phaseMetrics.push(phase4Metric);
+      await this.persistPhaseMetric(state.jobId, phase4Metric);
       await this.markPhaseComplete(state.jobId, 'correlationDone');
 
+      // ============================================
+      // PHASE 5: Digest Generation
+      // ============================================
+      const phase5Metric = this.startPhaseMetric('digest_gen');
+      const tokensBefore5 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['digest_gen'] = { start: new Date().toISOString() };
       await this.updateJobPhase(state.jobId, 'digest_gen');
-      const digest = await this.phase5DigestGeneration(state, dataReview, questions, webResearchResults, correlatedInsights);
+
+      let digest: DailyDigestContent;
+      try {
+        digest = await this.phase5DigestGeneration(state, dataReview, questions, webResearchResults, correlatedInsights);
+        phase5Metric.inputTokens = state.inputTokens - tokensBefore5.input;
+        phase5Metric.outputTokens = state.outputTokens - tokensBefore5.output;
+        this.completePhaseMetric(phase5Metric, 'success', {
+          itemsProcessed: digest.priorityActions.length + digest.quickWins.length,
+        });
+      } catch (error) {
+        phase5Metric.inputTokens = state.inputTokens - tokensBefore5.input;
+        phase5Metric.outputTokens = state.outputTokens - tokensBefore5.output;
+        this.completePhaseMetric(phase5Metric, 'failed', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw error;
+      }
       state.metadata.phaseTimings!['digest_gen'].end = new Date().toISOString();
+      state.metadata.phaseMetrics.push(phase5Metric);
+      await this.persistPhaseMetric(state.jobId, phase5Metric);
       await this.markPhaseComplete(state.jobId, 'digestGenDone');
+
+      // ISSUE #9 FIX: Calculate health summary from metrics
+      state.metadata.healthSummary = this.calculateHealthSummary(state.metadata.phaseMetrics);
 
       const digestData = {
         executiveSummary: digest.executiveSummary,
@@ -628,7 +927,217 @@ export class DailyLearningService {
     }
   }
 
+  /**
+   * ISSUE #9 FIX: Phase 1 with data source tracking for observability.
+   * Tracks which data sources loaded successfully and which failed.
+   */
+  private async phase1DataReviewWithMetrics(
+    state: DailyLearningJobState
+  ): Promise<{ result: DataReviewResult; dataSources: { loaded: string[]; failed: string[] } }> {
+    const dataSources = { loaded: [] as string[], failed: [] as string[] };
+
+    // Helper to track data source loading with timing
+    const trackDataSource = async <T>(
+      name: string,
+      loader: () => Promise<T>,
+      defaultValue: T
+    ): Promise<T> => {
+      const startTime = Date.now();
+      try {
+        const result = await withTimeout(loader(), QUERY_TIMEOUT_MS, name);
+        const durationMs = Date.now() - startTime;
+
+        // Check if result is "empty" (default value was returned due to failure in safeQuery)
+        const isEmpty = result === defaultValue ||
+          (typeof result === 'object' && Object.keys(result as object).length === 0) ||
+          (typeof result === 'string' && result === '');
+
+        if (isEmpty) {
+          dataSources.failed.push(name);
+          this.logDataSourceResult(name, false, 0, durationMs);
+        } else {
+          dataSources.loaded.push(name);
+          const recordCount = Array.isArray(result) ? result.length : undefined;
+          this.logDataSourceResult(name, true, recordCount, durationMs);
+        }
+        return result;
+      } catch (error) {
+        dataSources.failed.push(name);
+        const durationMs = Date.now() - startTime;
+        this.logDataSourceResult(name, false, undefined, durationMs);
+        console.warn(`[DataSource] ${name} failed:`, error instanceof Error ? error.message : error);
+        return defaultValue;
+      }
+    };
+
+    // Load all data sources with tracking
+    const [
+      salesData,
+      brandData,
+      customerData,
+      invoiceData,
+      qrData,
+      seoData,
+      budtenderData,
+      productData,
+      researchData,
+      correlationSummary,
+    ] = await Promise.all([
+      trackDataSource('sales', () => this.loadRecentSalesData(), {}),
+      trackDataSource('brands', () => this.loadRecentBrandData(), {}),
+      trackDataSource('customers', () => this.loadRecentCustomerData(), {}),
+      trackDataSource('invoices', () => this.loadRecentInvoiceData(), {}),
+      trackDataSource('qr_codes', () => this.loadQrCodeData(), {}),
+      trackDataSource('seo_audits', () => this.loadSeoAuditData(), {}),
+      trackDataSource('budtenders', () => this.loadBudtenderData(), {}),
+      trackDataSource('products', () => this.loadProductData(), {}),
+      trackDataSource('research', () => this.loadResearchData(), {}),
+      trackDataSource('correlations', () => dataCorrelationsService.getCorrelationSummaryForAI(), ''),
+    ]);
+
+    // Log data source summary
+    console.log(`[Phase1] Data sources - Loaded: ${dataSources.loaded.length}, Failed: ${dataSources.failed.length}`);
+    if (dataSources.failed.length > 0) {
+      console.warn(`[Phase1] Failed data sources: ${dataSources.failed.join(', ')}`);
+    }
+
+    // Call the original analysis logic
+    const result = await this.phase1DataReviewAnalysis(
+      state,
+      salesData,
+      brandData,
+      customerData,
+      invoiceData,
+      qrData,
+      seoData,
+      budtenderData,
+      productData,
+      researchData,
+      correlationSummary
+    );
+
+    return { result, dataSources };
+  }
+
+  /**
+   * Phase 1 analysis logic (extracted for metrics wrapper).
+   */
+  private async phase1DataReviewAnalysis(
+    state: DailyLearningJobState,
+    salesData: unknown,
+    brandData: unknown,
+    customerData: unknown,
+    invoiceData: unknown,
+    qrData: unknown,
+    seoData: unknown,
+    budtenderData: unknown,
+    productData: unknown,
+    researchData: unknown,
+    correlationSummary: string
+  ): Promise<DataReviewResult> {
+    const prompt = `Analyze business data for San Francisco cannabis dispensaries.
+
+## INDIVIDUAL DATA SOURCES
+
+SALES DATA: ${JSON.stringify(salesData, null, 2)}
+BRAND DATA: ${JSON.stringify(brandData, null, 2)}
+CUSTOMER DATA: ${JSON.stringify(customerData, null, 2)}
+INVOICE/PURCHASING DATA: ${JSON.stringify(invoiceData, null, 2)}
+BUDTENDER PERFORMANCE: ${JSON.stringify(budtenderData, null, 2)}
+PRODUCT CATEGORY DATA: ${JSON.stringify(productData, null, 2)}
+MARKET RESEARCH: ${JSON.stringify(researchData, null, 2)}
+QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
+WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
+
+## CROSS-TABLE CORRELATIONS & ANALYTICS
+The following links data across multiple tables to reveal deeper insights:
+
+${correlationSummary}
+
+## ANALYSIS INSTRUCTIONS
+1. Look for correlations between purchasing costs and sales revenue by brand
+2. Identify which product categories have the best markup ratios
+3. Note any discrepancies between vendor costs and sales performance
+4. Identify customer segments that may need attention (at-risk, lapsed)
+5. Look for patterns in dates with regulatory events vs sales performance
+6. Cross-reference the knowledge base insights with current data
+
+Return JSON:
+{
+  "summary": "Brief overview including key cross-table insights",
+  "keyMetrics": { "salesTrend": "", "topBrands": [], "customerActivity": "", "recentChanges": [] },
+  "areasOfConcern": [],
+  "areasOfOpportunity": [],
+  "anomalies": [],
+  "suggestedQuestionTopics": []
+}`;
+
+    // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
+    const response = await withRetry(
+      () => this.client.messages.create({
+        model: CLAUDE_CONFIG.haiku,
+        max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
+        system: JSON_SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: '{' }, // Prefill to ensure JSON object start
+        ],
+      }),
+      'phase1DataReview'
+    );
+
+    state.inputTokens += response.usage.input_tokens;
+    state.outputTokens += response.usage.output_tokens;
+
+    const textContent = response.content.find(c => c.type === 'text');
+    // Prepend the prefilled '{' since it won't be in the response
+    const responseText = '{' + (textContent?.type === 'text' ? textContent.text : '');
+
+    // ISSUE #5 FIX: Use centralized JSON parsing utility
+    const parseResult = parseClaudeJson<DataReviewResult>(responseText, false);
+
+    if (!parseResult.success || !parseResult.data) {
+      // Track parse issue in job metadata
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase1DataReview',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+        error: parseResult.error,
+      });
+
+      throw new Error(`Failed to parse data review JSON: ${parseResult.error}`);
+    }
+
+    // Track if fallback parsing was used (for observability)
+    if (parseResult.fallbackUsed) {
+      if (!state.metadata.jsonParseIssues) {
+        state.metadata.jsonParseIssues = [];
+      }
+      state.metadata.jsonParseIssues.push({
+        phase: 'phase1DataReview',
+        timestamp: new Date().toISOString(),
+        fallbackUsed: true,
+      });
+      console.warn('[phase1DataReview] Used fallback JSON parsing');
+    }
+
+    return parseResult.data;
+  }
+
+  /**
+   * @deprecated Use phase1DataReviewWithMetrics instead for observability tracking.
+   */
   private async phase1DataReview(state: DailyLearningJobState): Promise<DataReviewResult> {
+    // Delegate to metrics version but ignore the metrics
+    const { result } = await this.phase1DataReviewWithMetrics(state);
+    return result;
+  }
+
+  // Legacy code kept for reference - remove after confirming new method works
+  private async _legacyPhase1DataReview(state: DailyLearningJobState): Promise<DataReviewResult> {
     // Load all data sources in parallel with timeouts
     // Each data loader has a 60-second timeout and returns empty data on failure
     const [

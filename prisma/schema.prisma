@@ -462,33 +462,58 @@ model AnalysisHistory {
 }
 
 model DailyLearningJob {
-  id                 String       @id @default(uuid())
-  startedAt          DateTime     @default(now()) @map("started_at")
-  completedAt        DateTime?    @map("completed_at")
-  status             String       @default("running")
-  currentPhase       String?      @map("current_phase")
-  lastHeartbeat      DateTime?    @map("last_heartbeat")
-  dataReviewDone     Boolean      @default(false) @map("data_review_done")
-  questionGenDone    Boolean      @default(false) @map("question_gen_done")
-  webResearchDone    Boolean      @default(false) @map("web_research_done")
-  correlationDone    Boolean      @default(false) @map("correlation_done")
-  digestGenDone      Boolean      @default(false) @map("digest_gen_done")
-  inputTokens        Int          @default(0) @map("input_tokens")
-  outputTokens       Int          @default(0) @map("output_tokens")
-  searchesUsed       Int          @default(0) @map("searches_used")
-  estimatedCost      Decimal      @default(0) @map("estimated_cost") @db.Decimal(10, 4)
-  questionsGenerated Int          @default(0) @map("questions_generated")
-  insightsDiscovered Int          @default(0) @map("insights_discovered")
-  articlesAnalyzed   Int          @default(0) @map("articles_analyzed")
-  errorMessage       String?      @map("error_message")
-  errorPhase         String?      @map("error_phase")
-  jobMetadata        Json?        @map("job_metadata") // Tracks runtime info: quota warnings, skipped phases, etc.
-  digestId           String?      @unique @map("digest_id")
-  digest             DailyDigest? @relation(fields: [digestId], references: [id])
+  id                 String                 @id @default(uuid())
+  startedAt          DateTime               @default(now()) @map("started_at")
+  completedAt        DateTime?              @map("completed_at")
+  status             String                 @default("running")
+  currentPhase       String?                @map("current_phase")
+  lastHeartbeat      DateTime?              @map("last_heartbeat")
+  dataReviewDone     Boolean                @default(false) @map("data_review_done")
+  questionGenDone    Boolean                @default(false) @map("question_gen_done")
+  webResearchDone    Boolean                @default(false) @map("web_research_done")
+  correlationDone    Boolean                @default(false) @map("correlation_done")
+  digestGenDone      Boolean                @default(false) @map("digest_gen_done")
+  inputTokens        Int                    @default(0) @map("input_tokens")
+  outputTokens       Int                    @default(0) @map("output_tokens")
+  searchesUsed       Int                    @default(0) @map("searches_used")
+  estimatedCost      Decimal                @default(0) @map("estimated_cost") @db.Decimal(10, 4)
+  questionsGenerated Int                    @default(0) @map("questions_generated")
+  insightsDiscovered Int                    @default(0) @map("insights_discovered")
+  articlesAnalyzed   Int                    @default(0) @map("articles_analyzed")
+  errorMessage       String?                @map("error_message")
+  errorPhase         String?                @map("error_phase")
+  jobMetadata        Json?                  @map("job_metadata") // Tracks runtime info: quota warnings, skipped phases, etc.
+  digestId           String?                @unique @map("digest_id")
+  digest             DailyDigest?           @relation(fields: [digestId], references: [id])
+  phaseMetrics       LearningPhaseMetric[]
 
   @@index([startedAt])
   @@index([status])
   @@map("daily_learning_jobs")
+}
+
+// ISSUE #9: Persisted phase-level metrics for observability dashboard
+model LearningPhaseMetric {
+  id             String   @id @default(uuid())
+  jobId          String   @map("job_id")
+  phase          String
+  status         String   // 'success' | 'failed' | 'skipped'
+  startTime      DateTime @map("start_time")
+  endTime        DateTime? @map("end_time")
+  durationMs     Int?     @map("duration_ms")
+  inputTokens    Int      @default(0) @map("input_tokens")
+  outputTokens   Int      @default(0) @map("output_tokens")
+  errorMessage   String?  @map("error_message")
+  dataSources    Json?    @map("data_sources") // { loaded: string[], failed: string[] }
+  itemsProcessed Int?     @map("items_processed")
+  createdAt      DateTime @default(now()) @map("created_at")
+  job            DailyLearningJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([phase])
+  @@index([status])
+  @@index([startTime])
+  @@map("learning_phase_metrics")
 }
 
 model CustomQueryJob {
