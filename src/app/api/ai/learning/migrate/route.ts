@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { isLearningApiAuthorized, unauthorizedResponse } from '../auth';
 
 // Migration definitions - add new migrations here
+// Each migration must contain a single SQL statement (Prisma limitation)
 const MIGRATIONS = [
   {
     id: '20260215_add_last_heartbeat',
@@ -16,47 +17,59 @@ const MIGRATIONS = [
     sql: `ALTER TABLE "daily_learning_jobs" ADD COLUMN IF NOT EXISTS "last_heartbeat" TIMESTAMP(3);`,
   },
   {
-    id: '20260215_add_learning_phase_metrics',
-    description: 'Add LearningPhaseMetric table for observability',
-    sql: `
-      CREATE TABLE IF NOT EXISTS "learning_phase_metrics" (
-        "id" TEXT NOT NULL,
-        "job_id" TEXT NOT NULL,
-        "phase" TEXT NOT NULL,
-        "status" TEXT NOT NULL,
-        "start_time" TIMESTAMP(3) NOT NULL,
-        "end_time" TIMESTAMP(3),
-        "duration_ms" INTEGER,
-        "input_tokens" INTEGER NOT NULL DEFAULT 0,
-        "output_tokens" INTEGER NOT NULL DEFAULT 0,
-        "error_message" TEXT,
-        "data_sources" JSONB,
-        "items_processed" INTEGER,
-        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "learning_phase_metrics_pkey" PRIMARY KEY ("id")
-      );
-      CREATE INDEX IF NOT EXISTS "learning_phase_metrics_job_id_idx" ON "learning_phase_metrics"("job_id");
-      CREATE INDEX IF NOT EXISTS "learning_phase_metrics_phase_idx" ON "learning_phase_metrics"("phase");
-      CREATE INDEX IF NOT EXISTS "learning_phase_metrics_status_idx" ON "learning_phase_metrics"("status");
-      CREATE INDEX IF NOT EXISTS "learning_phase_metrics_start_time_idx" ON "learning_phase_metrics"("start_time");
-    `,
+    id: '20260215_create_learning_phase_metrics_table',
+    description: 'Create LearningPhaseMetric table',
+    sql: `CREATE TABLE IF NOT EXISTS "learning_phase_metrics" (
+      "id" TEXT NOT NULL,
+      "job_id" TEXT NOT NULL,
+      "phase" TEXT NOT NULL,
+      "status" TEXT NOT NULL,
+      "start_time" TIMESTAMP(3) NOT NULL,
+      "end_time" TIMESTAMP(3),
+      "duration_ms" INTEGER,
+      "input_tokens" INTEGER NOT NULL DEFAULT 0,
+      "output_tokens" INTEGER NOT NULL DEFAULT 0,
+      "error_message" TEXT,
+      "data_sources" JSONB,
+      "items_processed" INTEGER,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "learning_phase_metrics_pkey" PRIMARY KEY ("id")
+    )`,
+  },
+  {
+    id: '20260215_create_learning_phase_metrics_idx_job',
+    description: 'Create job_id index on LearningPhaseMetric',
+    sql: `CREATE INDEX IF NOT EXISTS "learning_phase_metrics_job_id_idx" ON "learning_phase_metrics"("job_id")`,
+  },
+  {
+    id: '20260215_create_learning_phase_metrics_idx_phase',
+    description: 'Create phase index on LearningPhaseMetric',
+    sql: `CREATE INDEX IF NOT EXISTS "learning_phase_metrics_phase_idx" ON "learning_phase_metrics"("phase")`,
+  },
+  {
+    id: '20260215_create_learning_phase_metrics_idx_status',
+    description: 'Create status index on LearningPhaseMetric',
+    sql: `CREATE INDEX IF NOT EXISTS "learning_phase_metrics_status_idx" ON "learning_phase_metrics"("status")`,
+  },
+  {
+    id: '20260215_create_learning_phase_metrics_idx_time',
+    description: 'Create start_time index on LearningPhaseMetric',
+    sql: `CREATE INDEX IF NOT EXISTS "learning_phase_metrics_start_time_idx" ON "learning_phase_metrics"("start_time")`,
   },
   {
     id: '20260215_add_learning_phase_metrics_fk',
     description: 'Add foreign key constraint for LearningPhaseMetric',
-    sql: `
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.table_constraints
-          WHERE constraint_name = 'learning_phase_metrics_job_id_fkey'
-        ) THEN
-          ALTER TABLE "learning_phase_metrics"
-          ADD CONSTRAINT "learning_phase_metrics_job_id_fkey"
-          FOREIGN KEY ("job_id") REFERENCES "daily_learning_jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-        END IF;
-      END $$;
-    `,
+    sql: `DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'learning_phase_metrics_job_id_fkey'
+      ) THEN
+        ALTER TABLE "learning_phase_metrics"
+        ADD CONSTRAINT "learning_phase_metrics_job_id_fkey"
+        FOREIGN KEY ("job_id") REFERENCES "daily_learning_jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$`,
   },
 ];
 
