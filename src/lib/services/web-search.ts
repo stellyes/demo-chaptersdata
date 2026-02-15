@@ -1,6 +1,6 @@
 // ============================================
 // WEB SEARCH SERVICE
-// SerpAPI integration with throttling (250/month)
+// SerpAPI integration with throttling (1000/month)
 // and URL deduplication to maximize data collection
 // ============================================
 
@@ -95,7 +95,7 @@ export const CANNABIS_QUERY_TEMPLATES = {
 
 export class WebSearchService {
   private readonly SERPAPI_BASE_URL = 'https://serpapi.com/search.json';
-  private readonly MONTHLY_LIMIT = 250;
+  private readonly MONTHLY_LIMIT = 1000; // Upgraded SerpAPI plan
   private readonly CACHE_TTL_HOURS = 24;
   private readonly MAX_PAGES_PER_SEARCH = 5;
   private readonly RESULTS_PER_PAGE = 10;

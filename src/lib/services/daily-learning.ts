@@ -94,7 +94,7 @@ async function withRetry<T>(
 
 // Daily Learning Configuration
 export const DAILY_LEARNING_CONFIG = {
-  maxSearchesPerDay: 8,
+  maxSearchesPerDay: 30, // Generous budget: 1000/month ≈ 33/day
   maxPagesPerSearch: 5,
   // ISSUE #5 FIX: Increased token budgets for better JSON response quality & accuracy
   phase1TokenBudget: 16000, // Doubled: large data input requires space for thorough analysis
@@ -103,7 +103,7 @@ export const DAILY_LEARNING_CONFIG = {
   phase4TokenBudget: 20000, // Increased: complex cross-correlation work (Sonnet)
   phase5TokenBudget: 16000, // Increased: critical digest output quality
   questionsPerCycle: 10,
-  maxWebResearchQuestions: 5,
+  maxWebResearchQuestions: 10, // Increased: more thorough research coverage
   // Progressive learning settings
   maxPastQuestionsForContext: 50, // Expanded from 20 for deeper historical context
   maxPastInsightsForContext: 25, // Expanded from 10 for richer context
