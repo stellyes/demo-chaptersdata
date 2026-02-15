@@ -970,7 +970,13 @@ export class DailyLearningService {
       }
     };
 
-    // Load all data sources with tracking
+    // Load data sources with tracking
+    // ISSUE #9 FIX: Run in two batches to reduce connection pool pressure
+    // Batch 1: Simple queries that don't trigger nested queries
+    // Batch 2: Correlation query (triggers 7 nested queries internally)
+    console.log('[Phase1] Starting data source loading...');
+
+    // Batch 1: Simple data sources (9 queries in parallel)
     const [
       salesData,
       brandData,
@@ -981,7 +987,6 @@ export class DailyLearningService {
       budtenderData,
       productData,
       researchData,
-      correlationSummary,
     ] = await Promise.all([
       trackDataSource('sales', () => this.loadRecentSalesData(), {}),
       trackDataSource('brands', () => this.loadRecentBrandData(), {}),
@@ -992,8 +997,23 @@ export class DailyLearningService {
       trackDataSource('budtenders', () => this.loadBudtenderData(), {}),
       trackDataSource('products', () => this.loadProductData(), {}),
       trackDataSource('research', () => this.loadResearchData(), {}),
-      trackDataSource('correlations', () => dataCorrelationsService.getCorrelationSummaryForAI(), ''),
     ]);
+
+    console.log('[Phase1] Batch 1 complete, loading correlations...');
+
+    // Update heartbeat after Batch 1 to track progress
+    await prisma.dailyLearningJob.update({
+      where: { id: state.jobId },
+      data: { lastHeartbeat: new Date() },
+    });
+
+    // Batch 2: Correlation query (triggers 7 nested queries via getAllCorrelations)
+    // Run after Batch 1 to avoid connection pool exhaustion
+    const correlationSummary = await trackDataSource(
+      'correlations',
+      () => dataCorrelationsService.getCorrelationSummaryForAI(),
+      ''
+    );
 
     // Log data source summary
     console.log(`[Phase1] Data sources - Loaded: ${dataSources.loaded.length}, Failed: ${dataSources.failed.length}`);
