@@ -936,98 +936,51 @@ export class DailyLearningService {
   ): Promise<{ result: DataReviewResult; dataSources: { loaded: string[]; failed: string[] } }> {
     const dataSources = { loaded: [] as string[], failed: [] as string[] };
 
-    // Helper to track data source loading with timing
-    const trackDataSource = async <T>(
-      name: string,
-      loader: () => Promise<T>,
-      defaultValue: T
-    ): Promise<T> => {
-      const startTime = Date.now();
-      try {
-        const result = await withTimeout(loader(), QUERY_TIMEOUT_MS, name);
-        const durationMs = Date.now() - startTime;
+    // Load data sources using proven safeQuery approach with data source tracking
+    // Uses parallel loading like the original working implementation
+    console.log('[Phase1] Starting data source loading...');
 
-        // Check if result is "empty" (default value was returned due to failure in safeQuery)
-        const isEmpty = result === defaultValue ||
-          (typeof result === 'object' && Object.keys(result as object).length === 0) ||
-          (typeof result === 'string' && result === '');
+    const [
+      salesData,
+      brandData,
+      customerData,
+      invoiceData,
+      qrData,
+      seoData,
+      budtenderData,
+      productData,
+      researchData,
+      correlationSummary,
+    ] = await Promise.all([
+      safeQuery(() => this.loadRecentSalesData(), {}, 'loadRecentSalesData'),
+      safeQuery(() => this.loadRecentBrandData(), {}, 'loadRecentBrandData'),
+      safeQuery(() => this.loadRecentCustomerData(), {}, 'loadRecentCustomerData'),
+      safeQuery(() => this.loadRecentInvoiceData(), {}, 'loadRecentInvoiceData'),
+      safeQuery(() => this.loadQrCodeData(), {}, 'loadQrCodeData'),
+      safeQuery(() => this.loadSeoAuditData(), {}, 'loadSeoAuditData'),
+      safeQuery(() => this.loadBudtenderData(), {}, 'loadBudtenderData'),
+      safeQuery(() => this.loadProductData(), {}, 'loadProductData'),
+      safeQuery(() => this.loadResearchData(), {}, 'loadResearchData'),
+      safeQuery(() => dataCorrelationsService.getCorrelationSummaryForAI(), '', 'getCorrelationSummaryForAI'),
+    ]);
 
-        if (isEmpty) {
-          dataSources.failed.push(name);
-          this.logDataSourceResult(name, false, 0, durationMs);
-        } else {
-          dataSources.loaded.push(name);
-          const recordCount = Array.isArray(result) ? result.length : undefined;
-          this.logDataSourceResult(name, true, recordCount, durationMs);
-        }
-        return result;
-      } catch (error) {
-        dataSources.failed.push(name);
-        const durationMs = Date.now() - startTime;
-        this.logDataSourceResult(name, false, undefined, durationMs);
-        console.warn(`[DataSource] ${name} failed:`, error instanceof Error ? error.message : error);
-        return defaultValue;
+    // Track which data sources succeeded or failed for metrics
+    const dataSourceNames = ['sales', 'brands', 'customers', 'invoices', 'qr_codes', 'seo_audits', 'budtenders', 'products', 'research', 'correlations'];
+    const dataSourceResults = [salesData, brandData, customerData, invoiceData, qrData, seoData, budtenderData, productData, researchData, correlationSummary];
+
+    for (let i = 0; i < dataSourceNames.length; i++) {
+      const result = dataSourceResults[i];
+      const isEmpty = result === null || result === undefined ||
+        (typeof result === 'object' && Object.keys(result as object).length === 0) ||
+        (typeof result === 'string' && result === '');
+
+      if (isEmpty) {
+        dataSources.failed.push(dataSourceNames[i]);
+      } else {
+        dataSources.loaded.push(dataSourceNames[i]);
       }
-    };
+    }
 
-    // Load data sources SEQUENTIALLY to debug connection issues
-    // Each query runs one at a time with heartbeat updates
-    console.log('[Phase1] Starting data source loading (sequential mode)...');
-
-    // Helper to update heartbeat between queries
-    const updateHeartbeat = async () => {
-      await prisma.dailyLearningJob.update({
-        where: { id: state.jobId },
-        data: { lastHeartbeat: new Date() },
-      });
-    };
-
-    // Run queries sequentially with heartbeats between each
-    console.log('[Phase1] Loading sales...');
-    const salesData = await trackDataSource('sales', () => this.loadRecentSalesData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading brands...');
-    const brandData = await trackDataSource('brands', () => this.loadRecentBrandData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading customers...');
-    const customerData = await trackDataSource('customers', () => this.loadRecentCustomerData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading invoices...');
-    const invoiceData = await trackDataSource('invoices', () => this.loadRecentInvoiceData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading qr_codes...');
-    const qrData = await trackDataSource('qr_codes', () => this.loadQrCodeData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading seo_audits...');
-    const seoData = await trackDataSource('seo_audits', () => this.loadSeoAuditData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading budtenders...');
-    const budtenderData = await trackDataSource('budtenders', () => this.loadBudtenderData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading products...');
-    const productData = await trackDataSource('products', () => this.loadProductData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading research...');
-    const researchData = await trackDataSource('research', () => this.loadResearchData(), {});
-    await updateHeartbeat();
-
-    console.log('[Phase1] Loading correlations...');
-    const correlationSummary = await trackDataSource(
-      'correlations',
-      () => dataCorrelationsService.getCorrelationSummaryForAI(),
-      ''
-    );
-    await updateHeartbeat();
-
-    // Log data source summary
     console.log(`[Phase1] Data sources - Loaded: ${dataSources.loaded.length}, Failed: ${dataSources.failed.length}`);
     if (dataSources.failed.length > 0) {
       console.warn(`[Phase1] Failed data sources: ${dataSources.failed.join(', ')}`);
