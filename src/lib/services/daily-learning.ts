@@ -936,46 +936,44 @@ export class DailyLearningService {
   ): Promise<{ result: DataReviewResult; dataSources: { loaded: string[]; failed: string[] } }> {
     const dataSources = { loaded: [] as string[], failed: [] as string[] };
 
-    // Load data sources using proven safeQuery approach with data source tracking
-    // Uses parallel loading like the original working implementation
-    console.log('[Phase1] Starting data source loading...');
+    // Load data sources SEQUENTIALLY to avoid Amplify Lambda connection issues
+    // Parallel Promise.all causes hangs in the Amplify serverless environment
+    console.log('[Phase1] Starting data source loading (sequential)...');
 
     // Ensure Prisma is initialized before querying
     await initializePrisma();
-    console.log('[Phase1] Prisma initialized, starting queries...');
 
-    // TEMPORARY: Test with single query to debug hang
-    console.log('[Phase1] Loading just sales data as test...');
-    const salesData = await safeQuery(() => this.loadRecentSalesData(), {}, 'loadRecentSalesData');
-    console.log('[Phase1] Sales data loaded successfully!');
-
-    // Use empty defaults for other data sources during testing
-    const brandData = {};
-    const customerData = {};
-    const invoiceData = {};
-    const qrData = {};
-    const seoData = {};
-    const budtenderData = {};
-    const productData = {};
-    const researchData = {};
-    const correlationSummary = '';
-
-    // Track which data sources succeeded or failed for metrics
-    const dataSourceNames = ['sales', 'brands', 'customers', 'invoices', 'qr_codes', 'seo_audits', 'budtenders', 'products', 'research', 'correlations'];
-    const dataSourceResults = [salesData, brandData, customerData, invoiceData, qrData, seoData, budtenderData, productData, researchData, correlationSummary];
-
-    for (let i = 0; i < dataSourceNames.length; i++) {
-      const result = dataSourceResults[i];
-      const isEmpty = result === null || result === undefined ||
+    // Helper to track data source loading
+    const loadAndTrack = async <T>(
+      name: string,
+      loader: () => Promise<T>,
+      defaultValue: T
+    ): Promise<T> => {
+      console.log(`[Phase1] Loading ${name}...`);
+      const result = await safeQuery(loader, defaultValue, name);
+      const isEmpty = result === defaultValue ||
         (typeof result === 'object' && Object.keys(result as object).length === 0) ||
         (typeof result === 'string' && result === '');
-
       if (isEmpty) {
-        dataSources.failed.push(dataSourceNames[i]);
+        dataSources.failed.push(name);
       } else {
-        dataSources.loaded.push(dataSourceNames[i]);
+        dataSources.loaded.push(name);
       }
-    }
+      return result;
+    };
+
+    // Load each data source sequentially
+    const salesData = await loadAndTrack('sales', () => this.loadRecentSalesData(), {});
+    const brandData = await loadAndTrack('brands', () => this.loadRecentBrandData(), {});
+    const customerData = await loadAndTrack('customers', () => this.loadRecentCustomerData(), {});
+    const invoiceData = await loadAndTrack('invoices', () => this.loadRecentInvoiceData(), {});
+    const qrData = await loadAndTrack('qr_codes', () => this.loadQrCodeData(), {});
+    const seoData = await loadAndTrack('seo_audits', () => this.loadSeoAuditData(), {});
+    const budtenderData = await loadAndTrack('budtenders', () => this.loadBudtenderData(), {});
+    const productData = await loadAndTrack('products', () => this.loadProductData(), {});
+    const researchData = await loadAndTrack('research', () => this.loadResearchData(), {});
+    const correlationSummary = await loadAndTrack('correlations',
+      () => dataCorrelationsService.getCorrelationSummaryForAI(), '');
 
     console.log(`[Phase1] Data sources - Loaded: ${dataSources.loaded.length}, Failed: ${dataSources.failed.length}`);
     if (dataSources.failed.length > 0) {
