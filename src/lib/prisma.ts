@@ -48,6 +48,9 @@ const createPrismaClient = (datasourceUrl?: string) => {
 // This allows us to fetch credentials before creating the client
 let _prisma: PrismaClient | undefined = globalThis.prisma;
 
+// Track whether eager initialization has been kicked off
+let _eagerInitPromise: Promise<void> | null = null;
+
 // Helper to add pool params to a URL that might not have them
 function ensurePoolParams(url: string | undefined): string | undefined {
   if (!url) return url;
@@ -66,13 +69,49 @@ function ensurePoolParams(url: string | undefined): string | undefined {
   return `${url}${separator}${poolParams}`;
 }
 
+/**
+ * Eagerly initialize the Prisma client with credentials from Secrets Manager.
+ * In production, this runs on module load so that by the time the first
+ * database query arrives, `_prisma` already has the correct (rotated) password.
+ *
+ * If Secrets Manager is unreachable, it falls back to the DATABASE_URL env var.
+ */
+function startEagerInit(): Promise<void> {
+  if (_eagerInitPromise) return _eagerInitPromise;
+  _eagerInitPromise = (async () => {
+    try {
+      const databaseUrl = await getDatabaseUrl();
+      if (!_prisma || globalThis.prismaDatasourceUrl !== databaseUrl) {
+        if (_prisma) {
+          try { await _prisma.$disconnect(); } catch { /* ignore */ }
+        }
+        _prisma = createPrismaClient(databaseUrl);
+        globalThis.prismaDatasourceUrl = databaseUrl;
+        process.env.DATABASE_URL = databaseUrl;
+      }
+      globalThis.prismaInitialized = true;
+    } catch (error) {
+      console.warn('Eager Prisma init from Secrets Manager failed, will fall back to DATABASE_URL env var:', error);
+      // Fall through — the Proxy fallback below will use the env var
+    }
+  })();
+  return _eagerInitPromise;
+}
+
+// In production, kick off Secrets Manager fetch immediately on module load.
+// By the time Next.js handles the first request, _prisma will have fresh credentials.
+if (process.env.NODE_ENV === 'production' || process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI) {
+  startEagerInit();
+}
+
 // Export a getter that returns the prisma instance
 // For backwards compatibility with code that imports `prisma` directly
 export const prisma = new Proxy({} as PrismaClient, {
   get(_target, prop) {
     if (!_prisma) {
-      // Fallback: create with env var if not initialized
-      // Ensure pool params are added even if using env var directly
+      // Fallback: create with env var if not yet initialized via Secrets Manager.
+      // In production the eager init above will usually beat the first query,
+      // but if not, use the (possibly stale) env var as a last resort.
       const urlWithParams = ensurePoolParams(process.env.DATABASE_URL);
       _prisma = createPrismaClient(urlWithParams);
       if (process.env.NODE_ENV !== 'production') {

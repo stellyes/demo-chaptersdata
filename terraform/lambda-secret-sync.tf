@@ -65,25 +65,49 @@ data "archive_file" "secret_sync_lambda" {
 import json
 import boto3
 import urllib.parse
+import time
 
 def handler(event, context):
     """
-    Lambda triggered when RDS password rotates.
+    Lambda triggered when RDS password rotation completes.
     Updates Amplify environment variables with new DATABASE_URL.
+
+    Only acts on FinishSecret events (rotation complete, AWSCURRENT updated).
+    Skips PutSecretValue/RotateSecret events to avoid syncing stale credentials
+    during the AWSPENDING phase.
     """
     print(f"Received event: {json.dumps(event)}")
 
+    # Determine which rotation event triggered us
+    event_name = event.get('detail', {}).get('eventName', '')
+
+    # Only sync credentials after rotation is fully complete.
+    # PutSecretValue fires during AWSPENDING (new password not yet active).
+    # FinishSecret fires after AWSPENDING is promoted to AWSCURRENT.
+    if event_name in ('RotateSecret', 'PutSecretValue'):
+        print(f"Skipping {event_name} event - waiting for FinishSecret to sync credentials")
+        return {
+            'statusCode': 200,
+            'body': json.dumps(f'Skipped {event_name} - will sync on FinishSecret')
+        }
+
     # Get the secret ARN from the event
-    secret_arn = event.get('detail', {}).get('secretArn') or event.get('SecretArn')
+    secret_arn = (
+        event.get('detail', {}).get('requestParameters', {}).get('secretId')
+        or event.get('detail', {}).get('secretArn')
+        or event.get('SecretArn')
+    )
 
     if not secret_arn:
-        print("No secret ARN in event, checking for test invocation")
-        # For manual testing, use the known secret ARN
+        print("No secret ARN in event, using known secret ARN for manual invocation")
         secret_arn = "${aws_rds_cluster.chapters.master_user_secret[0].secret_arn}"
 
-    # Get the new password from Secrets Manager
+    # Brief delay to ensure AWSCURRENT is fully propagated after FinishSecret
+    time.sleep(2)
+
+    # Fetch the AWSCURRENT version explicitly to guarantee we get the active password
     sm = boto3.client('secretsmanager', region_name='${var.aws_region}')
-    secret = sm.get_secret_value(SecretId=secret_arn)
+    secret = sm.get_secret_value(SecretId=secret_arn, VersionStage='AWSCURRENT')
     secret_data = json.loads(secret['SecretString'])
 
     username = secret_data['username']
@@ -117,14 +141,7 @@ def handler(event, context):
                 environmentVariables=current_env
             )
 
-            # Trigger a new deployment
-            amplify.start_job(
-                appId=app_id,
-                branchName='main',
-                jobType='RELEASE'
-            )
-
-            print(f"Successfully updated app {app_id}")
+            print(f"Successfully updated DATABASE_URL env var for app {app_id} (no redeployment needed - apps fetch credentials from Secrets Manager at runtime)")
 
         except Exception as e:
             print(f"Error updating app {app_id}: {str(e)}")
@@ -165,7 +182,7 @@ resource "aws_cloudwatch_event_rule" "secret_rotation" {
     detail-type = ["AWS API Call via CloudTrail"]
     detail = {
       eventSource = ["secretsmanager.amazonaws.com"]
-      eventName   = ["RotateSecret", "PutSecretValue"]
+      eventName   = ["RotateSecret", "PutSecretValue", "FinishSecret"]
       requestParameters = {
         secretId = [aws_rds_cluster.chapters.master_user_secret[0].secret_arn]
       }
