@@ -195,9 +195,12 @@ interface DataReviewResult {
     customerActivity: string;
     recentChanges: string[];
   };
+  costStructureInsights?: string[];
+  customerSegmentInsights?: string[];
   areasOfConcern: string[];
   areasOfOpportunity: string[];
   anomalies: string[];
+  dataQualityIssues?: string[];
   suggestedQuestionTopics: string[];
 }
 
@@ -972,6 +975,7 @@ export class DailyLearningService {
     const budtenderData = await loadAndTrack('budtenders', () => this.loadBudtenderData(), {});
     const productData = await loadAndTrack('products', () => this.loadProductData(), {});
     const researchData = await loadAndTrack('research', () => this.loadResearchData(), {});
+    const dataFlagData = await loadAndTrack('data_flags', () => this.loadDataFlagSummary(), {});
     const correlationSummary = await loadAndTrack('correlations',
       () => dataCorrelationsService.getCorrelationSummaryForAI(), '');
 
@@ -992,6 +996,7 @@ export class DailyLearningService {
       budtenderData,
       productData,
       researchData,
+      dataFlagData,
       correlationSummary
     );
 
@@ -1012,21 +1017,23 @@ export class DailyLearningService {
     budtenderData: unknown,
     productData: unknown,
     researchData: unknown,
+    dataFlagData: unknown,
     correlationSummary: string
   ): Promise<DataReviewResult> {
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
 
 ## INDIVIDUAL DATA SOURCES
 
-SALES DATA: ${JSON.stringify(salesData, null, 2)}
-BRAND DATA: ${JSON.stringify(brandData, null, 2)}
-CUSTOMER DATA: ${JSON.stringify(customerData, null, 2)}
-INVOICE/PURCHASING DATA: ${JSON.stringify(invoiceData, null, 2)}
+SALES DATA (daily detail with cost structure): ${JSON.stringify(salesData, null, 2)}
+BRAND PERFORMANCE (all brands with margin/cost analysis): ${JSON.stringify(brandData, null, 2)}
+CUSTOMER SEGMENTATION (spending tiers, recency, at-risk): ${JSON.stringify(customerData, null, 2)}
+INVOICE/PURCHASING DATA (full vendor & cost breakdown): ${JSON.stringify(invoiceData, null, 2)}
 BUDTENDER PERFORMANCE: ${JSON.stringify(budtenderData, null, 2)}
 PRODUCT CATEGORY DATA: ${JSON.stringify(productData, null, 2)}
 MARKET RESEARCH: ${JSON.stringify(researchData, null, 2)}
 QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
 WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
+DATA QUALITY FLAGS (unresolved issues): ${JSON.stringify(dataFlagData, null, 2)}
 
 ## CROSS-TABLE CORRELATIONS & ANALYTICS
 The following links data across multiple tables to reveal deeper insights:
@@ -1034,20 +1041,27 @@ The following links data across multiple tables to reveal deeper insights:
 ${correlationSummary}
 
 ## ANALYSIS INSTRUCTIONS
-1. Look for correlations between purchasing costs and sales revenue by brand
-2. Identify which product categories have the best markup ratios
-3. Note any discrepancies between vendor costs and sales performance
-4. Identify customer segments that may need attention (at-risk, lapsed)
-5. Look for patterns in dates with regulatory events vs sales performance
-6. Cross-reference the knowledge base insights with current data
+1. Perform cost structure analysis: compare COGS, excise burden, and gross margins across brands and product types
+2. Identify brand profitability: cross-reference brand purchasing costs with brand sales revenue and margins
+3. Analyze product category profitability: which categories yield the highest markup and margin
+4. Perform customer segmentation analysis: LTV by tier, at-risk high-value customers, retention gaps
+5. Evaluate vendor cost efficiency: compare pricing across vendors supplying the same brands
+6. Look for daily trend patterns: margin compression, discount trends, cost percentage changes
+7. Note data quality issues: unresolved data flags that may affect analysis accuracy
+8. Cross-reference the knowledge base insights with current data
+9. Look for patterns in dates with regulatory events vs sales performance
+10. Analyze the long-tail of brands (beyond top 10) for emerging opportunities
 
 Return JSON:
 {
   "summary": "Brief overview including key cross-table insights",
   "keyMetrics": { "salesTrend": "", "topBrands": [], "customerActivity": "", "recentChanges": [] },
+  "costStructureInsights": [],
+  "customerSegmentInsights": [],
   "areasOfConcern": [],
   "areasOfOpportunity": [],
   "anomalies": [],
+  "dataQualityIssues": [],
   "suggestedQuestionTopics": []
 }`;
 
@@ -1129,6 +1143,7 @@ Return JSON:
       budtenderData,
       productData,
       researchData,
+      dataFlagData,
       correlationSummary,
     ] = await Promise.all([
       safeQuery(() => this.loadRecentSalesData(), {}, 'loadRecentSalesData'),
@@ -1140,6 +1155,7 @@ Return JSON:
       safeQuery(() => this.loadBudtenderData(), {}, 'loadBudtenderData'),
       safeQuery(() => this.loadProductData(), {}, 'loadProductData'),
       safeQuery(() => this.loadResearchData(), {}, 'loadResearchData'),
+      safeQuery(() => this.loadDataFlagSummary(), {}, 'loadDataFlagSummary'),
       safeQuery(() => dataCorrelationsService.getCorrelationSummaryForAI(), '', 'getCorrelationSummaryForAI'),
     ]);
 
@@ -1147,15 +1163,16 @@ Return JSON:
 
 ## INDIVIDUAL DATA SOURCES
 
-SALES DATA: ${JSON.stringify(salesData, null, 2)}
-BRAND DATA: ${JSON.stringify(brandData, null, 2)}
-CUSTOMER DATA: ${JSON.stringify(customerData, null, 2)}
-INVOICE/PURCHASING DATA: ${JSON.stringify(invoiceData, null, 2)}
+SALES DATA (daily detail with cost structure): ${JSON.stringify(salesData, null, 2)}
+BRAND PERFORMANCE (all brands with margin/cost analysis): ${JSON.stringify(brandData, null, 2)}
+CUSTOMER SEGMENTATION (spending tiers, recency, at-risk): ${JSON.stringify(customerData, null, 2)}
+INVOICE/PURCHASING DATA (full vendor & cost breakdown): ${JSON.stringify(invoiceData, null, 2)}
 BUDTENDER PERFORMANCE: ${JSON.stringify(budtenderData, null, 2)}
 PRODUCT CATEGORY DATA: ${JSON.stringify(productData, null, 2)}
 MARKET RESEARCH: ${JSON.stringify(researchData, null, 2)}
 QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
 WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
+DATA QUALITY FLAGS (unresolved issues): ${JSON.stringify(dataFlagData, null, 2)}
 
 ## CROSS-TABLE CORRELATIONS & ANALYTICS
 The following links data across multiple tables to reveal deeper insights:
@@ -1163,20 +1180,27 @@ The following links data across multiple tables to reveal deeper insights:
 ${correlationSummary}
 
 ## ANALYSIS INSTRUCTIONS
-1. Look for correlations between purchasing costs and sales revenue by brand
-2. Identify which product categories have the best markup ratios
-3. Note any discrepancies between vendor costs and sales performance
-4. Identify customer segments that may need attention (at-risk, lapsed)
-5. Look for patterns in dates with regulatory events vs sales performance
-6. Cross-reference the knowledge base insights with current data
+1. Perform cost structure analysis: compare COGS, excise burden, and gross margins across brands and product types
+2. Identify brand profitability: cross-reference brand purchasing costs with brand sales revenue and margins
+3. Analyze product category profitability: which categories yield the highest markup and margin
+4. Perform customer segmentation analysis: LTV by tier, at-risk high-value customers, retention gaps
+5. Evaluate vendor cost efficiency: compare pricing across vendors supplying the same brands
+6. Look for daily trend patterns: margin compression, discount trends, cost percentage changes
+7. Note data quality issues: unresolved data flags that may affect analysis accuracy
+8. Cross-reference the knowledge base insights with current data
+9. Look for patterns in dates with regulatory events vs sales performance
+10. Analyze the long-tail of brands (beyond top 10) for emerging opportunities
 
 Return JSON:
 {
   "summary": "Brief overview including key cross-table insights",
   "keyMetrics": { "salesTrend": "", "topBrands": [], "customerActivity": "", "recentChanges": [] },
+  "costStructureInsights": [],
+  "customerSegmentInsights": [],
   "areasOfConcern": [],
   "areasOfOpportunity": [],
   "anomalies": [],
+  "dataQualityIssues": [],
   "suggestedQuestionTopics": []
 }`;
 
@@ -2255,31 +2279,81 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const salesRecords = await prisma.salesRecord.findMany({
       where: { date: { gte: thirtyDaysAgo } },
       orderBy: { date: 'desc' },
-      take: 30,
     });
 
     const totalSales = salesRecords.reduce((sum, r) => sum + parseFloat(r.netSales.toString()), 0);
+    const totalGrossSales = salesRecords.reduce((sum, r) => sum + parseFloat(r.grossSales.toString()), 0);
+    const totalCogs = salesRecords.reduce((sum, r) => sum + parseFloat(r.cogsWithExcise.toString()), 0);
+    const totalDiscounts = salesRecords.reduce((sum, r) => sum + parseFloat(r.discounts.toString()), 0);
+    const totalReturns = salesRecords.reduce((sum, r) => sum + parseFloat(r.returns.toString()), 0);
+    const totalGrossIncome = salesRecords.reduce((sum, r) => sum + parseFloat(r.grossIncome.toString()), 0);
     const avgDaily = totalSales / Math.max(salesRecords.length, 1);
+    const avgMargin = salesRecords.length > 0
+      ? salesRecords.reduce((sum, r) => sum + parseFloat(r.grossMarginPct.toString()), 0) / salesRecords.length
+      : 0;
+    const avgDiscountPct = salesRecords.length > 0
+      ? salesRecords.reduce((sum, r) => sum + parseFloat(r.discountPct.toString()), 0) / salesRecords.length
+      : 0;
+    const avgCostPct = salesRecords.length > 0
+      ? salesRecords.reduce((sum, r) => sum + parseFloat(r.costPct.toString()), 0) / salesRecords.length
+      : 0;
+    const totalCustomers = salesRecords.reduce((sum, r) => sum + r.customersCount, 0);
+    const totalNewCustomers = salesRecords.reduce((sum, r) => sum + r.newCustomers, 0);
+    const totalTickets = salesRecords.reduce((sum, r) => sum + r.ticketsCount, 0);
+    const totalUnits = salesRecords.reduce((sum, r) => sum + r.unitsSold, 0);
+
+    // Per-day detail for trend analysis (include cost structure)
+    const dailyDetail = salesRecords.map(r => ({
+      date: r.date.toISOString().split('T')[0],
+      store: r.storeName || r.storeId,
+      netSales: parseFloat(r.netSales.toString()),
+      grossSales: parseFloat(r.grossSales.toString()),
+      cogs: parseFloat(r.cogsWithExcise.toString()),
+      grossIncome: parseFloat(r.grossIncome.toString()),
+      grossMarginPct: parseFloat(r.grossMarginPct.toString()),
+      costPct: parseFloat(r.costPct.toString()),
+      discountPct: parseFloat(r.discountPct.toString()),
+      tickets: r.ticketsCount,
+      customers: r.customersCount,
+      newCustomers: r.newCustomers,
+      avgOrderValue: parseFloat(r.avgOrderValue.toString()),
+      avgOrderProfit: parseFloat(r.avgOrderProfit.toString()),
+      avgBasketSize: parseFloat(r.avgBasketSize.toString()),
+    }));
 
     return {
       periodDays: 30,
       totalNetSales: totalSales.toFixed(2),
+      totalGrossSales: totalGrossSales.toFixed(2),
+      totalCOGS: totalCogs.toFixed(2),
+      totalGrossIncome: totalGrossIncome.toFixed(2),
+      totalDiscounts: totalDiscounts.toFixed(2),
+      totalReturns: totalReturns.toFixed(2),
       avgDailySales: avgDaily.toFixed(2),
+      avgGrossMarginPct: avgMargin.toFixed(1),
+      avgCostPct: avgCostPct.toFixed(1),
+      avgDiscountPct: avgDiscountPct.toFixed(1),
+      totalCustomers,
+      totalNewCustomers,
+      totalTickets,
+      totalUnitsSold: totalUnits,
+      avgOrderValue: totalTickets > 0 ? (totalSales / totalTickets).toFixed(2) : '0.00',
+      avgOrderProfit: totalTickets > 0 ? (totalGrossIncome / totalTickets).toFixed(2) : '0.00',
       recordCount: salesRecords.length,
+      dailyDetail,
     };
   }
 
   private async loadRecentBrandData(): Promise<Record<string, unknown>> {
+    // Load ALL brand records (not just top 10) to enable full portfolio analysis
     const brandRecords = await prisma.brandRecord.findMany({
       orderBy: { netSales: 'desc' },
-      take: 10,
       include: { brand: true },
     });
 
-    // Load vendor-brand relationships (which vendors supply which brands)
+    // Load ALL vendor-brand relationships for complete supply chain visibility
     const vendorBrands = await prisma.vendorBrand.findMany({
       orderBy: { invoiceCount: 'desc' },
-      take: 30,
       include: {
         vendor: true,
         brand: true,
@@ -2287,15 +2361,16 @@ Return ONLY valid JSON, no markdown or explanation.`;
     });
 
     // Group by vendor to show which brands each vendor supplies
-    const vendorBrandMap: Record<string, { brands: string[]; totalInvoices: number; totalUnits: number }> = {};
+    const vendorBrandMap: Record<string, { brands: string[]; totalInvoices: number; totalUnits: number; totalCost: number }> = {};
     for (const vb of vendorBrands) {
       const vendorName = vb.vendor.canonicalName;
       if (!vendorBrandMap[vendorName]) {
-        vendorBrandMap[vendorName] = { brands: [], totalInvoices: 0, totalUnits: 0 };
+        vendorBrandMap[vendorName] = { brands: [], totalInvoices: 0, totalUnits: 0, totalCost: 0 };
       }
       vendorBrandMap[vendorName].brands.push(vb.brand.canonicalName);
       vendorBrandMap[vendorName].totalInvoices += vb.invoiceCount;
       vendorBrandMap[vendorName].totalUnits += vb.totalUnits;
+      vendorBrandMap[vendorName].totalCost += parseFloat(vb.totalCost.toString());
     }
 
     // Group by brand to show which vendors supply each brand
@@ -2308,17 +2383,54 @@ Return ONLY valid JSON, no markdown or explanation.`;
       brandVendorMap[brandName].push(vb.vendor.canonicalName);
     }
 
+    // Calculate total to enable percentage computation
+    const totalBrandSales = brandRecords.reduce((sum, b) => sum + parseFloat(b.netSales.toString()), 0);
+
+    // Provide ALL brands with full margin and cost data
+    const allBrands = brandRecords.map(b => ({
+      name: b.brand?.canonicalName || b.originalBrandName,
+      netSales: parseFloat(b.netSales.toString()),
+      pctOfTotalSales: parseFloat(b.pctOfTotalNetSales.toString()),
+      grossMarginPct: parseFloat(b.grossMarginPct.toString()),
+      avgCostWoExcise: parseFloat(b.avgCostWoExcise.toString()),
+      suppliers: brandVendorMap[b.brand?.canonicalName || ''] || [],
+      store: b.storeName || b.storeId,
+    }));
+
+    // Identify underperforming brands (low margin or declining)
+    const lowMarginBrands = allBrands
+      .filter(b => b.grossMarginPct < 40 && b.netSales > 0)
+      .sort((a, b) => a.grossMarginPct - b.grossMarginPct);
+
+    // Identify high-margin opportunity brands
+    const highMarginBrands = allBrands
+      .filter(b => b.grossMarginPct >= 55)
+      .sort((a, b) => b.grossMarginPct - a.grossMarginPct);
+
     return {
-      topBrands: brandRecords.map(b => ({
-        name: b.brand?.canonicalName || b.originalBrandName,
-        netSales: parseFloat(b.netSales.toString()),
-        suppliers: brandVendorMap[b.brand?.canonicalName || ''] || [],
+      totalBrandsTracked: allBrands.length,
+      totalBrandSales: totalBrandSales.toFixed(2),
+      // Top 15 brands for primary analysis
+      topBrands: allBrands.slice(0, 15),
+      // All remaining brands for long-tail analysis
+      remainingBrands: allBrands.slice(15).map(b => ({
+        name: b.name,
+        netSales: b.netSales,
+        grossMarginPct: b.grossMarginPct,
+        pctOfTotalSales: b.pctOfTotalSales,
       })),
+      // Margin analysis
+      lowMarginBrands: lowMarginBrands.slice(0, 10),
+      highMarginBrands: highMarginBrands.slice(0, 10),
+      avgBrandMargin: allBrands.length > 0
+        ? (allBrands.reduce((sum, b) => sum + b.grossMarginPct, 0) / allBrands.length).toFixed(1)
+        : '0.0',
       vendorBrandRelationships: Object.entries(vendorBrandMap).map(([vendor, data]) => ({
         vendor,
         brands: data.brands,
         totalInvoices: data.totalInvoices,
         totalUnits: data.totalUnits,
+        totalCost: data.totalCost.toFixed(2),
       })),
       totalVendorBrandLinks: vendorBrands.length,
     };
@@ -2327,16 +2439,118 @@ Return ONLY valid JSON, no markdown or explanation.`;
   private async loadRecentCustomerData(): Promise<Record<string, unknown>> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const activeCustomers = await prisma.customer.count({
-      where: { lastVisitDate: { gte: thirtyDaysAgo } },
-    });
-    const totalCustomers = await prisma.customer.count();
+    // Run all customer queries in parallel
+    const [
+      activeCustomers,
+      totalCustomers,
+      newCustomers30d,
+      segmentCounts,
+      recencyCounts,
+      avgMetrics,
+      topCustomers,
+      atRiskCustomers,
+    ] = await Promise.all([
+      prisma.customer.count({
+        where: { lastVisitDate: { gte: thirtyDaysAgo } },
+      }),
+      prisma.customer.count(),
+      prisma.customer.count({
+        where: { signupDate: { gte: thirtyDaysAgo } },
+      }),
+      // Group by customer segment (spending tier)
+      prisma.customer.groupBy({
+        by: ['customerSegment'],
+        _count: { id: true },
+        _sum: { lifetimeNetSales: true },
+        _avg: { lifetimeNetSales: true, lifetimeVisits: true, lifetimeAov: true },
+      }),
+      // Group by recency segment (visit freshness)
+      prisma.customer.groupBy({
+        by: ['recencySegment'],
+        _count: { id: true },
+        _sum: { lifetimeNetSales: true },
+        _avg: { lifetimeNetSales: true },
+      }),
+      // Overall averages
+      prisma.customer.aggregate({
+        _avg: { lifetimeNetSales: true, lifetimeVisits: true, lifetimeAov: true },
+      }),
+      // Top 20 customers by LTV
+      prisma.customer.findMany({
+        orderBy: { lifetimeNetSales: 'desc' },
+        take: 20,
+        select: {
+          customerSegment: true,
+          recencySegment: true,
+          lifetimeNetSales: true,
+          lifetimeVisits: true,
+          lifetimeAov: true,
+          lastVisitDate: true,
+        },
+      }),
+      // At-risk high-value customers (VIP/Whale who haven't visited in 30+ days)
+      prisma.customer.findMany({
+        where: {
+          customerSegment: { in: ['VIP', 'Whale', 'Good'] },
+          lastVisitDate: { lt: thirtyDaysAgo },
+        },
+        orderBy: { lifetimeNetSales: 'desc' },
+        take: 20,
+        select: {
+          customerSegment: true,
+          recencySegment: true,
+          lifetimeNetSales: true,
+          lifetimeVisits: true,
+          lastVisitDate: true,
+        },
+      }),
+    ]);
 
     return {
       activeCustomers30d: activeCustomers,
       totalCustomers,
+      newCustomers30d,
       activeRate: ((activeCustomers / Math.max(totalCustomers, 1)) * 100).toFixed(1) + '%',
+      avgLifetimeValue: parseFloat(avgMetrics._avg.lifetimeNetSales?.toString() || '0').toFixed(2),
+      avgLifetimeVisits: parseFloat(avgMetrics._avg.lifetimeVisits?.toString() || '0').toFixed(1),
+      avgAov: parseFloat(avgMetrics._avg.lifetimeAov?.toString() || '0').toFixed(2),
+      // Full spending-tier segmentation (New/Low, Regular, Good, VIP, Whale)
+      spendingSegments: segmentCounts.map(s => ({
+        segment: s.customerSegment || 'Unknown',
+        count: s._count.id,
+        totalRevenue: parseFloat(s._sum.lifetimeNetSales?.toString() || '0').toFixed(2),
+        avgLtv: parseFloat(s._avg.lifetimeNetSales?.toString() || '0').toFixed(2),
+        avgVisits: parseFloat(s._avg.lifetimeVisits?.toString() || '0').toFixed(1),
+        avgAov: parseFloat(s._avg.lifetimeAov?.toString() || '0').toFixed(2),
+      })),
+      // Full recency segmentation (Active, Warm, Cool, Cold, Lost)
+      recencySegments: recencyCounts.map(s => ({
+        segment: s.recencySegment || 'Unknown',
+        count: s._count.id,
+        totalRevenue: parseFloat(s._sum.lifetimeNetSales?.toString() || '0').toFixed(2),
+        avgLtv: parseFloat(s._avg.lifetimeNetSales?.toString() || '0').toFixed(2),
+      })),
+      // Top 20 customers by lifetime value
+      topCustomers: topCustomers.map(c => ({
+        segment: c.customerSegment,
+        recency: c.recencySegment,
+        ltv: parseFloat(c.lifetimeNetSales.toString()),
+        visits: c.lifetimeVisits,
+        aov: parseFloat(c.lifetimeAov.toString()),
+        lastVisit: c.lastVisitDate?.toISOString().split('T')[0] || null,
+      })),
+      // At-risk high-value customers needing retention attention
+      atRiskHighValueCustomers: atRiskCustomers.map(c => ({
+        segment: c.customerSegment,
+        recency: c.recencySegment,
+        ltv: parseFloat(c.lifetimeNetSales.toString()),
+        visits: c.lifetimeVisits,
+        lastVisit: c.lastVisitDate?.toISOString().split('T')[0] || null,
+      })),
+      atRiskHighValueCount: atRiskCustomers.length,
     };
   }
 
@@ -2344,6 +2558,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    // Load ALL invoices in 30-day window (not just 50)
     const invoices = await prisma.invoice.findMany({
       where: { invoiceDate: { gte: thirtyDaysAgo } },
       include: {
@@ -2353,49 +2568,112 @@ Return ONLY valid JSON, no markdown or explanation.`;
         },
       },
       orderBy: { invoiceDate: 'desc' },
-      take: 50,
     });
 
     const totalCost = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalCost.toString()), 0);
-    const vendorCounts: Record<string, number> = {};
-    const brandCounts: Record<string, { count: number; cost: number; units: number }> = {};
+    const totalWithExcise = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalWithExcise.toString()), 0);
+    const totalDiscount = invoices.reduce((sum, inv) => sum + parseFloat(inv.discount.toString()), 0);
+    const totalFees = invoices.reduce((sum, inv) => sum + parseFloat(inv.fees.toString()), 0);
+    const totalTax = invoices.reduce((sum, inv) => sum + parseFloat(inv.tax.toString()), 0);
+
+    // Track ALL vendors (not just top 5)
+    const vendorStats: Record<string, { count: number; cost: number; costWithExcise: number; brands: Set<string> }> = {};
+    // Track ALL brands purchased with full cost detail
+    const brandCosts: Record<string, { count: number; cost: number; costWithExcise: number; units: number; avgUnitCost: number; excisePerUnit: number }> = {};
+    // Track by product type for category-level cost analysis
+    const productTypeCosts: Record<string, { count: number; cost: number; units: number }> = {};
 
     invoices.forEach(inv => {
       const vendorName = inv.vendor?.canonicalName || inv.originalVendorName || 'Unknown';
-      vendorCounts[vendorName] = (vendorCounts[vendorName] || 0) + 1;
+      if (!vendorStats[vendorName]) {
+        vendorStats[vendorName] = { count: 0, cost: 0, costWithExcise: 0, brands: new Set() };
+      }
+      vendorStats[vendorName].count++;
+      vendorStats[vendorName].cost += parseFloat(inv.totalCost.toString());
+      vendorStats[vendorName].costWithExcise += parseFloat(inv.totalWithExcise.toString());
 
-      // Track brands purchased
       inv.lineItems.forEach(item => {
         const brandName = item.brand?.canonicalName || item.originalBrandName || 'Unknown';
-        if (!brandCounts[brandName]) {
-          brandCounts[brandName] = { count: 0, cost: 0, units: 0 };
+        vendorStats[vendorName].brands.add(brandName);
+
+        if (!brandCosts[brandName]) {
+          brandCosts[brandName] = { count: 0, cost: 0, costWithExcise: 0, units: 0, avgUnitCost: 0, excisePerUnit: 0 };
         }
-        brandCounts[brandName].count++;
-        brandCounts[brandName].cost += parseFloat(item.totalCost.toString());
-        brandCounts[brandName].units += item.skuUnits;
+        brandCosts[brandName].count++;
+        brandCosts[brandName].cost += parseFloat(item.totalCost.toString());
+        brandCosts[brandName].costWithExcise += parseFloat(item.totalCostWithExcise.toString());
+        brandCosts[brandName].units += item.skuUnits;
+
+        // Track product type costs
+        const productType = item.productType || 'Unknown';
+        if (!productTypeCosts[productType]) {
+          productTypeCosts[productType] = { count: 0, cost: 0, units: 0 };
+        }
+        productTypeCosts[productType].count++;
+        productTypeCosts[productType].cost += parseFloat(item.totalCost.toString());
+        productTypeCosts[productType].units += item.skuUnits;
       });
     });
 
-    const topVendors = Object.entries(vendorCounts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([name, count]) => ({ name, invoiceCount: count }));
+    // Compute derived metrics for brands
+    Object.values(brandCosts).forEach(b => {
+      b.avgUnitCost = b.units > 0 ? b.cost / b.units : 0;
+      b.excisePerUnit = b.units > 0 ? (b.costWithExcise - b.cost) / b.units : 0;
+    });
 
-    const topBrandsPurchased = Object.entries(brandCounts)
+    // ALL vendors sorted by spend (not just top 5)
+    const allVendors = Object.entries(vendorStats)
       .sort(([, a], [, b]) => b.cost - a.cost)
-      .slice(0, 10)
+      .map(([name, data]) => ({
+        name,
+        invoiceCount: data.count,
+        totalCost: data.cost.toFixed(2),
+        totalWithExcise: data.costWithExcise.toFixed(2),
+        brandCount: data.brands.size,
+        brands: Array.from(data.brands).slice(0, 10),
+      }));
+
+    // ALL brands purchased sorted by cost
+    const allBrandsPurchased = Object.entries(brandCosts)
+      .sort(([, a], [, b]) => b.cost - a.cost)
       .map(([name, data]) => ({
         name,
         lineItems: data.count,
         totalCost: data.cost.toFixed(2),
+        totalWithExcise: data.costWithExcise.toFixed(2),
         units: data.units,
+        avgUnitCost: data.avgUnitCost.toFixed(2),
+        excisePerUnit: data.excisePerUnit.toFixed(2),
+      }));
+
+    // Product type cost breakdown
+    const productTypeSummary = Object.entries(productTypeCosts)
+      .sort(([, a], [, b]) => b.cost - a.cost)
+      .map(([type, data]) => ({
+        productType: type,
+        lineItems: data.count,
+        totalCost: data.cost.toFixed(2),
+        units: data.units,
+        avgUnitCost: data.units > 0 ? (data.cost / data.units).toFixed(2) : '0.00',
+        pctOfTotalCost: ((data.cost / Math.max(totalCost, 1)) * 100).toFixed(1) + '%',
       }));
 
     return {
       recentInvoiceCount: invoices.length,
       totalPurchasingCost30d: totalCost.toFixed(2),
-      topVendors,
-      topBrandsPurchased,
+      totalWithExcise30d: totalWithExcise.toFixed(2),
+      totalDiscounts30d: totalDiscount.toFixed(2),
+      totalFees30d: totalFees.toFixed(2),
+      totalTax30d: totalTax.toFixed(2),
+      exciseBurden: (totalWithExcise - totalCost).toFixed(2),
+      // Full vendor breakdown (not capped at 5)
+      allVendors,
+      vendorCount: allVendors.length,
+      // Full brand cost breakdown
+      allBrandsPurchased,
+      brandsPurchasedCount: allBrandsPurchased.length,
+      // Product type cost structure
+      productTypeCostBreakdown: productTypeSummary,
       lineItemsCount: invoices.reduce((sum, inv) => sum + inv.lineItems.length, 0),
       lineItemsWithBrand: invoices.reduce((sum, inv) =>
         sum + inv.lineItems.filter(li => li.brandId !== null).length, 0),
@@ -2628,6 +2906,69 @@ Return ONLY valid JSON, no markdown or explanation.`;
         finding: a.finding.substring(0, 150) + '...',
         action: a.recommendedAction?.substring(0, 100) + '...',
         category: a.category,
+      })),
+    };
+  }
+
+  /**
+   * Loads data quality flags to surface unresolved data issues to the learning model.
+   * DataFlags capture brand mismatches, data anomalies, and quality concerns.
+   */
+  private async loadDataFlagSummary(): Promise<Record<string, unknown>> {
+    const [pendingFlags, recentFlags] = await Promise.all([
+      // Count pending flags by severity
+      prisma.dataFlag.groupBy({
+        by: ['severity', 'flagType'],
+        where: { status: 'pending' },
+        _count: { id: true },
+      }),
+      // Recent unresolved flags with details
+      prisma.dataFlag.findMany({
+        where: { status: { in: ['pending', 'in_review'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          flagType: true,
+          severity: true,
+          status: true,
+          sourceTable: true,
+          title: true,
+          description: true,
+          rawValue: true,
+          suggestedMatch: true,
+          similarityScore: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    if (pendingFlags.length === 0 && recentFlags.length === 0) {
+      return { dataAvailable: false, pendingIssueCount: 0 };
+    }
+
+    // Summarize by severity
+    const bySeverity: Record<string, number> = {};
+    const byType: Record<string, number> = {};
+    for (const group of pendingFlags) {
+      bySeverity[group.severity] = (bySeverity[group.severity] || 0) + group._count.id;
+      byType[group.flagType] = (byType[group.flagType] || 0) + group._count.id;
+    }
+
+    return {
+      dataAvailable: true,
+      pendingIssueCount: Object.values(bySeverity).reduce((a, b) => a + b, 0),
+      bySeverity,
+      byType,
+      recentFlags: recentFlags.map(f => ({
+        type: f.flagType,
+        severity: f.severity,
+        title: f.title,
+        description: f.description.substring(0, 200),
+        sourceTable: f.sourceTable,
+        rawValue: f.rawValue,
+        suggestedMatch: f.suggestedMatch,
+        similarityScore: f.similarityScore ? parseFloat(f.similarityScore.toString()) : null,
+        createdAt: f.createdAt.toISOString().split('T')[0],
       })),
     };
   }

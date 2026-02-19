@@ -202,16 +202,8 @@ export function LearningProgressTab() {
     });
 
     try {
-      const response = await fetch('/api/ai/learning/run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(currentOrganization?.orgId && { 'X-Org-Id': currentOrganization.orgId }),
-        },
-        body: JSON.stringify({ skipWebResearch }),
-      });
-
-      const result = await response.json();
+      const { runLearningJob } = await import('@/app/actions/learning');
+      const result = await runLearningJob({ skipWebResearch });
       if (result.success) {
         // Start polling for completion
         startPolling();
