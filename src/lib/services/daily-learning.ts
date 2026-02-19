@@ -195,6 +195,143 @@ interface DailyLearningJobState {
   metadata: JobMetadata;
 }
 
+// ============================================
+// LOG CAPTURE SYSTEM
+// Intercepts console.log/warn/error during job execution
+// to provide real-time log streaming via the status API.
+// Stores last N log entries in-memory and periodically
+// flushes them to the job's metadata in the database.
+// ============================================
+const LOG_BUFFER_MAX_SIZE = 200; // Keep last 200 log entries
+
+interface LogEntry {
+  ts: string;    // ISO timestamp
+  level: 'info' | 'warn' | 'error';
+  msg: string;   // The log message
+}
+
+// Module-level log buffer — active during a job run
+let _logBuffer: LogEntry[] = [];
+let _logBufferActive = false;
+let _logBufferJobId: string | null = null;
+let _originalConsoleLog: typeof console.log | null = null;
+let _originalConsoleWarn: typeof console.warn | null = null;
+let _originalConsoleError: typeof console.error | null = null;
+let _logFlushTimer: NodeJS.Timeout | null = null;
+
+function formatLogArgs(args: unknown[]): string {
+  return args.map(a => {
+    if (typeof a === 'string') return a;
+    if (a instanceof Error) return `${a.message}`;
+    try { return JSON.stringify(a); } catch { return String(a); }
+  }).join(' ');
+}
+
+function startLogCapture(jobId: string): void {
+  if (_logBufferActive) return; // Already capturing
+  _logBuffer = [];
+  _logBufferActive = true;
+  _logBufferJobId = jobId;
+  _originalConsoleLog = console.log;
+  _originalConsoleWarn = console.warn;
+  _originalConsoleError = console.error;
+
+  console.log = (...args: unknown[]) => {
+    const entry: LogEntry = {
+      ts: new Date().toISOString(),
+      level: 'info',
+      msg: formatLogArgs(args),
+    };
+    _logBuffer.push(entry);
+    if (_logBuffer.length > LOG_BUFFER_MAX_SIZE) {
+      _logBuffer = _logBuffer.slice(-LOG_BUFFER_MAX_SIZE);
+    }
+    _originalConsoleLog!.apply(console, args as [unknown, ...unknown[]]);
+  };
+
+  console.warn = (...args: unknown[]) => {
+    const entry: LogEntry = {
+      ts: new Date().toISOString(),
+      level: 'warn',
+      msg: formatLogArgs(args),
+    };
+    _logBuffer.push(entry);
+    if (_logBuffer.length > LOG_BUFFER_MAX_SIZE) {
+      _logBuffer = _logBuffer.slice(-LOG_BUFFER_MAX_SIZE);
+    }
+    _originalConsoleWarn!.apply(console, args as [unknown, ...unknown[]]);
+  };
+
+  console.error = (...args: unknown[]) => {
+    const entry: LogEntry = {
+      ts: new Date().toISOString(),
+      level: 'error',
+      msg: formatLogArgs(args),
+    };
+    _logBuffer.push(entry);
+    if (_logBuffer.length > LOG_BUFFER_MAX_SIZE) {
+      _logBuffer = _logBuffer.slice(-LOG_BUFFER_MAX_SIZE);
+    }
+    _originalConsoleError!.apply(console, args as [unknown, ...unknown[]]);
+  };
+
+  // Flush logs to DB every 3 seconds so the status API can serve them
+  _logFlushTimer = setInterval(() => {
+    flushLogBufferToDb().catch(() => {}); // Best-effort
+  }, 3000);
+}
+
+function stopLogCapture(): void {
+  if (!_logBufferActive) return;
+
+  // Restore original console methods
+  if (_originalConsoleLog) console.log = _originalConsoleLog;
+  if (_originalConsoleWarn) console.warn = _originalConsoleWarn;
+  if (_originalConsoleError) console.error = _originalConsoleError;
+  _originalConsoleLog = null;
+  _originalConsoleWarn = null;
+  _originalConsoleError = null;
+
+  if (_logFlushTimer) {
+    clearInterval(_logFlushTimer);
+    _logFlushTimer = null;
+  }
+
+  _logBufferActive = false;
+  _logBufferJobId = null;
+}
+
+async function flushLogBufferToDb(): Promise<void> {
+  if (!_logBufferActive || !_logBufferJobId || _logBuffer.length === 0) return;
+
+  try {
+    // Read current metadata, merge log buffer, write back
+    const snapshot = [..._logBuffer];
+    const job = await prisma.dailyLearningJob.findUnique({
+      where: { id: _logBufferJobId },
+      select: { jobMetadata: true },
+    });
+    if (job) {
+      const metadata = (job.jobMetadata as Record<string, unknown>) || {};
+      metadata.logBuffer = snapshot;
+      await prisma.dailyLearningJob.update({
+        where: { id: _logBufferJobId },
+        data: { jobMetadata: metadata as object },
+      });
+    }
+  } catch {
+    // Best-effort — don't crash the job for log persistence failures
+  }
+}
+
+/** Get current log buffer (for status API to read in-process) */
+export function getActiveJobLogs(): { jobId: string | null; logs: LogEntry[] } {
+  return {
+    jobId: _logBufferJobId,
+    logs: [..._logBuffer],
+  };
+}
+
 interface DataReviewResult {
   summary: string;
   keyMetrics: {
@@ -733,6 +870,10 @@ export class DailyLearningService {
     // ISSUE #9 FIX: Initialize phase metrics array for observability
     state.metadata.phaseMetrics = [];
 
+    // Start capturing console.log/warn/error to an in-memory buffer
+    // so the status API can stream logs to the monitoring script
+    startLogCapture(job.id);
+
     try {
       // ============================================
       // PHASE 1: Data Review
@@ -980,6 +1121,10 @@ export class DailyLearningService {
       console.log(`[Learning] Questions: ${questions.length}, Insights: ${correlatedInsights.length}, Articles: ${webResearchResults.reduce((sum, r) => sum + r.findings.length, 0)}`);
       console.log(`[Learning] ================================`);
 
+      // Final log flush before stopping capture
+      await flushLogBufferToDb().catch(() => {});
+      stopLogCapture();
+
       return { jobId: state.jobId, digest };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1004,6 +1149,11 @@ export class DailyLearningService {
           searchesUsed: state.searchesUsed,
         },
       });
+
+      // Final log flush before stopping capture
+      await flushLogBufferToDb().catch(() => {});
+      stopLogCapture();
+
       throw error;
     }
   }

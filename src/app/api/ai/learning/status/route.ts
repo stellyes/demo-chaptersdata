@@ -8,13 +8,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { webSearchService } from '@/lib/services/web-search';
-import { JobMetadata } from '@/lib/services/daily-learning';
+import { JobMetadata, getActiveJobLogs } from '@/lib/services/daily-learning';
 
 // Maximum time a job can run before being considered stale (1 hour - reduced for faster recovery)
 const STALE_JOB_TIMEOUT_MS = 1 * 60 * 60 * 1000;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Parse query params for log streaming
+    const url = new URL(request.url);
+    const logsSince = url.searchParams.get('logs_since'); // ISO timestamp — return logs after this time
+    const includeLogs = url.searchParams.has('logs_since') || url.searchParams.get('include_logs') === 'true';
+
     // Get search quota status for monitoring
     const throttleStatus = await webSearchService.getThrottleStatus();
     const searchBudget = {
@@ -47,12 +52,32 @@ export async function GET() {
     });
 
     if (!runningJob) {
+      // If logs were requested, try to return logs from the most recently finished job
+      let finalLogs: Array<{ ts: string; level: string; msg: string }> | undefined;
+      if (includeLogs) {
+        const recentJob = await prisma.dailyLearningJob.findFirst({
+          where: { status: { in: ['completed', 'failed'] } },
+          orderBy: { completedAt: 'desc' },
+          select: { jobMetadata: true },
+        });
+        if (recentJob) {
+          const metadataAny = recentJob.jobMetadata as Record<string, unknown> | null;
+          if (metadataAny?.logBuffer && Array.isArray(metadataAny.logBuffer)) {
+            finalLogs = metadataAny.logBuffer as Array<{ ts: string; level: string; msg: string }>;
+            if (logsSince) {
+              finalLogs = finalLogs.filter(l => l.ts > logsSince);
+            }
+          }
+        }
+      }
+
       return NextResponse.json({
         success: true,
         data: {
           isRunning: false,
           currentJob: null,
           searchBudget,
+          ...(finalLogs !== undefined && { logs: finalLogs }),
         },
       });
     }
@@ -122,6 +147,27 @@ export async function GET() {
       jsonParseIssues: metadata.jsonParseIssues?.length || 0,
     } : undefined;
 
+    // Retrieve logs if requested
+    let logs: Array<{ ts: string; level: string; msg: string }> | undefined;
+    if (includeLogs) {
+      // Try in-memory buffer first (same process — real-time)
+      const activeJobLogs = getActiveJobLogs();
+      if (activeJobLogs.jobId === runningJob.id && activeJobLogs.logs.length > 0) {
+        logs = activeJobLogs.logs;
+      } else {
+        // Fall back to DB-stored logs
+        const metadataAny = runningJob.jobMetadata as Record<string, unknown> | null;
+        if (metadataAny?.logBuffer && Array.isArray(metadataAny.logBuffer)) {
+          logs = metadataAny.logBuffer as Array<{ ts: string; level: string; msg: string }>;
+        }
+      }
+
+      // Filter by `since` timestamp if provided
+      if (logs && logsSince) {
+        logs = logs.filter(l => l.ts > logsSince);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -136,6 +182,7 @@ export async function GET() {
         },
         metrics,
         searchBudget,
+        ...(logs !== undefined && { logs }),
       },
     });
   } catch (error) {
