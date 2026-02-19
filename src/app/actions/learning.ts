@@ -3,11 +3,14 @@
 // ============================================
 // LEARNING SERVER ACTIONS
 // Server-side actions for triggering learning jobs from the frontend.
-// These bypass the API route auth since they run server-side directly.
-// The API key auth on /api/ai/learning/run remains for external triggers.
+// Calls the API route internally with auth headers so the job runs
+// in the API route's SSR process (which stays alive for async work).
+// Server actions run in isolated Lambda invocations that terminate
+// on return, so fire-and-forget async work gets killed immediately.
 // ============================================
 
-import { dailyLearningService } from '@/lib/services/daily-learning';
+import { getInternalAuthHeaders } from '@/app/api/ai/learning/auth';
+import { headers } from 'next/headers';
 
 interface RunLearningResult {
   success: boolean;
@@ -24,8 +27,12 @@ interface RunLearningResult {
 /**
  * Server action to trigger a daily learning job.
  * Called from the frontend LearningProgressTab component.
- * Runs server-side so it can access the learning service directly
- * without needing API key auth (which is for external Lambda triggers).
+ *
+ * This makes an internal HTTP call to the /api/ai/learning/run route
+ * (authenticated via X-Internal-Auth header) so that the learning job
+ * runs in the API route handler's process context — which stays alive
+ * for async background work. Server actions run in ephemeral Lambda
+ * invocations that die on return, so we can't run the job directly here.
  */
 export async function runLearningJob(options: {
   skipWebResearch?: boolean;
@@ -34,50 +41,39 @@ export async function runLearningJob(options: {
   const { skipWebResearch = false, forceRun = true } = options;
 
   try {
-    // Check if a job is already running
-    const status = await dailyLearningService.getCurrentJobStatus();
-    if (status.isRunning) {
+    // Build the internal URL from the incoming request headers
+    const headersList = await headers();
+    const host = headersList.get('host') || 'localhost:3000';
+    const protocol = headersList.get('x-forwarded-proto') || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    // Call the API route with internal auth headers
+    const authHeaders = getInternalAuthHeaders();
+    const response = await fetch(`${baseUrl}/api/ai/learning/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({
+        skipWebResearch,
+        forceRun,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
       return {
         success: false,
-        error: 'A learning job is already running',
-        data: { currentJob: status.currentJob },
+        error: result.error || `API returned ${response.status}`,
+        data: result.data,
       };
     }
-
-    // Validate startup requirements synchronously
-    let startupValidation;
-    try {
-      startupValidation = await dailyLearningService.validateStartupRequirements(skipWebResearch);
-    } catch (validationError) {
-      const errorMessage = validationError instanceof Error ? validationError.message : 'Startup validation failed';
-      return {
-        success: false,
-        error: errorMessage,
-      };
-    }
-
-    const warnings: string[] = [];
-    if (startupValidation.quotaStatus.warning) {
-      warnings.push(startupValidation.quotaStatus.warning);
-    }
-
-    // Start job async (non-blocking)
-    dailyLearningService.runDailyLearning({ forceRun, skipWebResearch })
-      .then(result => console.log(`Learning job completed: ${result.jobId}, hasDigest: ${!!result.digest}`))
-      .catch(error => {
-        console.error('Learning job failed:', error instanceof Error ? error.message : error);
-      });
-
-    // Get the newly created job status
-    const newStatus = await dailyLearningService.getCurrentJobStatus();
 
     return {
       success: true,
-      data: {
-        message: 'Learning job started',
-        currentJob: newStatus.currentJob,
-        warnings: warnings.length > 0 ? warnings : undefined,
-      },
+      data: result.data,
     };
   } catch (error) {
     console.error('Error running learning job:', error);
