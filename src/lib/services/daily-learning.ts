@@ -2618,14 +2618,25 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 
   private async loadRecentBrandData(): Promise<Record<string, unknown>> {
-    // Load ALL brand records (not just top 10) to enable full portfolio analysis
-    console.log(`[DataLoader:brands] Querying brandRecord (all)...`);
+    // Load top brand records ordered by sales for portfolio analysis.
+    // We only send top 50 to Claude, but load 200 to also cover margin analysis.
+    // Previously loaded ALL 10K+ records which created a 1MB+ prompt that exceeded Claude's context.
+    console.log(`[DataLoader:brands] Querying brandRecord (top 200 by sales)...`);
     let queryStart = Date.now();
     const brandRecords = await prisma.brandRecord.findMany({
       orderBy: { netSales: 'desc' },
+      take: 200,
       include: { brand: true },
     });
     console.log(`[DataLoader:brands] brandRecord returned ${brandRecords.length} rows in ${Date.now() - queryStart}ms`);
+
+    // Get total count and aggregate for the long tail summary
+    const totalBrandCount = await prisma.brandRecord.count();
+    const totalSalesAgg = await prisma.brandRecord.aggregate({
+      _sum: { netSales: true },
+      _avg: { grossMarginPct: true },
+    });
+    console.log(`[DataLoader:brands] Total brands in DB: ${totalBrandCount}`);
 
     // Load ALL vendor-brand relationships for complete supply chain visibility
     console.log(`[DataLoader:brands] Querying vendorBrand (all)...`);
@@ -2662,8 +2673,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
       brandVendorMap[brandName].push(vb.vendor.canonicalName);
     }
 
-    // Calculate total to enable percentage computation
-    const totalBrandSales = brandRecords.reduce((sum, b) => sum + parseFloat(b.netSales.toString()), 0);
+    // Use aggregate for accurate total (includes brands not in our top-200 sample)
+    const totalBrandSales = parseFloat((totalSalesAgg._sum.netSales || 0).toString());
 
     // Provide ALL brands with full margin and cost data
     const allBrands = brandRecords.map(b => ({
@@ -2686,31 +2697,47 @@ Return ONLY valid JSON, no markdown or explanation.`;
       .filter(b => b.grossMarginPct >= 55)
       .sort((a, b) => b.grossMarginPct - a.grossMarginPct);
 
+    // Limit data sent to Claude to avoid exceeding context window.
+    // With 10K+ brands, sending all of them creates a 1MB+ prompt.
+    // Top 50 brands + summaries provide more than enough for analysis.
+    const topN = 50;
+    const topBrandsDetailed = allBrands.slice(0, topN);
+    const tailBrands = allBrands.slice(topN);
+    const tailSummary = tailBrands.length > 0 ? {
+      count: tailBrands.length,
+      totalNetSales: tailBrands.reduce((sum, b) => sum + b.netSales, 0).toFixed(2),
+      avgMargin: (tailBrands.reduce((sum, b) => sum + b.grossMarginPct, 0) / tailBrands.length).toFixed(1),
+      pctOfTotal: tailBrands.reduce((sum, b) => sum + b.pctOfTotalSales, 0).toFixed(2),
+    } : null;
+
+    // Limit vendor relationships to top 30 by invoice count
+    const topVendorRelationships = Object.entries(vendorBrandMap)
+      .sort(([, a], [, b]) => b.totalInvoices - a.totalInvoices)
+      .slice(0, 30)
+      .map(([vendor, data]) => ({
+        vendor,
+        brands: data.brands.slice(0, 10), // Cap brands per vendor
+        brandCount: data.brands.length,
+        totalInvoices: data.totalInvoices,
+        totalUnits: data.totalUnits,
+        totalCost: data.totalCost.toFixed(2),
+      }));
+
     return {
       totalBrandsTracked: allBrands.length,
       totalBrandSales: totalBrandSales.toFixed(2),
-      // Top 15 brands for primary analysis
-      topBrands: allBrands.slice(0, 15),
-      // All remaining brands for long-tail analysis
-      remainingBrands: allBrands.slice(15).map(b => ({
-        name: b.name,
-        netSales: b.netSales,
-        grossMarginPct: b.grossMarginPct,
-        pctOfTotalSales: b.pctOfTotalSales,
-      })),
+      // Top brands for detailed analysis
+      topBrands: topBrandsDetailed,
+      // Summary of remaining long-tail brands (not individual rows)
+      longTailSummary: tailSummary,
       // Margin analysis
       lowMarginBrands: lowMarginBrands.slice(0, 10),
       highMarginBrands: highMarginBrands.slice(0, 10),
       avgBrandMargin: allBrands.length > 0
         ? (allBrands.reduce((sum, b) => sum + b.grossMarginPct, 0) / allBrands.length).toFixed(1)
         : '0.0',
-      vendorBrandRelationships: Object.entries(vendorBrandMap).map(([vendor, data]) => ({
-        vendor,
-        brands: data.brands,
-        totalInvoices: data.totalInvoices,
-        totalUnits: data.totalUnits,
-        totalCost: data.totalCost.toFixed(2),
-      })),
+      vendorBrandRelationships: topVendorRelationships,
+      totalVendors: Object.keys(vendorBrandMap).length,
       totalVendorBrandLinks: vendorBrands.length,
     };
   }
