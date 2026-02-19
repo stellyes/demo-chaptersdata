@@ -502,54 +502,54 @@ export class DataCorrelationsService {
    * Customer Segment Metrics
    */
   async getCustomerSegmentMetrics(): Promise<CustomerSegmentMetrics[]> {
-    const customers = await prisma.customer.findMany({
-      select: {
-        customerSegment: true,
-        recencySegment: true,
-        lifetimeNetSales: true,
-        lifetimeVisits: true,
-        lifetimeAov: true,
-      },
+    // Use groupBy to aggregate at the database level instead of loading all customers into memory.
+    // The old approach (findMany + in-JS aggregation) would load the entire customer table,
+    // causing Lambda memory exhaustion / connection hangs with large customer counts.
+    const segmentAggregates = await prisma.customer.groupBy({
+      by: ['customerSegment'],
+      _count: { _all: true },
+      _sum: { lifetimeNetSales: true },
+      _avg: { lifetimeVisits: true, lifetimeAov: true },
     });
 
-    const segmentMap = new Map<string, CustomerSegmentMetrics>();
+    // For recency segment breakdowns, run a second lightweight groupBy
+    const recencyBreakdown = await prisma.customer.groupBy({
+      by: ['customerSegment', 'recencySegment'],
+      _count: { _all: true },
+    });
 
-    for (const customer of customers) {
-      const segment = customer.customerSegment || 'Unknown';
-      const existing = segmentMap.get(segment) || {
+    // Build recency counts per customer segment
+    const recencyCounts = new Map<string, { active: number; atRisk: number; lapsed: number }>();
+    for (const row of recencyBreakdown) {
+      const segment = row.customerSegment || 'Unknown';
+      const counts = recencyCounts.get(segment) || { active: 0, atRisk: 0, lapsed: 0 };
+      const recency = (row.recencySegment || '').toLowerCase();
+      if (recency.includes('active')) counts.active += row._count._all;
+      else if (recency.includes('risk')) counts.atRisk += row._count._all;
+      else if (recency.includes('lapsed')) counts.lapsed += row._count._all;
+      recencyCounts.set(segment, counts);
+    }
+
+    const results: CustomerSegmentMetrics[] = segmentAggregates.map(agg => {
+      const segment = agg.customerSegment || 'Unknown';
+      const customerCount = agg._count._all;
+      const totalLifetimeSales = Number(agg._sum.lifetimeNetSales || 0);
+      const recency = recencyCounts.get(segment) || { active: 0, atRisk: 0, lapsed: 0 };
+
+      return {
         segment,
-        customerCount: 0,
-        totalLifetimeSales: 0,
-        avgLifetimeValue: 0,
-        avgVisits: 0,
-        avgOrderValue: 0,
-        activeCount: 0,
-        atRiskCount: 0,
-        lapsedCount: 0,
+        customerCount,
+        totalLifetimeSales,
+        avgLifetimeValue: customerCount > 0 ? totalLifetimeSales / customerCount : 0,
+        avgVisits: Number(agg._avg.lifetimeVisits || 0),
+        avgOrderValue: Number(agg._avg.lifetimeAov || 0),
+        activeCount: recency.active,
+        atRiskCount: recency.atRisk,
+        lapsedCount: recency.lapsed,
       };
+    });
 
-      existing.customerCount++;
-      existing.totalLifetimeSales += Number(customer.lifetimeNetSales);
-      existing.avgVisits = (existing.avgVisits * (existing.customerCount - 1) + customer.lifetimeVisits) / existing.customerCount;
-      existing.avgOrderValue = (existing.avgOrderValue * (existing.customerCount - 1) + Number(customer.lifetimeAov)) / existing.customerCount;
-
-      // Count recency segments
-      const recency = customer.recencySegment?.toLowerCase() || '';
-      if (recency.includes('active')) existing.activeCount++;
-      else if (recency.includes('risk')) existing.atRiskCount++;
-      else if (recency.includes('lapsed')) existing.lapsedCount++;
-
-      segmentMap.set(segment, existing);
-    }
-
-    // Calculate averages
-    for (const metrics of segmentMap.values()) {
-      metrics.avgLifetimeValue = metrics.customerCount > 0
-        ? metrics.totalLifetimeSales / metrics.customerCount
-        : 0;
-    }
-
-    return Array.from(segmentMap.values()).sort((a, b) => b.customerCount - a.customerCount);
+    return results.sort((a, b) => b.customerCount - a.customerCount);
   }
 
   /**
