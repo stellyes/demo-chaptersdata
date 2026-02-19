@@ -211,23 +211,16 @@ export class DataCorrelationsService {
       }
     };
 
-    const [
-      dailyPerformance,
-      brandProfitability,
-      productCategoryFlow,
-      customerSegments,
-      vendorPerformance,
-      dateCorrelations,
-      knowledgeGraph,
-    ] = await Promise.all([
-      safeQuery(() => this.getDailyStorePerformance(startDate), [], 'dailyStorePerformance'),
-      safeQuery(() => this.getBrandProfitability(), [], 'brandProfitability'),
-      safeQuery(() => this.getProductCategoryFlow(), [], 'productCategoryFlow'),
-      safeQuery(() => this.getCustomerSegmentMetrics(), [], 'customerSegments'),
-      safeQuery(() => this.getVendorPerformance(startDate), [], 'vendorPerformance'),
-      safeQuery(() => this.getDateCorrelations(startDate), [], 'dateCorrelations'),
-      safeQuery(() => this.getKnowledgeGraphByCategory(), {}, 'knowledgeGraph'),
-    ]);
+    // Run correlation queries SEQUENTIALLY to avoid Prisma connection pool
+    // exhaustion in Amplify serverless environment. Parallel Promise.all
+    // with 7 concurrent queries can deadlock the connection pool (limit=20).
+    const dailyPerformance = await safeQuery(() => this.getDailyStorePerformance(startDate), [], 'dailyStorePerformance');
+    const brandProfitability = await safeQuery(() => this.getBrandProfitability(), [], 'brandProfitability');
+    const productCategoryFlow = await safeQuery(() => this.getProductCategoryFlow(), [], 'productCategoryFlow');
+    const customerSegments = await safeQuery(() => this.getCustomerSegmentMetrics(), [], 'customerSegments');
+    const vendorPerformance = await safeQuery(() => this.getVendorPerformance(startDate), [], 'vendorPerformance');
+    const dateCorrelations = await safeQuery(() => this.getDateCorrelations(startDate), [], 'dateCorrelations');
+    const knowledgeGraph = await safeQuery(() => this.getKnowledgeGraphByCategory(), {}, 'knowledgeGraph');
 
     // Build summary
     const topBrand = brandProfitability.length > 0

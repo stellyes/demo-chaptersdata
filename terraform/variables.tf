@@ -82,3 +82,10 @@ variable "amplify_app_url" {
   type        = string
   default     = "https://bcsf.chaptersdata.com"
 }
+
+variable "learning_api_key" {
+  description = "API key for authenticating learning trigger Lambda calls to the Amplify API"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

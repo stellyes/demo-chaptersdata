@@ -62,7 +62,8 @@ resource "aws_lambda_function" "learning_trigger" {
 
   environment {
     variables = {
-      API_BASE_URL = var.amplify_app_url
+      API_BASE_URL     = var.amplify_app_url
+      LEARNING_API_KEY = var.learning_api_key
     }
   }
 
@@ -87,7 +88,12 @@ exports.handler = async (event) => {
   console.log('Learning trigger invoked:', JSON.stringify(event));
 
   const baseUrl = process.env.API_BASE_URL || 'https://bcsf.chaptersdata.com';
+  const apiKey = process.env.LEARNING_API_KEY;
   const url = new URL('/api/ai/learning/run', baseUrl);
+
+  if (!apiKey) {
+    console.error('LEARNING_API_KEY not configured - API call will be rejected');
+  }
 
   const payload = JSON.stringify({
     forceRun: event.forceRun || false,
@@ -95,15 +101,22 @@ exports.handler = async (event) => {
     source: event.source || 'eventbridge-schedule'
   });
 
+  const headers = {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(payload)
+  };
+
+  // Add auth header if API key is configured
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  }
+
   const options = {
     hostname: url.hostname,
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
     path: url.pathname,
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payload)
-    }
+    headers: headers
   };
 
   return new Promise((resolve, reject) => {

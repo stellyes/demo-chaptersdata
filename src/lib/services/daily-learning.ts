@@ -23,6 +23,10 @@ const QUERY_TIMEOUT_MS = 60000;
 // Timeout for Claude API calls (2 minutes per attempt - shorter for retry)
 const CLAUDE_API_TIMEOUT_MS = 2 * 60 * 1000;
 
+// Overall Phase 1 timeout (5 minutes) - prevents indefinite stalls
+// Phase 1 includes: 11 sequential data loads + correlation summary + Claude analysis
+const PHASE1_OVERALL_TIMEOUT_MS = 5 * 60 * 1000;
+
 // Max retries for Claude API calls
 const CLAUDE_API_MAX_RETRIES = 3;
 
@@ -713,7 +717,14 @@ export class DailyLearningService {
       let dataReview: DataReviewResult;
       let phase1DataSources: { loaded: string[]; failed: string[] } | undefined;
       try {
-        const { result, dataSources } = await this.phase1DataReviewWithMetrics(state);
+        // Wrap entire Phase 1 with an overall timeout guard to prevent indefinite stalls.
+        // Individual queries have their own 60s timeouts, but this catches scenarios where
+        // the overall phase hangs (e.g., connection pool deadlock, Prisma hangs).
+        const { result, dataSources } = await withTimeout(
+          this.phase1DataReviewWithMetrics(state),
+          PHASE1_OVERALL_TIMEOUT_MS,
+          'Phase 1 Data Review (overall)'
+        );
         dataReview = result;
         phase1DataSources = dataSources;
         phase1Metric.inputTokens = state.inputTokens - tokensBefore1.input;
