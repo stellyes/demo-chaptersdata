@@ -1328,11 +1328,11 @@ Return JSON:
 
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
     const promptSizeKB = (prompt.length / 1024).toFixed(1);
-    console.log(`[Phase1:Claude] Prompt size: ${promptSizeKB}KB, Model: ${CLAUDE_CONFIG.haiku}, Max tokens: ${DAILY_LEARNING_CONFIG.phase1TokenBudget}`);
+    console.log(`[Phase1:Claude] Prompt size: ${promptSizeKB}KB, Model: ${CLAUDE_CONFIG.defaultModel}, Max tokens: ${DAILY_LEARNING_CONFIG.phase1TokenBudget}`);
     const apiCallStart = Date.now();
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.haiku,
+        model: CLAUDE_CONFIG.defaultModel,
         max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
         system: JSON_SYSTEM_PROMPT,
         messages: [
@@ -1569,7 +1569,7 @@ Return JSON array:
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.haiku,
+        model: CLAUDE_CONFIG.defaultModel,
         max_tokens: DAILY_LEARNING_CONFIG.phase2TokenBudget,
         system: JSON_SYSTEM_PROMPT,
         messages: [
@@ -1831,7 +1831,7 @@ Return ONLY valid JSON.`;
       // Add retry with timeout to Claude API call to handle transient failures
       const response = await withRetry(
         () => this.client.messages.create({
-          model: CLAUDE_CONFIG.haiku,
+          model: CLAUDE_CONFIG.defaultModel,
           max_tokens: 1000,
           messages: [{ role: 'user', content: prompt }],
         }),
