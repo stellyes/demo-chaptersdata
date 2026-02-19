@@ -133,23 +133,34 @@ export const prisma = new Proxy({} as PrismaClient, {
  * datasource URL, ensuring connection pool parameters are properly applied.
  */
 export async function initializePrisma(): Promise<PrismaClient> {
+  const initStart = Date.now();
+  console.log(`[Prisma] initializePrisma() called (initialized=${globalThis.prismaInitialized}, env=${process.env.NODE_ENV})`);
+
   // Skip re-initialization if already done and not in production
   // In production, we still want to check for rotated credentials periodically
   if (globalThis.prismaInitialized && process.env.NODE_ENV !== 'production') {
-    if (_prisma) return _prisma;
+    if (_prisma) {
+      console.log(`[Prisma] Skipping re-init (already initialized, non-production) — ${Date.now() - initStart}ms`);
+      return _prisma;
+    }
   }
 
   try {
+    console.log(`[Prisma] Fetching database URL from Secrets Manager...`);
+    const urlStart = Date.now();
     const databaseUrl = await getDatabaseUrl();
+    console.log(`[Prisma] Database URL fetched in ${Date.now() - urlStart}ms`);
 
     // Check if we need to recreate the client with new URL
     // This is important for applying connection pool parameters
     const needsNewClient = !_prisma || globalThis.prismaDatasourceUrl !== databaseUrl;
+    console.log(`[Prisma] needsNewClient=${needsNewClient} (hasClient=${!!_prisma}, urlChanged=${globalThis.prismaDatasourceUrl !== databaseUrl})`);
 
     if (needsNewClient) {
       // Disconnect old client if it exists
       if (_prisma) {
         try {
+          console.log(`[Prisma] Disconnecting old client...`);
           await _prisma.$disconnect();
         } catch {
           // Ignore disconnect errors
@@ -158,6 +169,7 @@ export async function initializePrisma(): Promise<PrismaClient> {
 
       // Create new client with the correct datasource URL
       // This ensures connection pool params (connection_limit, pool_timeout, etc.) are applied
+      console.log(`[Prisma] Creating new PrismaClient...`);
       _prisma = createPrismaClient(databaseUrl);
       globalThis.prismaDatasourceUrl = databaseUrl;
 
@@ -173,12 +185,18 @@ export async function initializePrisma(): Promise<PrismaClient> {
     const client = _prisma!;
 
     // Test the connection
+    console.log(`[Prisma] Testing connection with $connect()...`);
+    const connectStart = Date.now();
     await client.$connect();
+    console.log(`[Prisma] $connect() succeeded in ${Date.now() - connectStart}ms`);
     globalThis.prismaInitialized = true;
 
+    console.log(`[Prisma] initializePrisma() complete in ${Date.now() - initStart}ms`);
     return client;
   } catch (error) {
+    console.error(`[Prisma] First attempt failed:`, error instanceof Error ? error.message : error);
     // If connection fails, clear the cache and try once more with fresh credentials
+    console.log(`[Prisma] Retrying with fresh credentials...`);
     clearDatabaseUrlCache();
     const freshUrl = await getDatabaseUrl();
 
@@ -200,9 +218,13 @@ export async function initializePrisma(): Promise<PrismaClient> {
       globalThis.prisma = _prisma;
     }
 
+    console.log(`[Prisma] Retry: Testing connection...`);
+    const retryStart = Date.now();
     await _prisma.$connect();
+    console.log(`[Prisma] Retry: $connect() succeeded in ${Date.now() - retryStart}ms`);
     globalThis.prismaInitialized = true;
 
+    console.log(`[Prisma] initializePrisma() complete (with retry) in ${Date.now() - initStart}ms`);
     return _prisma;
   }
 }

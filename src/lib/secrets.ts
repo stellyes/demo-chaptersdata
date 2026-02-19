@@ -29,33 +29,42 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export async function getDatabaseUrl(): Promise<string> {
   // Return cached URL if still valid
   if (cachedDatabaseUrl && Date.now() < cacheExpiry) {
+    const remainingMs = cacheExpiry - Date.now();
+    console.log(`[Secrets] Using cached database URL (expires in ${(remainingMs / 1000).toFixed(0)}s)`);
     return cachedDatabaseUrl;
   }
 
   // In development, prefer local env var if set (for offline development)
   if (process.env.NODE_ENV === 'development' && process.env.DATABASE_URL) {
+    console.log(`[Secrets] Using DATABASE_URL env var (development mode)`);
     return process.env.DATABASE_URL;
   }
 
   try {
+    const useContainerCreds = !!process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI;
+    console.log(`[Secrets] Fetching from Secrets Manager (containerCreds=${useContainerCreds})...`);
+    const fetchStart = Date.now();
+
     // In Amplify SSR compute, use the IAM compute role credentials via the
     // container metadata endpoint. This bypasses the static S3 IAM user keys
     // in AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY that would otherwise take
     // precedence in the default credential chain.
     const client = new SecretsManagerClient({
       region: 'us-west-1',
-      ...(process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
+      ...(useContainerCreds
         ? { credentials: fromContainerMetadata() }
         : {}),
     });
     const command = new GetSecretValueCommand({ SecretId: RDS_SECRET_ARN });
     const response = await client.send(command);
+    console.log(`[Secrets] Secrets Manager response received in ${Date.now() - fetchStart}ms`);
 
     if (!response.SecretString) {
       throw new Error('Secret value is empty');
     }
 
     const secret: RDSSecret = JSON.parse(response.SecretString);
+    console.log(`[Secrets] Credentials retrieved for user: ${secret.username}`);
 
     // URL-encode the password to handle special characters
     const encodedPassword = encodeURIComponent(secret.password);
@@ -75,11 +84,12 @@ export async function getDatabaseUrl(): Promise<string> {
     cachedDatabaseUrl = `postgresql://${secret.username}:${encodedPassword}@${DB_HOST}:${DB_PORT}/${DB_NAME}?${poolParams}`;
     cacheExpiry = Date.now() + CACHE_TTL_MS;
 
+    console.log(`[Secrets] Database URL cached (TTL: ${CACHE_TTL_MS / 1000}s)`);
     return cachedDatabaseUrl;
   } catch (error) {
     // Fallback to environment variable if Secrets Manager fails
     if (process.env.DATABASE_URL) {
-      console.warn('Failed to fetch from Secrets Manager, using DATABASE_URL env var:', error);
+      console.warn('[Secrets] Failed to fetch from Secrets Manager, using DATABASE_URL env var:', error);
       return process.env.DATABASE_URL;
     }
     throw new Error(`Failed to get database credentials: ${error}`);

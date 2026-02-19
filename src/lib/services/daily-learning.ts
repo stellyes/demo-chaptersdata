@@ -59,10 +59,14 @@ async function safeQuery<T>(
   defaultValue: T,
   operationName: string
 ): Promise<T> {
+  const start = Date.now();
   try {
-    return await withTimeout(queryFn(), QUERY_TIMEOUT_MS, operationName);
+    const result = await withTimeout(queryFn(), QUERY_TIMEOUT_MS, operationName);
+    console.log(`[safeQuery] ✓ ${operationName} completed in ${Date.now() - start}ms`);
+    return result;
   } catch (error) {
-    console.warn(`Query '${operationName}' failed:`, error);
+    const elapsed = Date.now() - start;
+    console.warn(`[safeQuery] ✗ ${operationName} FAILED after ${elapsed}ms:`, error instanceof Error ? error.message : error);
     return defaultValue;
   }
 }
@@ -624,17 +628,29 @@ export class DailyLearningService {
     skipWebResearch?: boolean;
   }): Promise<{ jobId: string; digest: DailyDigestContent | null }> {
     const { forceRun = false, skipWebResearch: userSkipWebResearch = false } = options || {};
+    const jobStartTime = Date.now();
+
+    console.log(`[Learning] ========== STARTING DAILY LEARNING ==========`);
+    console.log(`[Learning] Options: forceRun=${forceRun}, skipWebResearch=${userSkipWebResearch}`);
+    console.log(`[Learning] Timestamp: ${new Date().toISOString()}`);
 
     // Initialize Prisma with proper connection pool settings
-    // This ensures connection pool params (connection_limit, pool_timeout) are applied
+    let stepStart = Date.now();
+    console.log(`[Learning] Step 1/6: Initializing Prisma (Secrets Manager + DB connect)...`);
     await initializePrisma();
+    console.log(`[Learning] Step 1/6: Prisma initialized in ${Date.now() - stepStart}ms`);
 
     // ISSUE #3 FIX: Validate environment variables BEFORE consuming any API tokens
-    // This prevents wasting Claude tokens on Phases 1-2 if Phase 3 would fail anyway
+    stepStart = Date.now();
+    console.log(`[Learning] Step 2/6: Validating environment variables...`);
     this.validateEnvironment(userSkipWebResearch);
+    console.log(`[Learning] Step 2/6: Environment validated in ${Date.now() - stepStart}ms`);
 
     // Check quota status for metadata tracking (Issue #4)
+    stepStart = Date.now();
+    console.log(`[Learning] Step 3/6: Validating startup requirements (quota check)...`);
     const { quotaStatus } = await this.validateStartupRequirements(userSkipWebResearch);
+    console.log(`[Learning] Step 3/6: Startup validated in ${Date.now() - stepStart}ms (quota remaining: ${quotaStatus.remaining})`);
 
     // Determine if we should skip web research due to quota exhaustion
     let skipWebResearch = userSkipWebResearch;
@@ -654,22 +670,30 @@ export class DailyLearningService {
     }
 
     // Clean up any stale jobs before checking for existing jobs
+    stepStart = Date.now();
+    console.log(`[Learning] Step 4/6: Cleaning up stale jobs...`);
     await this.cleanupStaleJobs();
+    console.log(`[Learning] Step 4/6: Stale job cleanup in ${Date.now() - stepStart}ms`);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     if (!forceRun) {
+      stepStart = Date.now();
+      console.log(`[Learning] Step 5/6: Checking for existing jobs today...`);
       const existingJob = await prisma.dailyLearningJob.findFirst({
         where: {
           startedAt: { gte: today },
           status: { in: ['completed', 'running'] },
         },
       });
+      console.log(`[Learning] Step 5/6: Duplicate check in ${Date.now() - stepStart}ms (found: ${!!existingJob})`);
 
       if (existingJob) {
         throw new Error(`Daily learning already ${existingJob.status} for today. Job ID: ${existingJob.id}`);
       }
+    } else {
+      console.log(`[Learning] Step 5/6: Skipped duplicate check (forceRun=true)`);
     }
 
     // ISSUE #2 FIX: Initialize metadata to track job state
@@ -686,6 +710,8 @@ export class DailyLearningService {
       phaseTimings: {},
     };
 
+    stepStart = Date.now();
+    console.log(`[Learning] Step 6/6: Creating job record in database...`);
     const job = await prisma.dailyLearningJob.create({
       data: {
         status: 'running',
@@ -693,6 +719,8 @@ export class DailyLearningService {
         jobMetadata: initialMetadata as object,
       },
     });
+    console.log(`[Learning] Step 6/6: Job created in ${Date.now() - stepStart}ms — ID: ${job.id}`);
+    console.log(`[Learning] ========== STARTUP COMPLETE (${Date.now() - jobStartTime}ms) ==========`);
 
     const state: DailyLearningJobState = {
       jobId: job.id,
@@ -717,6 +745,9 @@ export class DailyLearningService {
       let dataReview: DataReviewResult;
       let phase1DataSources: { loaded: string[]; failed: string[] } | undefined;
       try {
+        console.log(`[Phase1] ========== STARTING PHASE 1: DATA REVIEW ==========`);
+        console.log(`[Phase1] Overall timeout: ${PHASE1_OVERALL_TIMEOUT_MS / 1000}s, Per-query timeout: ${QUERY_TIMEOUT_MS / 1000}s`);
+        const phase1Start = Date.now();
         // Wrap entire Phase 1 with an overall timeout guard to prevent indefinite stalls.
         // Individual queries have their own 60s timeouts, but this catches scenarios where
         // the overall phase hangs (e.g., connection pool deadlock, Prisma hangs).
@@ -725,6 +756,9 @@ export class DailyLearningService {
           PHASE1_OVERALL_TIMEOUT_MS,
           'Phase 1 Data Review (overall)'
         );
+        console.log(`[Phase1] ========== PHASE 1 COMPLETE (${Date.now() - phase1Start}ms) ==========`);
+        console.log(`[Phase1] Data sources loaded: ${dataSources.loaded.join(', ')}`);
+        console.log(`[Phase1] Data sources failed: ${dataSources.failed.length > 0 ? dataSources.failed.join(', ') : 'none'}`);
         dataReview = result;
         phase1DataSources = dataSources;
         phase1Metric.inputTokens = state.inputTokens - tokensBefore1.input;
@@ -747,6 +781,8 @@ export class DailyLearningService {
       // ============================================
       // PHASE 2: Question Generation
       // ============================================
+      console.log(`[Phase2] ========== STARTING PHASE 2: QUESTION GENERATION ==========`);
+      const phase2Start = Date.now();
       const phase2Metric = this.startPhaseMetric('question_gen');
       const tokensBefore2 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['question_gen'] = { start: new Date().toISOString() };
@@ -755,6 +791,7 @@ export class DailyLearningService {
       let questions: GeneratedQuestion[];
       try {
         questions = await this.phase2QuestionGeneration(state, dataReview);
+        console.log(`[Phase2] ========== PHASE 2 COMPLETE (${Date.now() - phase2Start}ms) — ${questions.length} questions generated ==========`);
         phase2Metric.inputTokens = state.inputTokens - tokensBefore2.input;
         phase2Metric.outputTokens = state.outputTokens - tokensBefore2.output;
         this.completePhaseMetric(phase2Metric, 'success', { itemsProcessed: questions.length });
@@ -774,6 +811,8 @@ export class DailyLearningService {
       // ============================================
       // PHASE 3: Web Research
       // ============================================
+      console.log(`[Phase3] ========== STARTING PHASE 3: WEB RESEARCH (skip=${skipWebResearch}) ==========`);
+      const phase3Start = Date.now();
       let webResearchResults: WebResearchResult[] = [];
       const phase3Metric = this.startPhaseMetric('web_research');
       const tokensBefore3 = { input: state.inputTokens, output: state.outputTokens };
@@ -786,6 +825,7 @@ export class DailyLearningService {
           phase3Metric.inputTokens = state.inputTokens - tokensBefore3.input;
           phase3Metric.outputTokens = state.outputTokens - tokensBefore3.output;
           const articlesFound = webResearchResults.reduce((sum, r) => sum + r.findings.length, 0);
+          console.log(`[Phase3] ========== PHASE 3 COMPLETE (${Date.now() - phase3Start}ms) — ${articlesFound} articles found ==========`);
           this.completePhaseMetric(phase3Metric, 'success', { itemsProcessed: articlesFound });
         } catch (error) {
           phase3Metric.inputTokens = state.inputTokens - tokensBefore3.input;
@@ -799,6 +839,7 @@ export class DailyLearningService {
         await this.markPhaseComplete(state.jobId, 'webResearchDone');
       } else {
         // Mark web research as skipped with reason
+        console.log(`[Phase3] ========== PHASE 3 SKIPPED (${Date.now() - phase3Start}ms) — reason: ${webResearchSkipReason || 'user_requested'} ==========`);
         this.completePhaseMetric(phase3Metric, 'skipped', {
           error: webResearchSkipReason || 'user_requested',
         });
@@ -810,6 +851,8 @@ export class DailyLearningService {
       // ============================================
       // PHASE 4: Correlation Analysis
       // ============================================
+      console.log(`[Phase4] ========== STARTING PHASE 4: CORRELATION ANALYSIS ==========`);
+      const phase4Start = Date.now();
       const phase4Metric = this.startPhaseMetric('correlation');
       const tokensBefore4 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['correlation'] = { start: new Date().toISOString() };
@@ -818,6 +861,7 @@ export class DailyLearningService {
       let correlatedInsights: CorrelatedInsight[];
       try {
         correlatedInsights = await this.phase4Correlation(state, dataReview, webResearchResults);
+        console.log(`[Phase4] ========== PHASE 4 COMPLETE (${Date.now() - phase4Start}ms) — ${correlatedInsights.length} insights ==========`);
         phase4Metric.inputTokens = state.inputTokens - tokensBefore4.input;
         phase4Metric.outputTokens = state.outputTokens - tokensBefore4.output;
         this.completePhaseMetric(phase4Metric, 'success', { itemsProcessed: correlatedInsights.length });
@@ -837,6 +881,8 @@ export class DailyLearningService {
       // ============================================
       // PHASE 5: Digest Generation
       // ============================================
+      console.log(`[Phase5] ========== STARTING PHASE 5: DIGEST GENERATION ==========`);
+      const phase5Start = Date.now();
       const phase5Metric = this.startPhaseMetric('digest_gen');
       const tokensBefore5 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['digest_gen'] = { start: new Date().toISOString() };
@@ -845,6 +891,7 @@ export class DailyLearningService {
       let digest: DailyDigestContent;
       try {
         digest = await this.phase5DigestGeneration(state, dataReview, questions, webResearchResults, correlatedInsights);
+        console.log(`[Phase5] ========== PHASE 5 COMPLETE (${Date.now() - phase5Start}ms) — actions: ${digest.priorityActions.length}, quickWins: ${digest.quickWins.length} ==========`);
         phase5Metric.inputTokens = state.inputTokens - tokensBefore5.input;
         phase5Metric.outputTokens = state.outputTokens - tokensBefore5.output;
         this.completePhaseMetric(phase5Metric, 'success', {
@@ -893,8 +940,9 @@ export class DailyLearningService {
       });
 
       // NEW: Extract and save insights to BusinessInsight table for persistent knowledge
+      console.log(`[Learning] Extracting and saving insights to knowledge base...`);
       const savedInsightsCount = await this.extractAndSaveInsights(digest, state.jobId);
-      console.log(`Saved ${savedInsightsCount} insights to knowledge base`);
+      console.log(`[Learning] Saved ${savedInsightsCount} insights to knowledge base`);
 
       // Calculate phase durations
       for (const [phase, timing] of Object.entries(state.metadata.phaseTimings || {})) {
@@ -903,6 +951,7 @@ export class DailyLearningService {
         }
       }
 
+      console.log(`[Learning] Saving final job record...`);
       await prisma.dailyLearningJob.update({
         where: { id: state.jobId },
         data: {
@@ -920,9 +969,27 @@ export class DailyLearningService {
         },
       });
 
+      const totalElapsed = Date.now() - jobStartTime;
+      const totalTokens = state.inputTokens + state.outputTokens;
+      const cost = this.calculateCost(state.inputTokens, state.outputTokens);
+      console.log(`[Learning] ========== JOB COMPLETE ==========`);
+      console.log(`[Learning] Job ID: ${state.jobId}`);
+      console.log(`[Learning] Total time: ${(totalElapsed / 1000).toFixed(1)}s`);
+      console.log(`[Learning] Tokens: ${totalTokens} (in: ${state.inputTokens}, out: ${state.outputTokens})`);
+      console.log(`[Learning] Cost: $${cost?.toFixed(4) || 'unknown'}`);
+      console.log(`[Learning] Questions: ${questions.length}, Insights: ${correlatedInsights.length}, Articles: ${webResearchResults.reduce((sum, r) => sum + r.findings.length, 0)}`);
+      console.log(`[Learning] ================================`);
+
       return { jobId: state.jobId, digest };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const totalElapsed = Date.now() - jobStartTime;
+      console.error(`[Learning] ========== JOB FAILED ==========`);
+      console.error(`[Learning] Job ID: ${state.jobId}`);
+      console.error(`[Learning] Failed after: ${(totalElapsed / 1000).toFixed(1)}s`);
+      console.error(`[Learning] Error: ${errorMessage}`);
+      console.error(`[Learning] Tokens used: in=${state.inputTokens}, out=${state.outputTokens}`);
+      console.error(`[Learning] ================================`);
       const currentJob = await prisma.dailyLearningJob.findUnique({ where: { id: state.jobId } });
       await prisma.dailyLearningJob.update({
         where: { id: state.jobId },
@@ -949,29 +1016,38 @@ export class DailyLearningService {
     state: DailyLearningJobState
   ): Promise<{ result: DataReviewResult; dataSources: { loaded: string[]; failed: string[] } }> {
     const dataSources = { loaded: [] as string[], failed: [] as string[] };
+    const dataLoadStart = Date.now();
 
-    // Load data sources SEQUENTIALLY to avoid Amplify Lambda connection issues
-    // Parallel Promise.all causes hangs in the Amplify serverless environment
     console.log('[Phase1] Starting data source loading (sequential)...');
 
     // Ensure Prisma is initialized before querying
+    let stepStart = Date.now();
+    console.log('[Phase1] Re-initializing Prisma connection...');
     await initializePrisma();
+    console.log(`[Phase1] Prisma re-initialized in ${Date.now() - stepStart}ms`);
 
     // Helper to track data source loading
+    let dataSourceIndex = 0;
+    const totalDataSources = 11;
     const loadAndTrack = async <T>(
       name: string,
       loader: () => Promise<T>,
       defaultValue: T
     ): Promise<T> => {
-      console.log(`[Phase1] Loading ${name}...`);
+      dataSourceIndex++;
+      const elapsed = Date.now() - dataLoadStart;
+      console.log(`[Phase1] [${dataSourceIndex}/${totalDataSources}] Loading ${name}... (elapsed: ${elapsed}ms)`);
       const result = await safeQuery(loader, defaultValue, name);
       const isEmpty = result === defaultValue ||
         (typeof result === 'object' && Object.keys(result as object).length === 0) ||
         (typeof result === 'string' && result === '');
       if (isEmpty) {
         dataSources.failed.push(name);
+        console.warn(`[Phase1] [${dataSourceIndex}/${totalDataSources}] ${name} returned EMPTY`);
       } else {
         dataSources.loaded.push(name);
+        const size = typeof result === 'string' ? result.length : JSON.stringify(result).length;
+        console.log(`[Phase1] [${dataSourceIndex}/${totalDataSources}] ${name} loaded (${(size / 1024).toFixed(1)}KB)`);
       }
       return result;
     };
@@ -990,12 +1066,16 @@ export class DailyLearningService {
     const correlationSummary = await loadAndTrack('correlations',
       () => dataCorrelationsService.getCorrelationSummaryForAI(), '');
 
-    console.log(`[Phase1] Data sources - Loaded: ${dataSources.loaded.length}, Failed: ${dataSources.failed.length}`);
+    const dataLoadElapsed = Date.now() - dataLoadStart;
+    console.log(`[Phase1] ---- All data sources loaded in ${dataLoadElapsed}ms ----`);
+    console.log(`[Phase1] Loaded: ${dataSources.loaded.length}, Failed: ${dataSources.failed.length}`);
     if (dataSources.failed.length > 0) {
       console.warn(`[Phase1] Failed data sources: ${dataSources.failed.join(', ')}`);
     }
 
-    // Call the original analysis logic
+    // Call the original analysis logic (sends data to Claude)
+    console.log(`[Phase1] Sending data to Claude for analysis...`);
+    const claudeStart = Date.now();
     const result = await this.phase1DataReviewAnalysis(
       state,
       salesData,
@@ -1010,6 +1090,10 @@ export class DailyLearningService {
       dataFlagData,
       correlationSummary
     );
+    const claudeElapsed = Date.now() - claudeStart;
+    console.log(`[Phase1] Claude analysis complete in ${claudeElapsed}ms`);
+    console.log(`[Phase1] Tokens used — input: ${state.inputTokens}, output: ${state.outputTokens}`);
+    console.log(`[Phase1] ---- Total phase1DataReviewWithMetrics: ${Date.now() - dataLoadStart}ms ----`);
 
     return { result, dataSources };
   }
@@ -1031,6 +1115,7 @@ export class DailyLearningService {
     dataFlagData: unknown,
     correlationSummary: string
   ): Promise<DataReviewResult> {
+    console.log(`[Phase1:Analysis] Building Claude prompt...`);
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
 
 ## INDIVIDUAL DATA SOURCES
@@ -1077,6 +1162,9 @@ Return JSON:
 }`;
 
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
+    const promptSizeKB = (prompt.length / 1024).toFixed(1);
+    console.log(`[Phase1:Claude] Prompt size: ${promptSizeKB}KB, Model: ${CLAUDE_CONFIG.haiku}, Max tokens: ${DAILY_LEARNING_CONFIG.phase1TokenBudget}`);
+    const apiCallStart = Date.now();
     const response = await withRetry(
       () => this.client.messages.create({
         model: CLAUDE_CONFIG.haiku,
@@ -1089,6 +1177,8 @@ Return JSON:
       }),
       'phase1DataReview'
     );
+    console.log(`[Phase1:Claude] API response received in ${Date.now() - apiCallStart}ms`);
+    console.log(`[Phase1:Claude] Usage — input: ${response.usage.input_tokens}, output: ${response.usage.output_tokens}, stop: ${response.stop_reason}`);
 
     state.inputTokens += response.usage.input_tokens;
     state.outputTokens += response.usage.output_tokens;
@@ -1096,11 +1186,14 @@ Return JSON:
     const textContent = response.content.find(c => c.type === 'text');
     // Prepend the prefilled '{' since it won't be in the response
     const responseText = '{' + (textContent?.type === 'text' ? textContent.text : '');
+    console.log(`[Phase1:Claude] Response text size: ${(responseText.length / 1024).toFixed(1)}KB`);
 
     // ISSUE #5 FIX: Use centralized JSON parsing utility
     const parseResult = parseClaudeJson<DataReviewResult>(responseText, false);
+    console.log(`[Phase1:Claude] JSON parse: success=${parseResult.success}, fallback=${parseResult.fallbackUsed}`);
 
     if (!parseResult.success || !parseResult.data) {
+      console.error(`[Phase1:Claude] JSON parse FAILED: ${parseResult.error}`);
       // Track parse issue in job metadata
       if (!state.metadata.jsonParseIssues) {
         state.metadata.jsonParseIssues = [];
@@ -1128,6 +1221,7 @@ Return JSON:
       console.warn('[phase1DataReview] Used fallback JSON parsing');
     }
 
+    console.log(`[Phase1:Analysis] Analysis complete, returning result`);
     return parseResult.data;
   }
 
@@ -2287,10 +2381,13 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    console.log(`[DataLoader:sales] Querying salesRecord (last 30 days)...`);
+    const queryStart = Date.now();
     const salesRecords = await prisma.salesRecord.findMany({
       where: { date: { gte: thirtyDaysAgo } },
       orderBy: { date: 'desc' },
     });
+    console.log(`[DataLoader:sales] Query returned ${salesRecords.length} rows in ${Date.now() - queryStart}ms`);
 
     const totalSales = salesRecords.reduce((sum, r) => sum + parseFloat(r.netSales.toString()), 0);
     const totalGrossSales = salesRecords.reduce((sum, r) => sum + parseFloat(r.grossSales.toString()), 0);
@@ -2357,12 +2454,17 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
   private async loadRecentBrandData(): Promise<Record<string, unknown>> {
     // Load ALL brand records (not just top 10) to enable full portfolio analysis
+    console.log(`[DataLoader:brands] Querying brandRecord (all)...`);
+    let queryStart = Date.now();
     const brandRecords = await prisma.brandRecord.findMany({
       orderBy: { netSales: 'desc' },
       include: { brand: true },
     });
+    console.log(`[DataLoader:brands] brandRecord returned ${brandRecords.length} rows in ${Date.now() - queryStart}ms`);
 
     // Load ALL vendor-brand relationships for complete supply chain visibility
+    console.log(`[DataLoader:brands] Querying vendorBrand (all)...`);
+    queryStart = Date.now();
     const vendorBrands = await prisma.vendorBrand.findMany({
       orderBy: { invoiceCount: 'desc' },
       include: {
@@ -2370,6 +2472,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         brand: true,
       },
     });
+    console.log(`[DataLoader:brands] vendorBrand returned ${vendorBrands.length} rows in ${Date.now() - queryStart}ms`);
 
     // Group by vendor to show which brands each vendor supplies
     const vendorBrandMap: Record<string, { brands: string[]; totalInvoices: number; totalUnits: number; totalCost: number }> = {};
@@ -2454,6 +2557,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
     // Run all customer queries in parallel
+    console.log(`[DataLoader:customers] Running 8 parallel customer queries...`);
+    const queryStart = Date.now();
     const [
       activeCustomers,
       totalCustomers,
@@ -2519,6 +2624,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         },
       }),
     ]);
+    console.log(`[DataLoader:customers] All queries completed in ${Date.now() - queryStart}ms (total: ${totalCustomers}, active30d: ${activeCustomers}, atRisk: ${atRiskCustomers.length})`);
 
     return {
       activeCustomers30d: activeCustomers,
@@ -2570,6 +2676,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Load ALL invoices in 30-day window (not just 50)
+    console.log(`[DataLoader:invoices] Querying invoices with lineItems (last 30 days)...`);
+    const queryStart = Date.now();
     const invoices = await prisma.invoice.findMany({
       where: { invoiceDate: { gte: thirtyDaysAgo } },
       include: {
@@ -2580,6 +2688,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
       },
       orderBy: { invoiceDate: 'desc' },
     });
+    const totalLineItems = invoices.reduce((sum, inv) => sum + inv.lineItems.length, 0);
+    console.log(`[DataLoader:invoices] Query returned ${invoices.length} invoices (${totalLineItems} line items) in ${Date.now() - queryStart}ms`);
 
     const totalCost = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalCost.toString()), 0);
     const totalWithExcise = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalWithExcise.toString()), 0);
@@ -2695,6 +2805,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    console.log(`[DataLoader:qr] Running QR code queries...`);
+    const queryStart = Date.now();
     const [totalCodes, activeCodes, recentClicks] = await Promise.all([
       prisma.qrCode.count({ where: { deleted: false } }),
       prisma.qrCode.count({ where: { active: true, deleted: false } }),
@@ -2707,6 +2819,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       take: 5,
       select: { name: true, totalClicks: true, shortCode: true },
     });
+    console.log(`[DataLoader:qr] Queries completed in ${Date.now() - queryStart}ms (total: ${totalCodes}, active: ${activeCodes}, clicks30d: ${recentClicks})`);
 
     return {
       totalQrCodes: totalCodes,
@@ -2720,6 +2833,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 
   private async loadSeoAuditData(): Promise<Record<string, unknown>> {
+    console.log(`[DataLoader:seo] Querying latest SEO audit...`);
+    const queryStart = Date.now();
     const latestAudit = await prisma.seoAudit.findFirst({
       where: { status: 'completed' },
       orderBy: { completedAt: 'desc' },
@@ -2727,6 +2842,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
         _count: { select: { pages: true } },
       },
     });
+
+    console.log(`[DataLoader:seo] Query completed in ${Date.now() - queryStart}ms (found: ${!!latestAudit})`);
 
     if (!latestAudit || !latestAudit.summary) {
       return { auditAvailable: false };
@@ -2753,10 +2870,13 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    console.log(`[DataLoader:budtenders] Querying budtenderRecord (last 30 days)...`);
+    const queryStart = Date.now();
     const budtenderRecords = await prisma.budtenderRecord.findMany({
       where: { date: { gte: thirtyDaysAgo } },
       orderBy: { date: 'desc' },
     });
+    console.log(`[DataLoader:budtenders] Query returned ${budtenderRecords.length} rows in ${Date.now() - queryStart}ms`);
 
     if (budtenderRecords.length === 0) {
       return { dataAvailable: false };
@@ -2810,9 +2930,12 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
   private async loadProductData(): Promise<Record<string, unknown>> {
     // Get product category performance data
+    console.log(`[DataLoader:products] Querying productRecord (all)...`);
+    const queryStart = Date.now();
     const productRecords = await prisma.productRecord.findMany({
       orderBy: { netSales: 'desc' },
     });
+    console.log(`[DataLoader:products] Query returned ${productRecords.length} rows in ${Date.now() - queryStart}ms`);
 
     if (productRecords.length === 0) {
       return { dataAvailable: false };
@@ -2856,6 +2979,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
   private async loadResearchData(): Promise<Record<string, unknown>> {
     // Load research documents and their key findings
+    console.log(`[DataLoader:research] Querying researchDocument with findings...`);
+    const queryStart = Date.now();
     const researchDocs = await prisma.researchDocument.findMany({
       orderBy: { analyzedAt: 'desc' },
       take: 20,
@@ -2867,6 +2992,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
         },
       },
     });
+
+    console.log(`[DataLoader:research] researchDocument returned ${researchDocs.length} docs in ${Date.now() - queryStart}ms`);
 
     if (researchDocs.length === 0) {
       return { dataAvailable: false };
@@ -2888,6 +3015,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     }
 
     // Get action items requiring attention
+    console.log(`[DataLoader:research] Querying action items...`);
     const actionItems = await prisma.researchFinding.findMany({
       where: {
         actionRequired: true,
@@ -2897,6 +3025,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       take: 10,
       include: { document: true },
     });
+    console.log(`[DataLoader:research] Found ${actionItems.length} action items`);
 
     return {
       dataAvailable: true,
@@ -2926,6 +3055,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
    * DataFlags capture brand mismatches, data anomalies, and quality concerns.
    */
   private async loadDataFlagSummary(): Promise<Record<string, unknown>> {
+    console.log(`[DataLoader:dataFlags] Querying data flags...`);
+    const queryStart = Date.now();
     const [pendingFlags, recentFlags] = await Promise.all([
       // Count pending flags by severity
       prisma.dataFlag.groupBy({
@@ -2952,6 +3083,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
         },
       }),
     ]);
+
+    console.log(`[DataLoader:dataFlags] Queries completed in ${Date.now() - queryStart}ms (pending groups: ${pendingFlags.length}, recent flags: ${recentFlags.length})`);
 
     if (pendingFlags.length === 0 && recentFlags.length === 0) {
       return { dataAvailable: false, pendingIssueCount: 0 };

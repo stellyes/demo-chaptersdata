@@ -193,20 +193,29 @@ export class DataCorrelationsService {
    * Uses timeouts to prevent any single query from blocking indefinitely
    */
   async getAllCorrelations(): Promise<CorrelationSummary> {
+    const correlationStart = Date.now();
+    console.log(`[Correlations] getAllCorrelations() starting (lookback: ${this.lookbackDays} days)...`);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - this.lookbackDays);
 
     // Run all correlation queries with timeouts
     // If any query times out, use empty result to allow processing to continue
+    let queryIndex = 0;
+    const totalQueries = 7;
     const safeQuery = async <T>(
       queryFn: () => Promise<T>,
       defaultValue: T,
       operationName: string
     ): Promise<T> => {
+      queryIndex++;
+      const qStart = Date.now();
+      console.log(`[Correlations] [${queryIndex}/${totalQueries}] Running ${operationName}... (elapsed: ${Date.now() - correlationStart}ms)`);
       try {
-        return await withTimeout(queryFn(), QUERY_TIMEOUT_MS, operationName);
+        const result = await withTimeout(queryFn(), QUERY_TIMEOUT_MS, operationName);
+        console.log(`[Correlations] [${queryIndex}/${totalQueries}] ${operationName} completed in ${Date.now() - qStart}ms`);
+        return result;
       } catch (error) {
-        console.warn(`Correlation query '${operationName}' failed:`, error);
+        console.warn(`[Correlations] [${queryIndex}/${totalQueries}] ${operationName} FAILED after ${Date.now() - qStart}ms:`, error);
         return defaultValue;
       }
     };
@@ -221,6 +230,7 @@ export class DataCorrelationsService {
     const vendorPerformance = await safeQuery(() => this.getVendorPerformance(startDate), [], 'vendorPerformance');
     const dateCorrelations = await safeQuery(() => this.getDateCorrelations(startDate), [], 'dateCorrelations');
     const knowledgeGraph = await safeQuery(() => this.getKnowledgeGraphByCategory(), {}, 'knowledgeGraph');
+    console.log(`[Correlations] All ${totalQueries} queries completed in ${Date.now() - correlationStart}ms`);
 
     // Build summary
     const topBrand = brandProfitability.length > 0
@@ -800,6 +810,8 @@ export class DataCorrelationsService {
    * Get a text summary suitable for AI prompts
    */
   async getCorrelationSummaryForAI(): Promise<string> {
+    console.log(`[Correlations] getCorrelationSummaryForAI() starting...`);
+    const summaryStart = Date.now();
     const correlations = await this.getAllCorrelations();
 
     const sections: string[] = [];
@@ -879,7 +891,9 @@ ${datesWithEvents.map(d =>
 ).join('\n')}`);
     }
 
-    return sections.join('\n\n');
+    const summaryText = sections.join('\n\n');
+    console.log(`[Correlations] getCorrelationSummaryForAI() complete in ${Date.now() - summaryStart}ms (${(summaryText.length / 1024).toFixed(1)}KB summary)`);
+    return summaryText;
   }
 }
 
