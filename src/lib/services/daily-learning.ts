@@ -228,7 +228,11 @@ function formatLogArgs(args: unknown[]): string {
 }
 
 function startLogCapture(jobId: string): void {
-  if (_logBufferActive) return; // Already capturing
+  if (_logBufferActive) {
+    console.log(`[LogCapture] Already active for job ${_logBufferJobId}, skipping`);
+    return;
+  }
+  console.log(`[LogCapture] Starting log capture for job ${jobId}`);
   _logBuffer = [];
   _logBufferActive = true;
   _logBufferJobId = jobId;
@@ -277,8 +281,14 @@ function startLogCapture(jobId: string): void {
 
   // Flush logs to DB every 3 seconds so the status API can serve them
   _logFlushTimer = setInterval(() => {
-    flushLogBufferToDb().catch(() => {}); // Best-effort
+    flushLogBufferToDb().catch((err) => {
+      const logFn = _originalConsoleLog || console.log;
+      logFn(`[LogFlush] Interval flush error:`, err);
+    });
   }, 3000);
+
+  // Also log that capture is active (this goes into the buffer itself)
+  console.log(`[LogCapture] Log capture active — buffer max ${LOG_BUFFER_MAX_SIZE}, flush every 3s`);
 }
 
 function stopLogCapture(): void {
@@ -303,6 +313,7 @@ function stopLogCapture(): void {
 
 async function flushLogBufferToDb(): Promise<void> {
   if (!_logBufferActive || !_logBufferJobId || _logBuffer.length === 0) return;
+  const logFn = _originalConsoleLog || console.log;
 
   try {
     // Read current metadata, merge log buffer, write back
@@ -318,9 +329,13 @@ async function flushLogBufferToDb(): Promise<void> {
         where: { id: _logBufferJobId },
         data: { jobMetadata: metadata as object },
       });
+    } else {
+      logFn(`[LogFlush] Job ${_logBufferJobId} not found in DB — skipping flush`);
     }
-  } catch {
+  } catch (err) {
     // Best-effort — don't crash the job for log persistence failures
+    // But DO log the error so we can debug
+    logFn(`[LogFlush] ERROR flushing ${_logBuffer.length} logs to DB:`, err instanceof Error ? err.message : err);
   }
 }
 
