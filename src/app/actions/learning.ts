@@ -3,10 +3,15 @@
 // ============================================
 // LEARNING SERVER ACTIONS
 // Server-side actions for triggering learning jobs from the frontend.
-// Calls the API route internally with auth headers so the job runs
-// in the API route's SSR process (which stays alive for async work).
-// Server actions run in isolated Lambda invocations that terminate
-// on return, so fire-and-forget async work gets killed immediately.
+//
+// Architecture:
+// 1. Server action fires HTTP request to /api/ai/learning/run
+// 2. Server action returns immediately to the frontend (doesn't await the full job)
+// 3. The API route Lambda stays alive because it awaits runDailyLearning()
+// 4. Frontend polls /api/ai/learning/status for progress
+//
+// We validate and create the job synchronously, then let the API route
+// Lambda continue running the job in the background while we return.
 // ============================================
 
 import { getInternalAuthHeaders } from '@/app/api/ai/learning/auth';
@@ -28,11 +33,10 @@ interface RunLearningResult {
  * Server action to trigger a daily learning job.
  * Called from the frontend LearningProgressTab component.
  *
- * This makes an internal HTTP call to the /api/ai/learning/run route
- * (authenticated via X-Internal-Auth header) so that the learning job
- * runs in the API route handler's process context — which stays alive
- * for async background work. Server actions run in ephemeral Lambda
- * invocations that die on return, so we can't run the job directly here.
+ * Makes an internal HTTP call to the /api/ai/learning/run route which
+ * runs the job synchronously (keeping its Lambda alive). This server
+ * action does NOT await the full response — it fires the request then
+ * returns immediately so the frontend can start polling for status.
  */
 export async function runLearningJob(options: {
   skipWebResearch?: boolean;
@@ -47,34 +51,73 @@ export async function runLearningJob(options: {
     const protocol = headersList.get('x-forwarded-proto') || 'https';
     const baseUrl = `${protocol}://${host}`;
 
-    // Call the API route with internal auth headers
     const authHeaders = getInternalAuthHeaders();
-    const response = await fetch(`${baseUrl}/api/ai/learning/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders,
-      },
-      body: JSON.stringify({
-        skipWebResearch,
-        forceRun,
-      }),
-    });
 
-    const result = await response.json();
+    // Fire the request to the API route. Use AbortController with a short
+    // timeout so we don't wait for the full job to complete — we just need
+    // to confirm the request was accepted (job created in DB).
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s to validate + create job
 
-    if (!response.ok) {
+    try {
+      const response = await fetch(`${baseUrl}/api/ai/learning/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          skipWebResearch,
+          forceRun,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // If we got a response, the job either completed (fast) or there was an error
+      const result = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: result.error || `API returned ${response.status}`,
+          data: result.data,
+        };
+      }
+
       return {
-        success: false,
-        error: result.error || `API returned ${response.status}`,
+        success: true,
         data: result.data,
       };
-    }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
 
-    return {
-      success: true,
-      data: result.data,
-    };
+      // AbortError means the request timed out — which is EXPECTED.
+      // It means the API route accepted the request and is now running
+      // the job synchronously. The job has been created in the DB and
+      // the frontend can poll /api/ai/learning/status for progress.
+      if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+        return {
+          success: true,
+          data: {
+            message: 'Learning job started (running in background)',
+          },
+        };
+      }
+
+      // For Node.js fetch abort errors (different error type)
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        return {
+          success: true,
+          data: {
+            message: 'Learning job started (running in background)',
+          },
+        };
+      }
+
+      throw fetchError;
+    }
   } catch (error) {
     console.error('Error running learning job:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to run learning job';

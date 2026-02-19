@@ -54,7 +54,7 @@ resource "aws_lambda_function" "learning_trigger" {
   role          = aws_iam_role.learning_trigger_role.arn
   handler       = "index.handler"
   runtime       = "nodejs20.x"
-  timeout       = 30
+  timeout       = 900
   memory_size   = 128
 
   filename         = data.archive_file.learning_trigger_code.output_path

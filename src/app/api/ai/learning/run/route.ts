@@ -1,6 +1,9 @@
 // ============================================
 // LEARNING RUN API ROUTE
-// Trigger a daily learning job (async - returns immediately)
+// Trigger a daily learning job.
+// On Amplify SSR, all handlers run as Lambda invocations that terminate
+// when the response is sent. Fire-and-forget async work gets killed.
+// Therefore we ALWAYS await the job synchronously to keep the Lambda alive.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { skipWebResearch = false, forceRun = true, sync = false } = body;
+    const { skipWebResearch = false, forceRun = true } = body;
 
     // Check if a job is already running
     const status = await dailyLearningService.getCurrentJobStatus();
@@ -30,8 +33,8 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
-    // ISSUE #2 & #3 FIX: Validate startup requirements SYNCHRONOUSLY before starting
-    // This catches env var issues and quota problems before returning success
+    // Validate startup requirements SYNCHRONOUSLY before starting
+    // This catches env var issues and quota problems before consuming tokens
     let startupValidation;
     try {
       startupValidation = await dailyLearningService.validateStartupRequirements(skipWebResearch);
@@ -50,41 +53,19 @@ export async function POST(request: NextRequest) {
       warnings.push(startupValidation.quotaStatus.warning);
     }
 
-    // If sync mode requested, wait for completion (for local testing / Lambda)
-    if (sync) {
-      const result = await dailyLearningService.runDailyLearning({
-        forceRun,
-        skipWebResearch,
-      });
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          jobId: result.jobId,
-          hasDigest: !!result.digest,
-          digest: result.digest,
-          warnings: warnings.length > 0 ? warnings : undefined,
-        },
-      });
-    }
-
-    // Default: Async mode - start job and return immediately (for Lambda/scheduled triggers)
-    // The job now handles its own error persistence via persistJobError
-    dailyLearningService.runDailyLearning({ forceRun, skipWebResearch })
-      .then(result => console.log(`Learning job completed: ${result.jobId}, hasDigest: ${!!result.digest}`))
-      .catch(error => {
-        // Error is already persisted to DB by runDailyLearning, just log here
-        console.error('Learning job failed:', error instanceof Error ? error.message : error);
-      });
-
-    // Get the newly created job status
-    const newStatus = await dailyLearningService.getCurrentJobStatus();
+    // Run the learning job synchronously. This keeps the Lambda alive for the
+    // full duration of the job. The frontend polls /api/ai/learning/status
+    // for real-time progress updates while this request is in flight.
+    const result = await dailyLearningService.runDailyLearning({
+      forceRun,
+      skipWebResearch,
+    });
 
     return NextResponse.json({
       success: true,
       data: {
-        message: 'Learning job started',
-        job: newStatus.currentJob,
+        jobId: result.jobId,
+        hasDigest: !!result.digest,
         warnings: warnings.length > 0 ? warnings : undefined,
       },
     });
