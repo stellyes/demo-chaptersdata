@@ -2697,10 +2697,9 @@ Return ONLY valid JSON, no markdown or explanation.`;
       .filter(b => b.grossMarginPct >= 55)
       .sort((a, b) => b.grossMarginPct - a.grossMarginPct);
 
-    // Limit data sent to Claude to avoid exceeding context window.
-    // With 10K+ brands, sending all of them creates a 1MB+ prompt.
-    // Top 50 brands + summaries provide more than enough for analysis.
-    const topN = 50;
+    // Sonnet has a 200K token context window — send generous brand data for deep analysis.
+    // Top 150 brands with full details covers the vast majority of revenue.
+    const topN = 150;
     const topBrandsDetailed = allBrands.slice(0, topN);
     const tailBrands = allBrands.slice(topN);
     const tailSummary = tailBrands.length > 0 ? {
@@ -2710,13 +2709,13 @@ Return ONLY valid JSON, no markdown or explanation.`;
       pctOfTotal: tailBrands.reduce((sum, b) => sum + b.pctOfTotalSales, 0).toFixed(2),
     } : null;
 
-    // Limit vendor relationships to top 30 by invoice count
+    // Top 50 vendors with their full brand lists
     const topVendorRelationships = Object.entries(vendorBrandMap)
       .sort(([, a], [, b]) => b.totalInvoices - a.totalInvoices)
-      .slice(0, 30)
+      .slice(0, 50)
       .map(([vendor, data]) => ({
         vendor,
-        brands: data.brands.slice(0, 10), // Cap brands per vendor
+        brands: data.brands.slice(0, 20),
         brandCount: data.brands.length,
         totalInvoices: data.totalInvoices,
         totalUnits: data.totalUnits,
@@ -2726,13 +2725,10 @@ Return ONLY valid JSON, no markdown or explanation.`;
     return {
       totalBrandsTracked: allBrands.length,
       totalBrandSales: totalBrandSales.toFixed(2),
-      // Top brands for detailed analysis
       topBrands: topBrandsDetailed,
-      // Summary of remaining long-tail brands (not individual rows)
       longTailSummary: tailSummary,
-      // Margin analysis
-      lowMarginBrands: lowMarginBrands.slice(0, 10),
-      highMarginBrands: highMarginBrands.slice(0, 10),
+      lowMarginBrands: lowMarginBrands.slice(0, 20),
+      highMarginBrands: highMarginBrands.slice(0, 20),
       avgBrandMargin: allBrands.length > 0
         ? (allBrands.reduce((sum, b) => sum + b.grossMarginPct, 0) / allBrands.length).toFixed(1)
         : '0.0',
@@ -2786,10 +2782,10 @@ Return ONLY valid JSON, no markdown or explanation.`;
       prisma.customer.aggregate({
         _avg: { lifetimeNetSales: true, lifetimeVisits: true, lifetimeAov: true },
       }),
-      // Top 20 customers by LTV
+      // Top 50 customers by LTV
       prisma.customer.findMany({
         orderBy: { lifetimeNetSales: 'desc' },
-        take: 20,
+        take: 50,
         select: {
           customerSegment: true,
           recencySegment: true,
@@ -2806,7 +2802,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
           lastVisitDate: { lt: thirtyDaysAgo },
         },
         orderBy: { lifetimeNetSales: 'desc' },
-        take: 20,
+        take: 50,
         select: {
           customerSegment: true,
           recencySegment: true,
@@ -2842,7 +2838,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         totalRevenue: parseFloat(s._sum.lifetimeNetSales?.toString() || '0').toFixed(2),
         avgLtv: parseFloat(s._avg.lifetimeNetSales?.toString() || '0').toFixed(2),
       })),
-      // Top 20 customers by lifetime value
+      // Top 50 customers by lifetime value
       topCustomers: topCustomers.map(c => ({
         segment: c.customerSegment,
         recency: c.recencySegment,
@@ -3180,7 +3176,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         findings: {
           where: { relevance: 'high' },
           orderBy: { actionRequired: 'desc' },
-          take: 5,
+          take: 10,
         },
       },
     });
@@ -3214,7 +3210,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         relevance: 'high',
       },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 20,
       include: { document: true },
     });
     console.log(`[DataLoader:research] Found ${actionItems.length} action items`);
@@ -3222,21 +3218,21 @@ Return ONLY valid JSON, no markdown or explanation.`;
     return {
       dataAvailable: true,
       totalDocuments: researchDocs.length,
-      recentDocuments: researchDocs.slice(0, 5).map(d => ({
+      recentDocuments: researchDocs.slice(0, 15).map(d => ({
         category: d.category,
-        summary: d.summary.substring(0, 200) + '...',
+        summary: d.summary.substring(0, 300) + '...',
         relevance: d.relevanceScore,
         analyzedAt: d.analyzedAt.toISOString().split('T')[0],
       })),
       findingsByCategory: Object.entries(findingsByCategory).map(([category, findings]) => ({
         category,
         findingsCount: findings.length,
-        topFindings: findings.slice(0, 3),
+        topFindings: findings.slice(0, 10),
       })),
       actionItemsCount: actionItems.length,
-      priorityActions: actionItems.slice(0, 5).map(a => ({
-        finding: a.finding.substring(0, 150) + '...',
-        action: a.recommendedAction?.substring(0, 100) + '...',
+      priorityActions: actionItems.slice(0, 10).map(a => ({
+        finding: a.finding.substring(0, 200) + '...',
+        action: a.recommendedAction?.substring(0, 150) + '...',
         category: a.category,
       })),
     };
@@ -3260,7 +3256,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       prisma.dataFlag.findMany({
         where: { status: { in: ['pending', 'in_review'] } },
         orderBy: { createdAt: 'desc' },
-        take: 20,
+        take: 50,
         select: {
           flagType: true,
           severity: true,
