@@ -36,6 +36,11 @@ src/
 │   │   ├── auth/                 # Authentication
 │   │   ├── ai/                   # AI/learning endpoints
 │   │   │   ├── learning/         # Autonomous learning triggers
+│   │   │   │   ├── run/          # POST - trigger learning job
+│   │   │   │   ├── status/       # GET - poll job progress
+│   │   │   │   ├── digest/       # GET - retrieve daily digest
+│   │   │   │   ├── cancel/       # POST - cancel running job
+│   │   │   │   └── auth.ts       # Shared auth (API key validation)
 │   │   │   ├── insights/         # Insight generation
 │   │   │   ├── buyer-insights/   # Purchasing intelligence
 │   │   │   └── query/            # Custom queries
@@ -44,7 +49,10 @@ src/
 │   │   ├── qr/                   # QR code management
 │   │   ├── seo/                  # SEO audit endpoints
 │   │   └── admin/                # Admin operations
+│   ├── actions/                  # Server actions
+│   │   └── learning.ts           # runLearningJob() for frontend triggers
 │   └── r/[shortCode]/            # QR redirect route
+├── instrumentation.ts            # Next.js startup hook (Prisma init)
 ├── components/
 │   ├── pages/                    # Full-page components
 │   │   ├── DashboardPage/        # Main dashboard
@@ -82,8 +90,11 @@ prisma/
 ├── schema.prisma                 # 46 database models
 └── migrations/
 
-scripts/                          # Migration & utility scripts
-terraform/                        # Infrastructure-as-code
+scripts/
+├── run-learning.sh               # CLI tool to trigger & monitor learning jobs
+├── run-learning.ts               # TypeScript version of learning trigger
+└── ...                           # Migration & utility scripts
+terraform/                        # Infrastructure-as-code (Lambda, EventBridge)
 config/                           # Vendor mapping configs
 ```
 
@@ -95,6 +106,11 @@ npm run build         # Production build with Prisma
 npm run lint          # ESLint check
 npm run db:seed       # Seed database
 npm run sync-amplify  # Sync env vars to Amplify
+
+# Learning Pipeline
+./scripts/run-learning.sh              # Trigger & monitor learning job
+./scripts/run-learning.sh --skip-web   # Skip web research phase
+./scripts/run-learning.sh --monitor-only  # Monitor existing job
 ```
 
 ## Database Schema (46 Models)
@@ -242,7 +258,8 @@ const { sales, selectedStore, setDateRange } = useAppStore()
 Key env vars (see `.env.example`):
 - `DATABASE_URL`: Aurora PostgreSQL connection
 - `ANTHROPIC_API_KEY`: Claude API key
-- `SERPAPI_API_KEY`: Web search API
+- `SERPAPI_API_KEY`: Web search API (250 searches/month quota)
+- `LEARNING_API_KEY`: Auth key for learning pipeline endpoints
 - `S3_*`: S3 bucket configuration
 - `NEXT_PUBLIC_COGNITO_*`: Cognito config
 
@@ -261,14 +278,33 @@ Key env vars (see `.env.example`):
 4. Add corresponding API endpoint if needed
 
 ### Running autonomous learning
-```typescript
-// API call
-POST /api/ai/learning/run
-{ "async": true }  // or false for synchronous
 
-// Check status
-GET /api/ai/learning/status?jobId=xxx
+**From CLI:**
+```bash
+./scripts/run-learning.sh  # Triggers job, streams logs, monitors progress
 ```
+
+**From Frontend (Server Action):**
+```typescript
+import { runLearningJob } from '@/app/actions/learning';
+const result = await runLearningJob({ forceRun: true, skipWebResearch: false });
+// Returns immediately, frontend polls /api/ai/learning/status
+```
+
+**Direct API:**
+```bash
+# Trigger (requires X-API-Key header)
+curl -X POST https://bcsf.chaptersdata.com/api/ai/learning/run \
+  -H "X-API-Key: $LEARNING_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"forceRun": true}'
+
+# Poll status
+curl https://bcsf.chaptersdata.com/api/ai/learning/status \
+  -H "X-API-Key: $LEARNING_API_KEY"
+```
+
+**Architecture:** Jobs run synchronously on Amplify Lambda (keeps Lambda alive). Server action fires request with 15s timeout, returns immediately while Lambda continues execution. Frontend polls status endpoint for real-time progress.
 
 ### Working with the store
 ```typescript
