@@ -32,19 +32,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Gather related insights for context
-    const relatedInsights = await getRelevantInsights({
-      categories: ['purchasing', 'vendors', 'inventory', 'brands', category],
-      limit: 20,
-    });
+    // Gather data in parallel to minimize pre-stream latency
+    const [relatedInsights, purchasingContext] = await Promise.all([
+      getRelevantInsights({
+        categories: ['purchasing', 'vendors', 'inventory', 'brands', category],
+        limit: 20,
+      }),
+      getPurchasingDataContext(),
+    ]);
 
     const contextInsights = relatedInsights
       .filter(i => i.id !== insightId)
       .map(i => `- [${i.confidence}] ${i.insight}`)
       .join('\n');
-
-    // Fetch comprehensive purchasing data for context
-    const purchasingContext = await getPurchasingDataContext();
 
     // Build the investigation prompt
     const systemPrompt = `You are a senior procurement analyst specializing in cannabis retail purchasing and vendor management.
@@ -99,45 +99,63 @@ Please conduct a thorough investigation of this purchasing insight and provide:
 
 8. **KPIs to Track** - What metrics should be monitored going forward?`;
 
-    const response = await anthropic.messages.create({
+    // Stream the response to avoid CloudFront 30s origin timeout.
+    const stream = anthropic.messages.stream({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
       system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
+      messages: [{ role: 'user', content: userPrompt }],
     });
 
-    const analysisContent = response.content[0];
-    if (analysisContent.type !== 'text') {
-      throw new Error('Unexpected response type from Claude');
-    }
+    const encoder = new TextEncoder();
+    let fullText = '';
 
-    const tokensUsed = response.usage.input_tokens + response.usage.output_tokens;
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              fullText += event.delta.text;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`));
+            }
+          }
 
-    // Save investigation to AnalysisHistory for persistence
-    const savedAnalysis = await prisma.analysisHistory.create({
-      data: {
-        analysisType: 'buyer-investigation',
-        inputSummary: insight.slice(0, 500),
-        outputSummary: analysisContent.text,
-        insightsCount: 1,
-        tokensUsed,
-        model: 'claude-sonnet-4-20250514',
+          const finalMessage = await stream.finalMessage();
+          const tokensUsed = finalMessage.usage.input_tokens + finalMessage.usage.output_tokens;
+
+          const savedAnalysis = await prisma.analysisHistory.create({
+            data: {
+              analysisType: 'buyer-investigation',
+              inputSummary: insight.slice(0, 500),
+              outputSummary: fullText,
+              insightsCount: 1,
+              tokensUsed,
+              model: 'claude-sonnet-4-20250514',
+            },
+          });
+
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'done',
+            investigationId: savedAnalysis.id,
+            insightId,
+            category,
+            tokensUsed,
+          })}\n\n`));
+
+          controller.close();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Stream failed';
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`));
+          controller.close();
+        }
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        investigation: analysisContent.text,
-        investigationId: savedAnalysis.id,
-        insightId,
-        category,
-        tokensUsed,
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
       },
     });
   } catch (error) {

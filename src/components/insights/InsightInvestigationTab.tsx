@@ -155,28 +155,54 @@ export function InsightInvestigationTab() {
         }),
       });
 
-      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
 
-      if (result.success) {
-        setInvestigationResult(result.data.investigation);
+      // Handle streaming SSE response
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
 
-        // Add the investigation to the local store using the server-generated ID
-        // This ensures consistency with the database-persisted record
-        addAiRecommendation({
-          id: result.data.investigationId,
-          type: 'investigation',
-          date: new Date().toISOString(),
-          analysis: result.data.investigation,
-          summary: selectedInsight.insight.slice(0, 200),
-        });
+      const decoder = new TextDecoder();
+      let accumulated = '';
+      let buffer = '';
 
-        addNotification({
-          type: 'success',
-          title: 'Investigation Complete',
-          message: 'Deep analysis is ready to view and has been saved.',
-        });
-      } else {
-        throw new Error(result.error);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'text') {
+              accumulated += event.content;
+              setInvestigationResult(accumulated);
+            } else if (event.type === 'done') {
+              addAiRecommendation({
+                id: event.investigationId,
+                type: 'investigation',
+                date: new Date().toISOString(),
+                analysis: accumulated,
+                summary: selectedInsight.insight.slice(0, 200),
+              });
+              addNotification({
+                type: 'success',
+                title: 'Investigation Complete',
+                message: 'Deep analysis is ready to view and has been saved.',
+              });
+            } else if (event.type === 'error') {
+              throw new Error(event.error);
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) continue;
+            throw e;
+          }
+        }
       }
     } catch (error) {
       console.error('Investigation failed:', error);
