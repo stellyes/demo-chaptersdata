@@ -102,6 +102,20 @@ function startEagerInit(): Promise<void> {
 // By the time Next.js handles the first request, _prisma will have fresh credentials.
 if (process.env.NODE_ENV === 'production' || process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI) {
   startEagerInit();
+
+  // Proactive credential refresh for password rotation resilience.
+  // Most routes use the `prisma` proxy directly without calling initializePrisma(),
+  // so this background refresh ensures _prisma is recreated with fresh credentials
+  // shortly after a rotation occurs. Without this, warm Lambda instances would
+  // permanently fail after rotation until a cold start.
+  setInterval(async () => {
+    try {
+      clearDatabaseUrlCache();
+      await initializePrisma();
+    } catch (error) {
+      console.warn('[Prisma] Background credential refresh failed:', error);
+    }
+  }, 4 * 60 * 1000); // Every 4 minutes (credentials cache is 5 min TTL)
 }
 
 // Export a getter that returns the prisma instance
@@ -184,11 +198,12 @@ export async function initializePrisma(): Promise<PrismaClient> {
     // At this point _prisma is guaranteed to exist
     const client = _prisma!;
 
-    // Test the connection
-    console.log(`[Prisma] Testing connection with $connect()...`);
+    // Test the connection with an actual query — $connect() can be a no-op on
+    // already-connected clients, masking stale credentials after password rotation.
+    console.log(`[Prisma] Testing connection with query...`);
     const connectStart = Date.now();
-    await client.$connect();
-    console.log(`[Prisma] $connect() succeeded in ${Date.now() - connectStart}ms`);
+    await client.$queryRaw`SELECT 1`;
+    console.log(`[Prisma] Connection test succeeded in ${Date.now() - connectStart}ms`);
     globalThis.prismaInitialized = true;
 
     console.log(`[Prisma] initializePrisma() complete in ${Date.now() - initStart}ms`);
@@ -220,8 +235,8 @@ export async function initializePrisma(): Promise<PrismaClient> {
 
     console.log(`[Prisma] Retry: Testing connection...`);
     const retryStart = Date.now();
-    await _prisma.$connect();
-    console.log(`[Prisma] Retry: $connect() succeeded in ${Date.now() - retryStart}ms`);
+    await _prisma.$queryRaw`SELECT 1`;
+    console.log(`[Prisma] Retry: Connection test succeeded in ${Date.now() - retryStart}ms`);
     globalThis.prismaInitialized = true;
 
     console.log(`[Prisma] initializePrisma() complete (with retry) in ${Date.now() - initStart}ms`);

@@ -146,7 +146,7 @@ aws events put-rule \
     "detail-type": ["AWS API Call via CloudTrail"],
     "detail": {
       "eventSource": ["secretsmanager.amazonaws.com"],
-      "eventName": ["RotateSecret", "PutSecretValue"]
+      "eventName": ["RotateSecret", "PutSecretValue", "UpdateSecretVersionStage"]
     }
   }' \
   --region "$REGION" 2>/dev/null || echo "Rule already exists"
