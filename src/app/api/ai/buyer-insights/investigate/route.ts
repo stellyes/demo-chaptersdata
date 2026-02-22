@@ -41,34 +41,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Return the SSE stream immediately.  All slow work (Secrets Manager,
-  // Prisma cold-connect, Anthropic API) runs inside the ReadableStream so
-  // CloudFront sees bytes flowing well before its 30 s origin timeout.
+  // Use a TransformStream so we can write the SSE comment *immediately*
+  // before doing any slow I/O.  The readable side is handed to the Response
+  // and the writable side is consumed by our background async function.
   const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
 
-  const readable = new ReadableStream({
-    async start(controller) {
-      let fullText = '';
+  // Fire-and-forget: all slow work runs in the background.
+  (async () => {
+    let fullText = '';
 
-      try {
-        // SSE comment — keeps CloudFront alive during cold-start data gathering.
-        controller.enqueue(encoder.encode(': connected\n\n'));
+    try {
+      // SSE comment — first byte for CloudFront, keeps connection alive.
+      await writer.write(encoder.encode(': connected\n\n'));
 
-        // Gather data in parallel
-        const [relatedInsights, purchasingContext] = await Promise.all([
-          getRelevantInsights({
-            categories: ['purchasing', 'vendors', 'inventory', 'brands', category],
-            limit: 20,
-          }),
-          getPurchasingDataContext(),
-        ]);
+      // Gather data in parallel
+      const [relatedInsights, purchasingContext] = await Promise.all([
+        getRelevantInsights({
+          categories: ['purchasing', 'vendors', 'inventory', 'brands', category],
+          limit: 20,
+        }),
+        getPurchasingDataContext(),
+      ]);
 
-        const contextInsights = relatedInsights
-          .filter(i => i.id !== insightId)
-          .map(i => `- [${i.confidence}] ${i.insight}`)
-          .join('\n');
+      const contextInsights = relatedInsights
+        .filter(i => i.id !== insightId)
+        .map(i => `- [${i.confidence}] ${i.insight}`)
+        .join('\n');
 
-        const systemPrompt = `You are a senior procurement analyst specializing in cannabis retail purchasing and vendor management.
+      const systemPrompt = `You are a senior procurement analyst specializing in cannabis retail purchasing and vendor management.
 Your task is to conduct a deep investigation into a specific purchasing insight to provide actionable recommendations.
 
 You have access to:
@@ -87,7 +89,7 @@ Your investigation should:
 
 Format your response with clear sections using markdown headers.`;
 
-        const userPrompt = `## Insight to Investigate
+      const userPrompt = `## Insight to Investigate
 **Category:** ${category}
 **Insight:** ${insight}
 
@@ -120,52 +122,56 @@ Please conduct a thorough investigation of this purchasing insight and provide:
 
 8. **KPIs to Track** - What metrics should be monitored going forward?`;
 
-        // Stream the Anthropic response
-        const stream = anthropic.messages.stream({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        });
+      // Stream the Anthropic response
+      const stream = anthropic.messages.stream({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      });
 
-        for await (const event of stream) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            fullText += event.delta.text;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`));
-          }
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          fullText += event.delta.text;
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`));
         }
-
-        const finalMessage = await stream.finalMessage();
-        const tokensUsed = finalMessage.usage.input_tokens + finalMessage.usage.output_tokens;
-
-        const savedAnalysis = await prisma.analysisHistory.create({
-          data: {
-            analysisType: 'buyer-investigation',
-            inputSummary: insight.slice(0, 500),
-            outputSummary: fullText,
-            insightsCount: 1,
-            tokensUsed,
-            model: 'claude-sonnet-4-20250514',
-          },
-        });
-
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-          type: 'done',
-          investigationId: savedAnalysis.id,
-          insightId,
-          category,
-          tokensUsed,
-        })}\n\n`));
-
-        controller.close();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Stream failed';
-        console.error('Buyer investigation stream error:', message);
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`));
-        controller.close();
       }
-    },
-  });
+
+      const finalMessage = await stream.finalMessage();
+      const tokensUsed = finalMessage.usage.input_tokens + finalMessage.usage.output_tokens;
+
+      const savedAnalysis = await prisma.analysisHistory.create({
+        data: {
+          analysisType: 'buyer-investigation',
+          inputSummary: insight.slice(0, 500),
+          outputSummary: fullText,
+          insightsCount: 1,
+          tokensUsed,
+          model: 'claude-sonnet-4-20250514',
+        },
+      });
+
+      await writer.write(encoder.encode(`data: ${JSON.stringify({
+        type: 'done',
+        investigationId: savedAnalysis.id,
+        insightId,
+        category,
+        tokensUsed,
+      })}\n\n`));
+
+      await writer.close();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Stream failed';
+      console.error('Buyer investigation stream error:', message);
+      try {
+        await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`));
+        await writer.close();
+      } catch {
+        // writer may already be closed/errored
+        writer.abort().catch(() => {});
+      }
+    }
+  })();
 
   return new Response(readable, {
     headers: {
