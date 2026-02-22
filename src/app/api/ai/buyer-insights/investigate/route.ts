@@ -21,33 +21,54 @@ interface InvestigationRequest {
 }
 
 export async function POST(request: NextRequest) {
+  // Parse & validate synchronously so we can still return 400.
+  let body: InvestigationRequest;
   try {
-    const body: InvestigationRequest = await request.json();
-    const { insightId, insight, category, additionalContext } = body;
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Invalid JSON body' },
+      { status: 400 }
+    );
+  }
 
-    if (!insight) {
-      return NextResponse.json(
-        { success: false, error: 'Insight text is required' },
-        { status: 400 }
-      );
-    }
+  const { insightId, insight, category, additionalContext } = body;
 
-    // Gather data in parallel to minimize pre-stream latency
-    const [relatedInsights, purchasingContext] = await Promise.all([
-      getRelevantInsights({
-        categories: ['purchasing', 'vendors', 'inventory', 'brands', category],
-        limit: 20,
-      }),
-      getPurchasingDataContext(),
-    ]);
+  if (!insight) {
+    return NextResponse.json(
+      { success: false, error: 'Insight text is required' },
+      { status: 400 }
+    );
+  }
 
-    const contextInsights = relatedInsights
-      .filter(i => i.id !== insightId)
-      .map(i => `- [${i.confidence}] ${i.insight}`)
-      .join('\n');
+  // Return the SSE stream immediately.  All slow work (Secrets Manager,
+  // Prisma cold-connect, Anthropic API) runs inside the ReadableStream so
+  // CloudFront sees bytes flowing well before its 30 s origin timeout.
+  const encoder = new TextEncoder();
 
-    // Build the investigation prompt
-    const systemPrompt = `You are a senior procurement analyst specializing in cannabis retail purchasing and vendor management.
+  const readable = new ReadableStream({
+    async start(controller) {
+      let fullText = '';
+
+      try {
+        // SSE comment — keeps CloudFront alive during cold-start data gathering.
+        controller.enqueue(encoder.encode(': connected\n\n'));
+
+        // Gather data in parallel
+        const [relatedInsights, purchasingContext] = await Promise.all([
+          getRelevantInsights({
+            categories: ['purchasing', 'vendors', 'inventory', 'brands', category],
+            limit: 20,
+          }),
+          getPurchasingDataContext(),
+        ]);
+
+        const contextInsights = relatedInsights
+          .filter(i => i.id !== insightId)
+          .map(i => `- [${i.confidence}] ${i.insight}`)
+          .join('\n');
+
+        const systemPrompt = `You are a senior procurement analyst specializing in cannabis retail purchasing and vendor management.
 Your task is to conduct a deep investigation into a specific purchasing insight to provide actionable recommendations.
 
 You have access to:
@@ -66,7 +87,7 @@ Your investigation should:
 
 Format your response with clear sections using markdown headers.`;
 
-    const userPrompt = `## Insight to Investigate
+        const userPrompt = `## Insight to Investigate
 **Category:** ${category}
 **Insight:** ${insight}
 
@@ -99,72 +120,60 @@ Please conduct a thorough investigation of this purchasing insight and provide:
 
 8. **KPIs to Track** - What metrics should be monitored going forward?`;
 
-    // Stream the response to avoid CloudFront 30s origin timeout.
-    const stream = anthropic.messages.stream({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
+        // Stream the Anthropic response
+        const stream = anthropic.messages.stream({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        });
 
-    const encoder = new TextEncoder();
-    let fullText = '';
-
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const event of stream) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-              fullText += event.delta.text;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`));
-            }
+        for await (const event of stream) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            fullText += event.delta.text;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`));
           }
-
-          const finalMessage = await stream.finalMessage();
-          const tokensUsed = finalMessage.usage.input_tokens + finalMessage.usage.output_tokens;
-
-          const savedAnalysis = await prisma.analysisHistory.create({
-            data: {
-              analysisType: 'buyer-investigation',
-              inputSummary: insight.slice(0, 500),
-              outputSummary: fullText,
-              insightsCount: 1,
-              tokensUsed,
-              model: 'claude-sonnet-4-20250514',
-            },
-          });
-
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            type: 'done',
-            investigationId: savedAnalysis.id,
-            insightId,
-            category,
-            tokensUsed,
-          })}\n\n`));
-
-          controller.close();
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Stream failed';
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`));
-          controller.close();
         }
-      },
-    });
 
-    return new Response(readable, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
-  } catch (error) {
-    console.error('Error investigating buyer insight:', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to investigate insight' },
-      { status: 500 }
-    );
-  }
+        const finalMessage = await stream.finalMessage();
+        const tokensUsed = finalMessage.usage.input_tokens + finalMessage.usage.output_tokens;
+
+        const savedAnalysis = await prisma.analysisHistory.create({
+          data: {
+            analysisType: 'buyer-investigation',
+            inputSummary: insight.slice(0, 500),
+            outputSummary: fullText,
+            insightsCount: 1,
+            tokensUsed,
+            model: 'claude-sonnet-4-20250514',
+          },
+        });
+
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'done',
+          investigationId: savedAnalysis.id,
+          insightId,
+          category,
+          tokensUsed,
+        })}\n\n`));
+
+        controller.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Stream failed';
+        console.error('Buyer investigation stream error:', message);
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: message })}\n\n`));
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
 }
 
 async function getPurchasingDataContext(): Promise<string> {
