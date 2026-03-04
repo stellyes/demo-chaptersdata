@@ -7,7 +7,7 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
-import { QrCode, Link, Download, Loader2, Copy, Check } from 'lucide-react';
+import { QrCode, Link, Download, Loader2, Copy, Check, Trash2 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { useAppStore } from '@/store/app-store';
 import { QRCode } from '@/types';
@@ -18,6 +18,8 @@ export function QRCodePage() {
   const [trackingUrl, setTrackingUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     url: '',
@@ -92,6 +94,23 @@ export function QRCodePage() {
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy:', error);
+    }
+  };
+
+  const deleteQRCode = async (id: string) => {
+    try {
+      setDeleting(id);
+      const response = await fetch(`/api/qr?id=${id}`, { method: 'DELETE' });
+      const result = await response.json();
+
+      if (result.success) {
+        setQrCodesData(qrCodesData.filter((qr) => qr.id !== id));
+      }
+    } catch (error) {
+      console.error('Failed to delete QR code:', error);
+    } finally {
+      setDeleting(null);
+      setConfirmDelete(null);
     }
   };
 
@@ -316,6 +335,49 @@ export function QRCodePage() {
                       {v ? 'Active' : 'Inactive'}
                     </span>
                   ),
+                },
+                {
+                  key: 'id',
+                  label: '',
+                  align: 'right',
+                  render: (_v, row) => {
+                    const id = String(row.id);
+                    const isConfirming = confirmDelete === id;
+                    const isDeleting = deleting === id;
+
+                    if (isDeleting) {
+                      return <Loader2 className="w-4 h-4 animate-spin text-[var(--muted)]" />;
+                    }
+
+                    if (isConfirming) {
+                      return (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => deleteQRCode(id)}
+                            className="px-2 py-1 text-xs font-medium text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="px-2 py-1 text-xs font-medium text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        onClick={() => setConfirmDelete(id)}
+                        className="p-1.5 text-[var(--muted)] hover:text-red-600 rounded hover:bg-red-50 transition-colors"
+                        title="Delete QR code"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    );
+                  },
                 },
               ]}
               pageSize={10}
