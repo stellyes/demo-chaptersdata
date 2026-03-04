@@ -5,22 +5,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-// Get the base URL for tracking redirects
-function getTrackingBaseUrl(): string {
-  // Use environment variable if set, otherwise default to production URL
-  return (
-    process.env.QR_REDIRECT_BASE_URL ||
-    process.env.NEXTAUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    'https://bcsf.chaptersdata.com'
-  );
-}
+import { QR_REDIRECT_BASE_URL } from '@/lib/config';
 
 // Build the tracking URL for a QR code
+// QR_REDIRECT_BASE_URL already includes the /r path segment
+// e.g., https://skhaq1xs3j.execute-api.us-west-1.amazonaws.com/prod/r
 function buildTrackingUrl(shortCode: string): string {
-  const baseUrl = getTrackingBaseUrl();
-  return `${baseUrl}/r/${shortCode}`;
+  return `${QR_REDIRECT_BASE_URL}/${shortCode}`;
 }
 
 // GET - Load all QR codes

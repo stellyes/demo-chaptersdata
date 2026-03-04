@@ -27,19 +27,22 @@ export const STORES: Record<StoreId, StoreConfig> = {
 export const STORE_NAME_TO_ID: Record<string, StoreId> = {
   'Grass Roots': 'grass_roots',
   'Grass Roots SF': 'grass_roots',
+  'Grass Roots - SF': 'grass_roots',
+  'Grass Roots - SF Excelsior': 'grass_roots',
   'grass_roots': 'grass_roots',
   'Barbary Coast': 'barbary_coast',
   'Barbary Coast SF': 'barbary_coast',
+  'Barbary Coast - SF Mission': 'barbary_coast',
   'barbary_coast': 'barbary_coast',
 };
 
 // AWS Configuration
 // Uses CHAPTERS_ prefix for Amplify (AWS_ prefix is reserved)
 export const AWS_CONFIG = {
-  region: process.env.CHAPTERS_AWS_REGION || process.env.AWS_REGION || 'us-west-1',
+  region: process.env.CHAPTERS_AWS_REGION || process.env.S3_REGION || 'us-west-1',
   bucket: process.env.CHAPTERS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'retail-data-bcgr',
-  accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY,
+  accessKeyId: process.env.CHAPTERS_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID,
+  secretAccessKey: process.env.CHAPTERS_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY,
 };
 
 // S3 Paths
@@ -61,7 +64,7 @@ export const DYNAMODB_TABLES = {
 };
 
 // QR Redirect URL
-export const QR_REDIRECT_BASE_URL = process.env.QR_REDIRECT_BASE_URL || 'https://skhaq1xs3j.execute-api.us-west-1.amazonaws.com/prod/r';
+export const QR_REDIRECT_BASE_URL = process.env.QR_REDIRECT_BASE_URL || 'https://bcsf.chaptersdata.com/r';
 
 // Customer Segmentation Thresholds
 export const CUSTOMER_SEGMENTS = {
