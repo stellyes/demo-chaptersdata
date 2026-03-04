@@ -157,6 +157,13 @@ function SalesDataTab() {
           title: 'Brand Data Saved',
           message: `${result.recordCount || cleaned.length} brand records saved to database.`,
         });
+      } else {
+        console.error('Brand data save failed:', result.error);
+        addNotification({
+          type: 'error',
+          title: 'Brand Data Save Failed',
+          message: result.error || 'Failed to save brand data to database.',
+        });
       }
     } catch (error) {
       console.error('Failed to save brand data to database:', error);
@@ -198,6 +205,13 @@ function SalesDataTab() {
           type: 'success',
           title: 'Product Data Saved',
           message: `${result.recordCount || cleaned.length} product records saved to database.`,
+        });
+      } else {
+        console.error('Product data save failed:', result.error);
+        addNotification({
+          type: 'error',
+          title: 'Product Data Save Failed',
+          message: result.error || 'Failed to save product data to database.',
         });
       }
     } catch (error) {

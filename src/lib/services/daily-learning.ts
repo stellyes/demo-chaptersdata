@@ -13,22 +13,22 @@ import { saveInsights, InsightInput } from './knowledge-base';
 import { dataCorrelationsService, CorrelationSummary } from './data-correlations';
 import { CLAUDE_CONFIG } from '@/lib/config';
 import { parseClaudeJson, ParseJsonResult } from '@/lib/utils/json-response';
+import {
+  DAILY_LEARNING_CONFIG as IMPORTED_LEARNING_CONFIG,
+  LEARNING_TIMEOUTS,
+  PHASE_CONFIGS,
+  LEARNING_LOG_CONFIG,
+  logLearningConfig,
+} from '@/lib/learning-config';
 
 // Default org ID for autonomous learning (set via env var or use fallback)
 const DEFAULT_LEARNING_ORG_ID = process.env.DEFAULT_ORG_ID || 'chapters-primary';
 
-// Timeout for database queries (60 seconds)
-const QUERY_TIMEOUT_MS = 60000;
-
-// Timeout for Claude API calls (2 minutes per attempt - shorter for retry)
-const CLAUDE_API_TIMEOUT_MS = 2 * 60 * 1000;
-
-// Overall Phase 1 timeout (5 minutes) - prevents indefinite stalls
-// Phase 1 includes: 11 sequential data loads + correlation summary + Claude analysis
-const PHASE1_OVERALL_TIMEOUT_MS = 5 * 60 * 1000;
-
-// Max retries for Claude API calls
-const CLAUDE_API_MAX_RETRIES = 3;
+// Re-export timeouts from centralized config for use in this module
+const QUERY_TIMEOUT_MS = LEARNING_TIMEOUTS.queryTimeoutMs;
+const CLAUDE_API_TIMEOUT_MS = LEARNING_TIMEOUTS.claudeApiTimeoutMs;
+const PHASE1_OVERALL_TIMEOUT_MS = LEARNING_TIMEOUTS.phase1OverallTimeoutMs;
+const CLAUDE_API_MAX_RETRIES = LEARNING_TIMEOUTS.claudeApiMaxRetries;
 
 // Helper to add timeout to async operations
 async function withTimeout<T>(
@@ -100,29 +100,8 @@ async function withRetry<T>(
   throw new Error(`${operationName} failed after ${maxRetries} attempts. Last error: ${lastError?.message}`);
 }
 
-// Daily Learning Configuration
-export const DAILY_LEARNING_CONFIG = {
-  maxSearchesPerDay: 30, // Generous budget: 1000/month ≈ 33/day
-  maxPagesPerSearch: 5,
-  // ISSUE #5 FIX: Increased token budgets for better JSON response quality & accuracy
-  phase1TokenBudget: 16000, // Doubled: large data input requires space for thorough analysis
-  phase2TokenBudget: 12000, // Increased: progressive context continues to grow
-  phase3TokenBudget: 12000, // Increased: better analysis of search results
-  phase4TokenBudget: 20000, // Increased: complex cross-correlation work (Sonnet)
-  phase5TokenBudget: 16000, // Increased: critical digest output quality
-  questionsPerCycle: 10,
-  maxWebResearchQuestions: 10, // Increased: more thorough research coverage
-  // Progressive learning settings
-  maxPastQuestionsForContext: 50, // Expanded from 20 for deeper historical context
-  maxPastInsightsForContext: 25, // Expanded from 10 for richer context
-  maxPastDigestsForContext: 14, // 2 weeks of digests for trend analysis
-  maxIndustryHighlightsForContext: 10, // NEW: Include industry news from past digests
-  maxRegulatoryUpdatesForContext: 10, // NEW: Include regulatory updates from past digests
-  maxCollectedUrlsForContext: 15, // NEW: Include analyzed web research URLs
-  maxPastInvestigationsForContext: 10, // Include recent investigations for learning continuity
-  questionRepeatCooldownDays: 7, // Don't repeat questions asked within this period
-  lowQualityThreshold: 0.4, // Questions below this quality may be re-asked
-};
+// Daily Learning Configuration — imported from centralized config (supports env var overrides)
+export const DAILY_LEARNING_CONFIG = IMPORTED_LEARNING_CONFIG;
 
 // ISSUE #5 FIX: System prompt for enforcing valid JSON responses
 const JSON_SYSTEM_PROMPT = `You are a precise cannabis retail data analyst. Your responses must be valid JSON only.
@@ -202,7 +181,7 @@ interface DailyLearningJobState {
 // Stores last N log entries in-memory and periodically
 // flushes them to the job's metadata in the database.
 // ============================================
-const LOG_BUFFER_MAX_SIZE = 200; // Keep last 200 log entries
+const LOG_BUFFER_MAX_SIZE = LEARNING_LOG_CONFIG.bufferMaxSize;
 
 interface LogEntry {
   ts: string;    // ISO timestamp
@@ -279,13 +258,13 @@ function startLogCapture(jobId: string): void {
     _originalConsoleError!.apply(console, args as [unknown, ...unknown[]]);
   };
 
-  // Flush logs to DB every 3 seconds so the status API can serve them
+  // Flush logs to DB periodically so the status API can serve them
   _logFlushTimer = setInterval(() => {
     flushLogBufferToDb().catch((err) => {
       const logFn = _originalConsoleLog || console.log;
       logFn(`[LogFlush] Interval flush error:`, err);
     });
-  }, 3000);
+  }, LEARNING_LOG_CONFIG.flushIntervalMs);
 
   // Also log that capture is active (this goes into the buffer itself)
   console.log(`[LogCapture] Log capture active — buffer max ${LOG_BUFFER_MAX_SIZE}, flush every 3s`);
@@ -786,6 +765,9 @@ export class DailyLearningService {
     console.log(`[Learning] Options: forceRun=${forceRun}, skipWebResearch=${userSkipWebResearch}`);
     console.log(`[Learning] Timestamp: ${new Date().toISOString()}`);
 
+    // Log the full resolved configuration so every run is auditable
+    logLearningConfig();
+
     // Initialize Prisma with proper connection pool settings
     let stepStart = Date.now();
     console.log(`[Learning] Step 1/6: Initializing Prisma (Secrets Manager + DB connect)...`);
@@ -893,6 +875,7 @@ export class DailyLearningService {
       // ============================================
       // PHASE 1: Data Review
       // ============================================
+      const phase1Cfg = PHASE_CONFIGS.data_review;
       const phase1Metric = this.startPhaseMetric('data_review');
       const tokensBefore1 = { input: state.inputTokens, output: state.outputTokens };
       state.metadata.phaseTimings!['data_review'] = { start: new Date().toISOString() };
@@ -902,7 +885,8 @@ export class DailyLearningService {
       let phase1DataSources: { loaded: string[]; failed: string[] } | undefined;
       try {
         console.log(`[Phase1] ========== STARTING PHASE 1: DATA REVIEW ==========`);
-        console.log(`[Phase1] Overall timeout: ${PHASE1_OVERALL_TIMEOUT_MS / 1000}s, Per-query timeout: ${QUERY_TIMEOUT_MS / 1000}s`);
+        console.log(`[Phase1] Model: ${phase1Cfg.model}, Token budget: ${phase1Cfg.tokenBudget}, Timeout: ${phase1Cfg.timeoutMs / 1000}s`);
+        console.log(`[Phase1] Per-query timeout: ${QUERY_TIMEOUT_MS / 1000}s, API retries: ${CLAUDE_API_MAX_RETRIES}`);
         const phase1Start = Date.now();
         // Wrap entire Phase 1 with an overall timeout guard to prevent indefinite stalls.
         // Individual queries have their own 60s timeouts, but this catches scenarios where
@@ -937,7 +921,9 @@ export class DailyLearningService {
       // ============================================
       // PHASE 2: Question Generation
       // ============================================
+      const phase2Cfg = PHASE_CONFIGS.question_gen;
       console.log(`[Phase2] ========== STARTING PHASE 2: QUESTION GENERATION ==========`);
+      console.log(`[Phase2] Model: ${phase2Cfg.model}, Token budget: ${phase2Cfg.tokenBudget}, Questions per cycle: ${DAILY_LEARNING_CONFIG.questionsPerCycle}`);
       const phase2Start = Date.now();
       const phase2Metric = this.startPhaseMetric('question_gen');
       const tokensBefore2 = { input: state.inputTokens, output: state.outputTokens };
@@ -967,7 +953,9 @@ export class DailyLearningService {
       // ============================================
       // PHASE 3: Web Research
       // ============================================
+      const phase3Cfg = PHASE_CONFIGS.web_research;
       console.log(`[Phase3] ========== STARTING PHASE 3: WEB RESEARCH (skip=${skipWebResearch}) ==========`);
+      console.log(`[Phase3] Model: ${phase3Cfg.model}, Token budget: ${phase3Cfg.tokenBudget}, Max searches: ${DAILY_LEARNING_CONFIG.maxSearchesPerDay}, Max questions: ${DAILY_LEARNING_CONFIG.maxWebResearchQuestions}`);
       const phase3Start = Date.now();
       let webResearchResults: WebResearchResult[] = [];
       const phase3Metric = this.startPhaseMetric('web_research');
@@ -1007,7 +995,9 @@ export class DailyLearningService {
       // ============================================
       // PHASE 4: Correlation Analysis
       // ============================================
+      const phase4Cfg = PHASE_CONFIGS.correlation;
       console.log(`[Phase4] ========== STARTING PHASE 4: CORRELATION ANALYSIS ==========`);
+      console.log(`[Phase4] Model: ${phase4Cfg.model}, Token budget: ${phase4Cfg.tokenBudget}`);
       const phase4Start = Date.now();
       const phase4Metric = this.startPhaseMetric('correlation');
       const tokensBefore4 = { input: state.inputTokens, output: state.outputTokens };
@@ -1037,7 +1027,9 @@ export class DailyLearningService {
       // ============================================
       // PHASE 5: Digest Generation
       // ============================================
+      const phase5Cfg = PHASE_CONFIGS.digest_gen;
       console.log(`[Phase5] ========== STARTING PHASE 5: DIGEST GENERATION ==========`);
+      console.log(`[Phase5] Model: ${phase5Cfg.model}, Token budget: ${phase5Cfg.tokenBudget}`);
       const phase5Start = Date.now();
       const phase5Metric = this.startPhaseMetric('digest_gen');
       const tokensBefore5 = { input: state.inputTokens, output: state.outputTokens };
@@ -1328,12 +1320,14 @@ Return JSON:
 
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
     const promptSizeKB = (prompt.length / 1024).toFixed(1);
-    console.log(`[Phase1:Claude] Prompt size: ${promptSizeKB}KB, Model: ${CLAUDE_CONFIG.defaultModel}, Max tokens: ${DAILY_LEARNING_CONFIG.phase1TokenBudget}`);
+    const p1Model = PHASE_CONFIGS.data_review.model;
+    const p1Tokens = PHASE_CONFIGS.data_review.tokenBudget;
+    console.log(`[Phase1:Claude] Prompt size: ${promptSizeKB}KB, Model: ${p1Model}, Max tokens: ${p1Tokens}`);
     const apiCallStart = Date.now();
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.defaultModel,
-        max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
+        model: p1Model,
+        max_tokens: p1Tokens,
         system: JSON_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: prompt },
@@ -1475,10 +1469,13 @@ Return JSON:
 }`;
 
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
+    // NOTE: This call is the fallback within phase1DataReviewAnalysis (extracted logic).
+    // When called from phase1DataReviewWithMetrics, the outer phase already logged the
+    // model/token config. This uses the phase config model rather than hardcoded haiku.
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.haiku,
-        max_tokens: DAILY_LEARNING_CONFIG.phase1TokenBudget,
+        model: PHASE_CONFIGS.data_review.model,
+        max_tokens: PHASE_CONFIGS.data_review.tokenBudget,
         system: JSON_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: prompt },
@@ -1567,10 +1564,13 @@ Return JSON array:
 [{ "question": "", "category": "sales|brands|customers|market|regulatory|operations", "priority": 1-10, "requiresWebResearch": boolean, "requiresInternalData": boolean, "context": "why this question matters based on learning history" }]`;
 
     // ISSUE #5 FIX: Add system prompt and assistant prefilling for reliable JSON
+    const p2Model = PHASE_CONFIGS.question_gen.model;
+    const p2Tokens = PHASE_CONFIGS.question_gen.tokenBudget;
+    console.log(`[Phase2:Claude] Model: ${p2Model}, Max tokens: ${p2Tokens}`);
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.defaultModel,
-        max_tokens: DAILY_LEARNING_CONFIG.phase2TokenBudget,
+        model: p2Model,
+        max_tokens: p2Tokens,
         system: JSON_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: prompt },
@@ -2228,10 +2228,13 @@ Generate 5-10 high-quality correlations.`;
     // Correlation analysis requires more deliberate reasoning across multiple data
     // dimensions (sales, customer, brand, market) to identify accurate patterns.
     // The higher cost is justified by the critical nature of insight quality.
+    const p4Model = PHASE_CONFIGS.correlation.model;
+    const p4Tokens = PHASE_CONFIGS.correlation.tokenBudget;
+    console.log(`[Phase4:Claude] Model: ${p4Model}, Max tokens: ${p4Tokens}`);
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.defaultModel,
-        max_tokens: DAILY_LEARNING_CONFIG.phase4TokenBudget,
+        model: p4Model,
+        max_tokens: p4Tokens,
         system: JSON_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: prompt },
@@ -2459,10 +2462,13 @@ Return ONLY valid JSON, no markdown or explanation.`;
     // NOTE: Phase 5 intentionally uses Sonnet (defaultModel) instead of Haiku.
     // The digest is the primary user-facing deliverable and requires the highest
     // quality synthesis of all insights, correlations, and recommendations.
+    const p5Model = PHASE_CONFIGS.digest_gen.model;
+    const p5Tokens = PHASE_CONFIGS.digest_gen.tokenBudget;
+    console.log(`[Phase5:Claude] Model: ${p5Model}, Max tokens: ${p5Tokens}`);
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.defaultModel,
-        max_tokens: DAILY_LEARNING_CONFIG.phase5TokenBudget,
+        model: p5Model,
+        max_tokens: p5Tokens,
         system: JSON_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: prompt },
@@ -3623,8 +3629,8 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     // Add retry with timeout to Claude API call to handle transient failures
     const response = await withRetry(
       () => this.client.messages.create({
-        model: CLAUDE_CONFIG.haiku,
-        max_tokens: DAILY_LEARNING_CONFIG.phase3TokenBudget,
+        model: CLAUDE_CONFIG.haiku, // Haiku for cost efficiency on per-result analysis
+        max_tokens: PHASE_CONFIGS.web_research.tokenBudget,
         messages: [{ role: 'user', content: prompt }],
       }),
       'analyzeSearchResults'

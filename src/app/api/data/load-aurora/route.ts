@@ -3,7 +3,7 @@
 // Fast data loading from Aurora instead of S3/DynamoDB
 // ============================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createHash } from 'crypto';
 
@@ -357,6 +357,112 @@ export async function GET() {
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load data from Aurora',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// POST - Save brand or product data to Aurora
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { type, storeId, startDate, endDate, data } = body;
+
+    if (!type || !storeId || !data || !Array.isArray(data)) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required fields: type, storeId, data' },
+        { status: 400 }
+      );
+    }
+
+    // Invalidate cache so next GET reflects new data
+    dataCache = null;
+
+    if (type === 'brands') {
+      let insertedCount = 0;
+
+      for (const record of data) {
+        const brandName = record.brand || '';
+        if (!brandName) continue;
+
+        // Find or create the canonical brand
+        let canonicalBrand = await prisma.canonicalBrand.findFirst({
+          where: { canonicalName: brandName.toUpperCase() },
+        });
+
+        if (!canonicalBrand) {
+          canonicalBrand = await prisma.canonicalBrand.create({
+            data: { canonicalName: brandName.toUpperCase() },
+          });
+        }
+
+        await prisma.brandRecord.create({
+          data: {
+            storeId,
+            storeName: record.store || storeId,
+            brandId: canonicalBrand.id,
+            originalBrandName: brandName,
+            pctOfTotalNetSales: record.pct_of_total_net_sales || 0,
+            grossMarginPct: record.gross_margin_pct || 0,
+            avgCostWoExcise: record.avg_cost_wo_excise || 0,
+            netSales: record.net_sales || 0,
+            uploadStartDate: startDate ? new Date(startDate) : null,
+            uploadEndDate: endDate ? new Date(endDate) : null,
+          },
+        });
+        insertedCount++;
+      }
+
+      return NextResponse.json({
+        success: true,
+        recordCount: insertedCount,
+        type: 'brands',
+        source: 'aurora',
+      });
+    }
+
+    if (type === 'products') {
+      let insertedCount = 0;
+
+      for (const record of data) {
+        const productType = record.product_type || '';
+        if (!productType) continue;
+
+        await prisma.productRecord.create({
+          data: {
+            storeId,
+            storeName: record.store || storeId,
+            productType,
+            pctOfTotalNetSales: record.pct_of_total_net_sales || 0,
+            grossMarginPct: record.gross_margin_pct || 0,
+            avgCostWoExcise: record.avg_cost_wo_excise || 0,
+            netSales: record.net_sales || 0,
+            uploadStartDate: startDate ? new Date(startDate) : null,
+            uploadEndDate: endDate ? new Date(endDate) : null,
+          },
+        });
+        insertedCount++;
+      }
+
+      return NextResponse.json({
+        success: true,
+        recordCount: insertedCount,
+        type: 'products',
+        source: 'aurora',
+      });
+    }
+
+    return NextResponse.json(
+      { success: false, error: `Unknown data type: ${type}` },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error('Aurora data save error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save data to Aurora',
       },
       { status: 500 }
     );
