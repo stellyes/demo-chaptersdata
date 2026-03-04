@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE - Soft delete a QR code
+// DELETE - Hard delete a QR code and all associated click data
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -97,12 +97,36 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await prisma.qrCode.update({
+    // Look up the QR code to get its shortCode for click deletion
+    const qrCode = await prisma.qrCode.findUnique({
       where: { id },
-      data: { deleted: true },
+      select: { shortCode: true, name: true },
     });
 
-    return NextResponse.json({ success: true });
+    if (!qrCode) {
+      return NextResponse.json(
+        { success: false, error: 'QR code not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete clicks first (foreign key constraint), then the QR code itself
+    const [deletedClicks] = await prisma.$transaction([
+      prisma.qrClick.deleteMany({
+        where: { shortCode: qrCode.shortCode },
+      }),
+      prisma.qrCode.delete({
+        where: { id },
+      }),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        deletedClicks: deletedClicks.count,
+        name: qrCode.name,
+      },
+    });
   } catch (error) {
     console.error('Error deleting QR code:', error);
     return NextResponse.json(
