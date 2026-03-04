@@ -125,6 +125,7 @@ async function loadQRData(): Promise<QRCode[]> {
   });
 
   return qrCodes.map((qr) => ({
+    id: qr.id,
     shortCode: qr.shortCode,
     name: qr.name,
     originalUrl: qr.originalUrl,
