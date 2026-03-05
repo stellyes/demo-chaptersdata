@@ -3,11 +3,10 @@
 // Triggers data migrations from legacy storage to Aurora
 // ============================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
-import { AWS_CONFIG, DYNAMODB_TABLES } from '@/lib/config';
+import { AWS_CONFIG } from '@/lib/config';
 
 const s3Config = AWS_CONFIG.accessKeyId && AWS_CONFIG.secretAccessKey
   ? {
@@ -21,76 +20,6 @@ const s3Config = AWS_CONFIG.accessKeyId && AWS_CONFIG.secretAccessKey
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const s3 = new S3Client(s3Config as any);
-
-const dynamoConfig = AWS_CONFIG.accessKeyId && AWS_CONFIG.secretAccessKey
-  ? {
-      region: AWS_CONFIG.region,
-      credentials: {
-        accessKeyId: AWS_CONFIG.accessKeyId,
-        secretAccessKey: AWS_CONFIG.secretAccessKey,
-      },
-    }
-  : { region: AWS_CONFIG.region };
-
-const dynamodb = new DynamoDBClient(dynamoConfig);
-
-// Migrate QR codes from DynamoDB to Aurora
-async function migrateQRCodes(): Promise<{ migrated: number; skipped: number; errors: string[] }> {
-  const errors: string[] = [];
-  let migrated = 0;
-  let skipped = 0;
-
-  try {
-    const tableName = DYNAMODB_TABLES.qrCodes;
-    console.log(`[Migration] Scanning DynamoDB table: ${tableName}`);
-
-    const command = new ScanCommand({ TableName: tableName });
-    const result = await dynamodb.send(command);
-    const items = result.Items || [];
-
-    console.log(`[Migration] Found ${items.length} QR codes in DynamoDB`);
-
-    for (const item of items) {
-      const shortCode = item.short_code?.S;
-      const name = item.name?.S || 'Unnamed QR Code';
-      const originalUrl = item.original_url?.S;
-      const description = item.description?.S || null;
-      const totalClicks = parseInt(item.total_clicks?.N || '0');
-      const active = item.active?.BOOL !== false;
-      const createdAt = item.created_at?.S ? new Date(item.created_at.S) : new Date();
-
-      if (!shortCode || !originalUrl) {
-        skipped++;
-        continue;
-      }
-
-      try {
-        const existing = await prisma.qrCode.findUnique({
-          where: { shortCode },
-        });
-
-        if (existing) {
-          await prisma.qrCode.update({
-            where: { shortCode },
-            data: { name, originalUrl, description, totalClicks, active },
-          });
-        } else {
-          await prisma.qrCode.create({
-            data: { shortCode, name, originalUrl, description, totalClicks, active, createdAt },
-          });
-        }
-        migrated++;
-      } catch (err) {
-        errors.push(`QR ${shortCode}: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        skipped++;
-      }
-    }
-  } catch (err) {
-    errors.push(`DynamoDB scan failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-  }
-
-  return { migrated, skipped, errors };
-}
 
 // Migrate AI reports from S3 to Aurora
 async function migrateAIReports(): Promise<{ migrated: number; skipped: number; errors: string[] }> {
@@ -178,32 +107,14 @@ async function migrateAIReports(): Promise<{ migrated: number; skipped: number; 
   return { migrated, skipped, errors };
 }
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const { type } = await request.json();
-
-    if (!type || !['qr', 'reports', 'all'].includes(type)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid migration type. Use: qr, reports, or all' },
-        { status: 400 }
-      );
-    }
-
-    const results: Record<string, unknown> = {};
-
-    if (type === 'qr' || type === 'all') {
-      console.log('[Migration] Starting QR code migration...');
-      results.qrCodes = await migrateQRCodes();
-    }
-
-    if (type === 'reports' || type === 'all') {
-      console.log('[Migration] Starting AI reports migration...');
-      results.aiReports = await migrateAIReports();
-    }
+    console.log('[Migration] Starting AI reports migration...');
+    const aiReports = await migrateAIReports();
 
     return NextResponse.json({
       success: true,
-      data: results,
+      data: { aiReports },
     });
   } catch (error) {
     console.error('[Migration] Error:', error);

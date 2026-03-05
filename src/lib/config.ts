@@ -55,14 +55,6 @@ export const S3_PATHS = {
   config: 'config',
 };
 
-// DynamoDB Tables
-export const DYNAMODB_TABLES = {
-  invoices: 'retail-invoices',
-  lineItems: 'retail-invoice-line-items',
-  qrCodes: process.env.DYNAMODB_QR_TABLE || 'qr-tracker-qr-codes',
-  qrClicks: process.env.DYNAMODB_CLICKS_TABLE || 'qr-tracker-clicks',
-};
-
 // QR Redirect URL
 export const QR_REDIRECT_BASE_URL = process.env.QR_REDIRECT_BASE_URL || 'https://bcsf.chaptersdata.com/r';
 
