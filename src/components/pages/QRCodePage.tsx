@@ -406,7 +406,8 @@ export function QRCodePage() {
       const response = await fetch(`/api/qr?id=${id}`, { method: 'DELETE' });
       const result = await response.json();
 
-      if (result.success) {
+      // Remove from UI if deleted successfully or if it no longer exists in the database
+      if (result.success || response.status === 404) {
         setQrCodesData(qrCodesData.filter((qr) => qr.id !== id));
       }
     } catch (error) {
