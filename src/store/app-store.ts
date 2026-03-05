@@ -107,7 +107,6 @@ export type PageType =
   | 'research'
   | 'seo'
   | 'invoices'
-  | 'qr-codes'
   | 'settings';
 
 interface AppState {

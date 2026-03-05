@@ -34,6 +34,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { DataHealthTab } from '@/components/data-health/DataHealthTab';
+import { QRPortalTab } from '@/components/pages/QRCodePage';
 
 // ============================================
 // DATA STATUS COMPONENT
@@ -1927,6 +1928,11 @@ export const DataCenterPage = memo(function DataCenterPage() {
       id: 'health',
       label: 'Data Health',
       render: () => <DataHealthTab />,
+    },
+    {
+      id: 'qr-portal',
+      label: 'QR Portal',
+      render: () => <QRPortalTab />,
     },
   ];
 

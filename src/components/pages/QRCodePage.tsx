@@ -315,7 +315,7 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
   );
 }
 
-export function QRCodePage() {
+export function QRPortalTab() {
   const { qrCodesData, setQrCodesData } = useAppStore();
   const [qrImage, setQrImage] = useState<string>('');
   const [trackingUrl, setTrackingUrl] = useState<string>('');
@@ -669,10 +669,14 @@ export function QRCodePage() {
     },
   ];
 
+  return <Tabs tabs={tabs} />;
+}
+
+export function QRCodePage() {
   return (
     <div>
       <Header title="QR Code Generator & Tracker" subtitle="QR Codes" />
-      <Tabs tabs={tabs} />
+      <QRPortalTab />
     </div>
   );
 }

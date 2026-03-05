@@ -5,7 +5,6 @@ import {
   TrendingUp,
   Sparkles,
   Database,
-  QrCode,
   Settings,
   LogOut,
   Moon,
@@ -92,7 +91,6 @@ export function Sidebar() {
     { icon: TrendingUp, label: 'Sales Analytics', page: 'sales' },
     { icon: Sparkles, label: 'Recommendations', page: 'recommendations' },
     { icon: Database, label: 'Data Center', page: 'data-center' },
-    { icon: QrCode, label: 'QR Codes', page: 'qr-codes' },
   ];
 
   return (
