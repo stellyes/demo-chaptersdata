@@ -27,6 +27,7 @@ interface SEOSummary {
 }
 
 interface QRCode {
+  id: string;
   shortCode: string;
   name: string;
   originalUrl: string;

@@ -10,7 +10,7 @@ import { FileUpload } from '@/components/ui/FileUpload';
 import { DataTable } from '@/components/ui/DataTable';
 import { useAppStore } from '@/store/app-store';
 import { parseCSV, cleanSalesData, cleanBrandData, cleanProductData, cleanCustomerData } from '@/lib/services/data-processor';
-import { STORES, SEO_SITES, RESEARCH_CATEGORIES, QR_REDIRECT_BASE_URL } from '@/lib/config';
+import { STORES, SEO_SITES, RESEARCH_CATEGORIES } from '@/lib/config';
 import { StoreId } from '@/types';
 import {
   Check,
@@ -25,18 +25,14 @@ import {
   Tag,
   Search,
   Globe,
-  QrCode,
   Loader2,
-  Download,
   ExternalLink,
-  Link,
   Upload,
   Trash2,
   Save,
   CheckCircle,
   TrendingUp,
 } from 'lucide-react';
-import QRCodeLib from 'qrcode';
 import { DataHealthTab } from '@/components/data-health/DataHealthTab';
 
 // ============================================
@@ -1882,275 +1878,6 @@ function SEOAnalysisTab() {
 }
 
 // ============================================
-// QR PORTAL TAB
-// ============================================
-interface QRCodeRecord {
-  [key: string]: string | number | boolean | undefined;
-  shortCode: string;
-  name: string;
-  originalUrl: string;
-  totalClicks: number;
-  createdAt: string;
-  active: boolean;
-  description?: string;
-}
-
-function QRPortalTab() {
-  // Load QR codes from app store
-  const { qrCodesData } = useAppStore();
-
-  // Convert store data to local format and merge with any newly created codes
-  const [localQrCodes, setLocalQrCodes] = useState<QRCodeRecord[]>([]);
-  const [qrImage, setQrImage] = useState<string>('');
-  const [formData, setFormData] = useState({
-    name: '',
-    url: '',
-    color: '#1e391f',
-    bgColor: '#ffffff',
-  });
-
-  // Merge store data with locally created QR codes
-  const qrCodes = useMemo(() => {
-    // Convert store data to QRCodeRecord format
-    const storeQrCodes: QRCodeRecord[] = (qrCodesData || []).map((qr) => ({
-      shortCode: qr.shortCode,
-      name: qr.name,
-      originalUrl: qr.originalUrl,
-      totalClicks: qr.totalClicks,
-      createdAt: qr.createdAt,
-      active: qr.active,
-      description: qr.description,
-    }));
-
-    // Merge with local codes (local codes first, then store codes not in local)
-    const localShortCodes = new Set(localQrCodes.map((qr) => qr.shortCode));
-    const uniqueStoreCodes = storeQrCodes.filter((qr) => !localShortCodes.has(qr.shortCode));
-
-    return [...localQrCodes, ...uniqueStoreCodes];
-  }, [qrCodesData, localQrCodes]);
-
-  const generateQRCode = async () => {
-    if (!formData.name || !formData.url) return;
-
-    try {
-      const qrDataUrl = await QRCodeLib.toDataURL(formData.url, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: formData.color,
-          light: formData.bgColor,
-        },
-      });
-
-      setQrImage(qrDataUrl);
-
-      const shortCode = `qr_${Date.now().toString(36)}`;
-      const newQR: QRCodeRecord = {
-        shortCode,
-        name: formData.name,
-        originalUrl: formData.url,
-        totalClicks: 0,
-        createdAt: new Date().toISOString(),
-        active: true,
-      };
-
-      // Save to Aurora
-      try {
-        await fetch('/api/qr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            shortCode,
-            name: formData.name,
-            originalUrl: formData.url,
-          }),
-        });
-      } catch (err) {
-        console.error('Failed to save QR code to database:', err);
-      }
-
-      setLocalQrCodes((prev) => [newQR, ...prev]);
-      setFormData({ ...formData, name: '', url: '' });
-    } catch (error) {
-      console.error('Failed to generate QR code:', error);
-    }
-  };
-
-  const downloadQR = () => {
-    if (!qrImage) return;
-    const link = document.createElement('a');
-    link.download = `qr-${formData.name || 'code'}.png`;
-    link.href = qrImage;
-    link.click();
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <Card>
-          <SectionLabel>QR Code Generator</SectionLabel>
-          <SectionTitle>Create New QR Code</SectionTitle>
-
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-[var(--muted)] block mb-2">Name *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Menu Link, Promo Page"
-                className="w-full px-3 py-2 border border-[var(--border)] rounded text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-                Destination URL *
-              </label>
-              <div className="relative">
-                <Link className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="url"
-                  value={formData.url}
-                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full pl-10 pr-3 py-2 border border-[var(--border)] rounded text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-                  QR Color
-                </label>
-                <input
-                  type="color"
-                  value={formData.color}
-                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                  className="w-full h-10 rounded border border-[var(--border)] cursor-pointer"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-                  Background
-                </label>
-                <input
-                  type="color"
-                  value={formData.bgColor}
-                  onChange={(e) => setFormData({ ...formData, bgColor: e.target.value })}
-                  className="w-full h-10 rounded border border-[var(--border)] cursor-pointer"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={generateQRCode}
-              disabled={!formData.name || !formData.url}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--ink)] text-[var(--paper)] rounded font-medium disabled:opacity-50"
-            >
-              <QrCode className="w-5 h-5" />
-              Generate QR Code
-            </button>
-          </div>
-        </Card>
-
-        <Card>
-          <SectionLabel>Preview</SectionLabel>
-          <SectionTitle>QR Code Output</SectionTitle>
-
-          <div className="flex flex-col items-center justify-center min-h-[300px]">
-            {qrImage ? (
-              <>
-                <img src={qrImage} alt="Generated QR Code" className="mb-4 rounded-lg shadow-lg" />
-                <button
-                  onClick={downloadQR}
-                  className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded text-sm font-medium hover:bg-[var(--paper)]"
-                >
-                  <Download className="w-4 h-4" />
-                  Download PNG
-                </button>
-              </>
-            ) : (
-              <div className="text-center text-[var(--muted)]">
-                <QrCode className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                <p>Enter URL and click generate to create QR code</p>
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* QR Code Stats */}
-      <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <Card className="p-3 md:p-4">
-          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
-          <p className="text-lg md:text-2xl font-semibold font-serif">{qrCodes.length}</p>
-        </Card>
-        <Card className="p-3 md:p-4">
-          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Total Scans</p>
-          <p className="text-lg md:text-2xl font-semibold font-serif">
-            {qrCodes.reduce((sum, qr) => sum + qr.totalClicks, 0)}
-          </p>
-        </Card>
-        <Card className="p-3 md:p-4">
-          <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Active Codes</p>
-          <p className="text-lg md:text-2xl font-semibold font-serif">
-            {qrCodes.filter((qr) => qr.active).length}
-          </p>
-        </Card>
-      </div>
-
-      {/* QR Code List */}
-      {qrCodes.length > 0 && (
-        <Card>
-          <SectionLabel>QR Code Library</SectionLabel>
-          <SectionTitle>All QR Codes</SectionTitle>
-          <DataTable
-            data={qrCodes}
-            columns={[
-              { key: 'name', label: 'Name', sortable: true },
-              {
-                key: 'originalUrl',
-                label: 'URL',
-                render: (v) => (
-                  <span className="text-xs text-[var(--muted)] truncate max-w-[200px] block">
-                    {String(v)}
-                  </span>
-                ),
-              },
-              { key: 'totalClicks', label: 'Scans', sortable: true, align: 'right' },
-              {
-                key: 'createdAt',
-                label: 'Created',
-                sortable: true,
-                render: (v) => new Date(String(v)).toLocaleDateString(),
-              },
-              {
-                key: 'active',
-                label: 'Status',
-                render: (v) => (
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      v
-                        ? 'bg-[var(--success)]/15 text-[var(--success)]'
-                        : 'bg-[var(--muted)]/15 text-[var(--muted)]'
-                    }`}
-                  >
-                    {v ? 'Active' : 'Inactive'}
-                  </span>
-                ),
-              },
-            ]}
-            pageSize={10}
-          />
-        </Card>
-      )}
-    </div>
-  );
-}
-
-// ============================================
 // MAIN DATA CENTER PAGE
 // ============================================
 export const DataCenterPage = memo(function DataCenterPage() {
@@ -2195,11 +1922,6 @@ export const DataCenterPage = memo(function DataCenterPage() {
       id: 'seo',
       label: 'SEO Analysis',
       render: () => <SEOAnalysisTab />,
-    },
-    {
-      id: 'qr',
-      label: 'QR Portal',
-      render: () => <QRPortalTab />,
     },
     {
       id: 'health',

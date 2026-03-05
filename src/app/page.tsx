@@ -9,6 +9,7 @@ import { SalesAnalyticsPage } from '@/components/pages/SalesAnalyticsPage';
 import { RecommendationsPage } from '@/components/pages/RecommendationsPage';
 import { DataCenterPage } from '@/components/pages/DataCenterPage';
 import { SettingsPage } from '@/components/pages/SettingsPage';
+import { QRCodePage } from '@/components/pages/QRCodePage';
 import { LoginPage } from '@/components/pages/LoginPage';
 import { LoadingToast } from '@/components/ui/LoadingToast';
 import { NotificationCenter } from '@/components/ui/NotificationCenter';
@@ -90,6 +91,8 @@ export default function App() {
         return <DataCenterPage />;
       case 'settings':
         return <SettingsPage />;
+      case 'qr-codes':
+        return <QRCodePage />;
       default:
         return <DashboardPage />;
     }
