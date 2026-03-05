@@ -1,16 +1,319 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/ui/Header';
 import { Card } from '@/components/ui/Card';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { DataTable } from '@/components/ui/DataTable';
-import { QrCode, Link, Download, Loader2, Copy, Check, Trash2 } from 'lucide-react';
+import { QrCode, Link, Download, Loader2, Copy, Check, Trash2, Monitor, Smartphone, Tablet, Globe, Clock, RefreshCw } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { useAppStore } from '@/store/app-store';
 import { QRCode } from '@/types';
+
+// ---- Analytics types ----
+interface AnalyticsData {
+  totalClicks: number;
+  period: { days: number; since: string };
+  dailyClicks: { date: string; clicks: number }[];
+  topCodes: { shortCode: string; name: string; clicks: number }[];
+  devices: Record<string, number>;
+  browsers: Record<string, number>;
+  operatingSystems: Record<string, number>;
+  topReferrers: { source: string; clicks: number }[];
+  recentClicks: {
+    shortCode: string;
+    name: string;
+    clickedAt: string;
+    device: string;
+    browser: string;
+    os: string;
+    referrer: string | null;
+  }[];
+}
+
+// ---- Analytics sub-component ----
+function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: number }) {
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(30);
+
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/qr/analytics?days=${days}`);
+      const result = await res.json();
+      if (result.success) {
+        setAnalytics(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to load analytics:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [days]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
+  if (loading) {
+    return (
+      <Card>
+        <div className="flex flex-col items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)] mb-3" />
+          <p className="text-sm text-[var(--muted)]">Loading analytics...</p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <Card>
+        <p className="text-[var(--muted)] text-center py-8">Failed to load analytics data.</p>
+      </Card>
+    );
+  }
+
+  const maxDaily = Math.max(...analytics.dailyClicks.map((d) => d.clicks), 1);
+  const totalDevices = Object.values(analytics.devices).reduce((a, b) => a + b, 0) || 1;
+
+  const deviceIcon = (type: string) => {
+    if (type === 'mobile') return <Smartphone className="w-4 h-4" />;
+    if (type === 'tablet') return <Tablet className="w-4 h-4" />;
+    return <Monitor className="w-4 h-4" />;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Period selector + refresh */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className={`px-3 py-1.5 text-sm rounded font-medium transition-colors ${
+                days === d
+                  ? 'bg-[var(--ink)] text-[var(--paper)]'
+                  : 'bg-[var(--paper)] text-[var(--muted)] border border-[var(--border)] hover:bg-[var(--cream)]'
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={fetchAnalytics}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[var(--muted)] border border-[var(--border)] rounded hover:bg-[var(--cream)] transition-colors"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Refresh
+        </button>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <p className="text-xs text-[var(--muted)] mb-1">Total Scans</p>
+          <p className="text-2xl font-semibold font-serif">{analytics.totalClicks}</p>
+          <p className="text-xs text-[var(--muted)] mt-1">last {days} days</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-[var(--muted)] mb-1">Avg / Day</p>
+          <p className="text-2xl font-semibold font-serif">
+            {days > 0 ? (analytics.totalClicks / days).toFixed(1) : '0'}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-[var(--muted)] mb-1">QR Codes</p>
+          <p className="text-2xl font-semibold font-serif">{qrCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-[var(--muted)] mb-1">Active</p>
+          <p className="text-2xl font-semibold font-serif">{activeCount}</p>
+        </Card>
+      </div>
+
+      {/* Daily clicks chart (bar chart via CSS) */}
+      <Card>
+        <SectionLabel>Scan Activity</SectionLabel>
+        <SectionTitle>Daily Scans</SectionTitle>
+        {analytics.totalClicks === 0 ? (
+          <p className="text-[var(--muted)] text-center py-8 text-sm">No scans recorded in this period.</p>
+        ) : (
+          <div className="mt-4">
+            <div className="flex items-end gap-[2px] h-40">
+              {analytics.dailyClicks.map((day) => (
+                <div
+                  key={day.date}
+                  className="flex-1 group relative"
+                  title={`${day.date}: ${day.clicks} scan${day.clicks !== 1 ? 's' : ''}`}
+                >
+                  <div
+                    className="w-full bg-[var(--accent)] rounded-t opacity-80 hover:opacity-100 transition-opacity min-h-[2px]"
+                    style={{ height: `${(day.clicks / maxDaily) * 100}%` }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between mt-2 text-[10px] text-[var(--muted)]">
+              <span>{analytics.dailyClicks[0]?.date}</span>
+              <span>{analytics.dailyClicks[analytics.dailyClicks.length - 1]?.date}</span>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Two-column: Top codes + Devices */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Top performing QR codes */}
+        <Card>
+          <SectionLabel>Performance</SectionLabel>
+          <SectionTitle>Top QR Codes</SectionTitle>
+          {analytics.topCodes.length === 0 ? (
+            <p className="text-[var(--muted)] text-center py-6 text-sm">No data yet.</p>
+          ) : (
+            <div className="space-y-3 mt-4">
+              {analytics.topCodes.map((code, i) => (
+                <div key={code.shortCode} className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-[var(--muted)] w-5 text-right">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{code.name}</p>
+                    <div className="w-full bg-[var(--border)] rounded-full h-1.5 mt-1">
+                      <div
+                        className="bg-[var(--accent)] h-1.5 rounded-full"
+                        style={{ width: `${(code.clicks / (analytics.topCodes[0]?.clicks || 1)) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums">{code.clicks}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Device breakdown */}
+        <Card>
+          <SectionLabel>Devices</SectionLabel>
+          <SectionTitle>Scan Devices</SectionTitle>
+          {analytics.totalClicks === 0 ? (
+            <p className="text-[var(--muted)] text-center py-6 text-sm">No data yet.</p>
+          ) : (
+            <div className="space-y-4 mt-4">
+              {Object.entries(analytics.devices)
+                .sort(([, a], [, b]) => b - a)
+                .map(([type, count]) => (
+                  <div key={type} className="flex items-center gap-3">
+                    <span className="text-[var(--muted)]">{deviceIcon(type)}</span>
+                    <span className="text-sm capitalize flex-1">{type}</span>
+                    <span className="text-sm font-semibold tabular-nums">{count}</span>
+                    <span className="text-xs text-[var(--muted)] w-10 text-right">
+                      {((count / totalDevices) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+
+              {/* Browser breakdown */}
+              <div className="border-t border-[var(--border)] pt-4 mt-4">
+                <p className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-3">Browsers</p>
+                {Object.entries(analytics.browsers)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 5)
+                  .map(([browser, count]) => (
+                    <div key={browser} className="flex items-center gap-3 mb-2">
+                      <Globe className="w-3.5 h-3.5 text-[var(--muted)]" />
+                      <span className="text-sm flex-1">{browser}</span>
+                      <span className="text-sm font-semibold tabular-nums">{count}</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* OS breakdown */}
+              <div className="border-t border-[var(--border)] pt-4 mt-4">
+                <p className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-3">Operating Systems</p>
+                {Object.entries(analytics.operatingSystems)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 5)
+                  .map(([os, count]) => (
+                    <div key={os} className="flex items-center gap-3 mb-2">
+                      <Monitor className="w-3.5 h-3.5 text-[var(--muted)]" />
+                      <span className="text-sm flex-1">{os}</span>
+                      <span className="text-sm font-semibold tabular-nums">{count}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Top referrers */}
+      {analytics.topReferrers.length > 0 && (
+        <Card>
+          <SectionLabel>Traffic Sources</SectionLabel>
+          <SectionTitle>Top Referrers</SectionTitle>
+          <div className="space-y-3 mt-4">
+            {analytics.topReferrers.map((ref) => (
+              <div key={ref.source} className="flex items-center gap-3">
+                <Globe className="w-4 h-4 text-[var(--muted)] shrink-0" />
+                <span className="text-sm flex-1 truncate">{ref.source}</span>
+                <span className="text-sm font-semibold tabular-nums">{ref.clicks}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Recent clicks */}
+      {analytics.recentClicks.length > 0 && (
+        <Card>
+          <SectionLabel>Activity</SectionLabel>
+          <SectionTitle>Recent Scans</SectionTitle>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-left">
+                  <th className="pb-2 pr-4 font-medium text-[var(--muted)]">QR Code</th>
+                  <th className="pb-2 pr-4 font-medium text-[var(--muted)]">Time</th>
+                  <th className="pb-2 pr-4 font-medium text-[var(--muted)]">Device</th>
+                  <th className="pb-2 pr-4 font-medium text-[var(--muted)]">Browser</th>
+                  <th className="pb-2 font-medium text-[var(--muted)]">Referrer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.recentClicks.map((click, i) => (
+                  <tr key={i} className="border-b border-[var(--border)] last:border-0">
+                    <td className="py-2.5 pr-4 font-medium">{click.name}</td>
+                    <td className="py-2.5 pr-4 text-[var(--muted)] whitespace-nowrap">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        {new Date(click.clickedAt).toLocaleString()}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4 capitalize">
+                      <span className="flex items-center gap-1.5">
+                        {deviceIcon(click.device)}
+                        {click.device}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4">{click.browser} / {click.os}</td>
+                    <td className="py-2.5 text-[var(--muted)] truncate max-w-[200px]">
+                      {click.referrer || 'Direct'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 export function QRCodePage() {
   const { qrCodesData, setQrCodesData } = useAppStore();
@@ -262,33 +565,10 @@ export function QRCodePage() {
       id: 'analytics',
       label: 'Analytics',
       render: () => (
-        <Card>
-          <SectionLabel>Click Tracking</SectionLabel>
-          <SectionTitle>QR Code Performance</SectionTitle>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Total QR Codes</p>
-              <p className="text-2xl font-semibold font-serif">{qrCodes.length}</p>
-            </div>
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Total Scans</p>
-              <p className="text-2xl font-semibold font-serif">
-                {qrCodes.reduce((sum, qr) => sum + (qr.totalClicks || 0), 0)}
-              </p>
-            </div>
-            <div className="p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-sm text-[var(--muted)] mb-1">Active Codes</p>
-              <p className="text-2xl font-semibold font-serif">
-                {qrCodes.filter((qr) => qr.active).length}
-              </p>
-            </div>
-          </div>
-
-          <p className="text-[var(--muted)] text-center py-8">
-            Connect to the QR tracking API to view detailed click analytics.
-          </p>
-        </Card>
+        <AnalyticsTab
+          qrCount={qrCodes.length}
+          activeCount={qrCodes.filter((qr) => qr.active).length}
+        />
       ),
     },
     {
