@@ -147,6 +147,9 @@ resource "aws_lambda_function" "learning_processor" {
       DATABASE_NAME       = aws_rds_cluster.chapters.database_name
       S3_BUCKET           = var.s3_bucket_name
       ANTHROPIC_API_KEY   = var.anthropic_api_key
+      SERPAPI_API_KEY      = var.serpapi_api_key
+      VOYAGE_API_KEY       = var.voyage_api_key
+      LEARNING_API_KEY     = var.learning_api_key
       NODE_ENV            = var.environment
     }
   }

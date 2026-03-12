@@ -89,3 +89,23 @@ variable "learning_api_key" {
   sensitive   = true
   default     = ""
 }
+
+variable "serpapi_api_key" {
+  description = "SerpAPI key for web research in learning pipeline"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "voyage_api_key" {
+  description = "Voyage AI key for semantic vector search over business insights"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "step_functions_arn" {
+  description = "ARN of the learning pipeline Step Functions state machine (set after first terraform apply)"
+  type        = string
+  default     = ""
+}

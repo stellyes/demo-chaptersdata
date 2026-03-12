@@ -4,14 +4,14 @@
 // LEARNING SERVER ACTIONS
 // Server-side actions for triggering learning jobs from the frontend.
 //
-// Architecture:
-// 1. Server action fires HTTP request to /api/ai/learning/run
-// 2. Server action returns immediately to the frontend (doesn't await the full job)
-// 3. The API route Lambda stays alive because it awaits runDailyLearning()
+// Architecture (Step Functions):
+// 1. Server action calls POST /api/ai/learning/run
+// 2. API route starts a Step Functions execution
+// 3. Server action returns immediately to the frontend
 // 4. Frontend polls /api/ai/learning/status for progress
 //
-// We validate and create the job synchronously, then let the API route
-// Lambda continue running the job in the background while we return.
+// The Step Functions state machine orchestrates 5 phases,
+// each running in a dedicated Lambda with 900s timeout.
 // ============================================
 
 import { getInternalAuthHeaders } from '@/app/api/ai/learning/auth';
@@ -26,6 +26,8 @@ interface RunLearningResult {
     hasDigest?: boolean;
     warnings?: string[];
     currentJob?: unknown;
+    executionStarted?: boolean;
+    executionName?: string;
   };
 }
 
@@ -33,10 +35,9 @@ interface RunLearningResult {
  * Server action to trigger a daily learning job.
  * Called from the frontend LearningProgressTab component.
  *
- * Makes an internal HTTP call to the /api/ai/learning/run route which
- * runs the job synchronously (keeping its Lambda alive). This server
- * action does NOT await the full response — it fires the request then
- * returns immediately so the frontend can start polling for status.
+ * With Step Functions: The API route starts a Step Functions execution
+ * and returns immediately. The frontend polls /api/ai/learning/status
+ * for real-time progress as phases complete.
  */
 export async function runLearningJob(options: {
   skipWebResearch?: boolean;
@@ -53,11 +54,10 @@ export async function runLearningJob(options: {
 
     const authHeaders = getInternalAuthHeaders();
 
-    // Fire the request to the API route. Use AbortController with a short
-    // timeout so we don't wait for the full job to complete — we just need
-    // to confirm the request was accepted (job created in DB).
+    // With Step Functions, the API route returns quickly (no need for abort timeout)
+    // But keep a generous timeout for the synchronous fallback (dev mode)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s to validate + create job
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
       const response = await fetch(`${baseUrl}/api/ai/learning/run`, {
@@ -75,7 +75,6 @@ export async function runLearningJob(options: {
 
       clearTimeout(timeoutId);
 
-      // If we got a response, the job either completed (fast) or there was an error
       const result = await response.json();
 
       if (!response.ok) {
@@ -93,10 +92,9 @@ export async function runLearningJob(options: {
     } catch (fetchError) {
       clearTimeout(timeoutId);
 
-      // AbortError means the request timed out — which is EXPECTED.
-      // It means the API route accepted the request and is now running
-      // the job synchronously. The job has been created in the DB and
-      // the frontend can poll /api/ai/learning/status for progress.
+      // AbortError means the request timed out.
+      // In dev mode (sync fallback), this means the job is running.
+      // In production (Step Functions), this shouldn't happen.
       if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
         return {
           success: true,
@@ -106,7 +104,6 @@ export async function runLearningJob(options: {
         };
       }
 
-      // For Node.js fetch abort errors (different error type)
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         return {
           success: true,

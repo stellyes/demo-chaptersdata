@@ -1,17 +1,18 @@
 // ============================================
 // LEARNING RUN API ROUTE
-// Trigger a daily learning job.
-// On Amplify SSR, all handlers run as Lambda invocations that terminate
-// when the response is sent. Fire-and-forget async work gets killed.
-// Therefore we ALWAYS await the job synchronously to keep the Lambda alive.
+// Triggers a daily learning job via Step Functions.
+//
+// Previously ran the job synchronously on Amplify's SSR Lambda,
+// but the ~120s hard timeout killed Phase 3 (web research) every time.
+// Now starts a Step Functions execution that orchestrates the 5 phases
+// across dedicated Lambda invocations with 900s timeout per phase.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
 import { dailyLearningService } from '@/lib/services/daily-learning';
 import { isLearningApiAuthorized, unauthorizedResponse } from '../auth';
-
-// Extend function timeout to 900 seconds (15 minutes) for long-running learning jobs
-export const maxDuration = 900;
+import { initializePrisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   // Verify authorization before allowing job triggers
@@ -23,6 +24,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const { skipWebResearch = false, forceRun = true } = body;
 
+    // Initialize Prisma for status checks
+    await initializePrisma();
+
     // Check if a job is already running
     const status = await dailyLearningService.getCurrentJobStatus();
     if (status.isRunning) {
@@ -33,8 +37,41 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
-    // Validate startup requirements SYNCHRONOUSLY before starting
-    // This catches env var issues and quota problems before consuming tokens
+    // Check for Step Functions ARN
+    const stateMachineArn = process.env.STEP_FUNCTIONS_ARN;
+
+    if (stateMachineArn) {
+      // New path: Start Step Functions execution
+      const sfn = new SFNClient({ region: process.env.AWS_REGION || 'us-west-1' });
+
+      const executionName = `learning-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+      await sfn.send(new StartExecutionCommand({
+        stateMachineArn,
+        name: executionName,
+        input: JSON.stringify({
+          skipWebResearch,
+          forceRun,
+          source: 'api-trigger',
+        }),
+      }));
+
+      console.log(`[Learning] Started Step Functions execution: ${executionName}`);
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          executionStarted: true,
+          executionName,
+          message: 'Learning job started via Step Functions. Poll /api/ai/learning/status for progress.',
+        },
+      });
+    }
+
+    // Fallback: Run synchronously (for dev/local where Step Functions isn't available)
+    console.log('[Learning] STEP_FUNCTIONS_ARN not set, running synchronously (dev mode)');
+
+    // Validate startup requirements
     let startupValidation;
     try {
       startupValidation = await dailyLearningService.validateStartupRequirements(skipWebResearch);
@@ -47,15 +84,11 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Include quota warnings in response if applicable
     const warnings: string[] = [];
     if (startupValidation.quotaStatus.warning) {
       warnings.push(startupValidation.quotaStatus.warning);
     }
 
-    // Run the learning job synchronously. This keeps the Lambda alive for the
-    // full duration of the job. The frontend polls /api/ai/learning/status
-    // for real-time progress updates while this request is in flight.
     const result = await dailyLearningService.runDailyLearning({
       forceRun,
       skipWebResearch,
@@ -74,7 +107,6 @@ export async function POST(request: NextRequest) {
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to run learning job';
 
-    // Check if it's a "already running" error
     if (errorMessage.includes('already')) {
       return NextResponse.json(
         { success: false, error: errorMessage },

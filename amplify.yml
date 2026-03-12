@@ -36,6 +36,10 @@ frontend:
         - echo "AUTH_ANALYST_HASH=$AUTH_ANALYST_HASH" >> .env.production
         # Learning API (for Lambda-triggered autonomous learning)
         - echo "LEARNING_API_KEY=$LEARNING_API_KEY" >> .env.production
+        # Voyage AI (for semantic vector search over business insights)
+        - echo "VOYAGE_API_KEY=$VOYAGE_API_KEY" >> .env.production
+        # Step Functions (for learning pipeline orchestration)
+        - echo "STEP_FUNCTIONS_ARN=$STEP_FUNCTIONS_ARN" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next

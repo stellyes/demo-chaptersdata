@@ -4127,6 +4127,534 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     }
   }
 
+  // ============================================
+  // PUBLIC PHASE EXECUTION API
+  // Used by the Lambda handler to run individual phases
+  // via Step Functions orchestration.
+  // ============================================
+
+  /**
+   * Initializes a new learning job and returns the job ID.
+   * This is the first step in the Step Functions workflow.
+   * Creates the job record, validates environment, and prepares state.
+   */
+  async initializeJob(options?: {
+    skipWebResearch?: boolean;
+    forceRun?: boolean;
+  }): Promise<{
+    jobId: string;
+    skipWebResearch: boolean;
+    webResearchSkipReason?: string;
+  }> {
+    const { forceRun = true, skipWebResearch: userSkipWebResearch = false } = options || {};
+
+    console.log(`[Learning] ========== INITIALIZING JOB (Step Functions) ==========`);
+    console.log(`[Learning] Options: forceRun=${forceRun}, skipWebResearch=${userSkipWebResearch}`);
+
+    // Log the full resolved configuration
+    logLearningConfig();
+
+    // Initialize Prisma with Secrets Manager credentials
+    await initializePrisma();
+
+    // Validate environment
+    this.validateEnvironment(userSkipWebResearch);
+
+    // Check quota status
+    const { quotaStatus } = await this.validateStartupRequirements(userSkipWebResearch);
+
+    // Determine if we should skip web research
+    let skipWebResearch = userSkipWebResearch;
+    let webResearchSkipReason: JobMetadata['webResearchSkipReason'] | undefined;
+
+    if (userSkipWebResearch) {
+      webResearchSkipReason = 'user_requested';
+    } else if (quotaStatus.remaining <= 0) {
+      skipWebResearch = true;
+      webResearchSkipReason = 'quota_exhausted';
+    } else if (quotaStatus.remaining < 3) {
+      skipWebResearch = true;
+      webResearchSkipReason = 'low_quota';
+    }
+
+    // Clean up stale jobs
+    await this.cleanupStaleJobs();
+
+    // Check for existing jobs today (unless forceRun)
+    if (!forceRun) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const existingJob = await prisma.dailyLearningJob.findFirst({
+        where: {
+          startedAt: { gte: today },
+          status: { in: ['completed', 'running'] },
+        },
+      });
+      if (existingJob) {
+        throw new Error(`Daily learning already ${existingJob.status} for today. Job ID: ${existingJob.id}`);
+      }
+    }
+
+    // Create job record
+    const initialMetadata: JobMetadata = {
+      webResearchSkipped: skipWebResearch,
+      webResearchSkipReason,
+      quotaAtStart: quotaStatus.remaining,
+      quotaWarning: quotaStatus.warning,
+      envValidation: {
+        validated: true,
+        timestamp: new Date().toISOString(),
+        skippedChecks: skipWebResearch ? ['SERPAPI_API_KEY'] : undefined,
+      },
+      phaseTimings: {},
+      phaseMetrics: [],
+    };
+
+    const job = await prisma.dailyLearningJob.create({
+      data: {
+        status: 'running',
+        currentPhase: 'initializing',
+        jobMetadata: initialMetadata as object,
+      },
+    });
+
+    console.log(`[Learning] Job created: ${job.id}`);
+    return {
+      jobId: job.id,
+      skipWebResearch,
+      webResearchSkipReason,
+    };
+  }
+
+  /**
+   * Executes a single phase of the learning pipeline.
+   * Called by the Lambda handler for each Step Functions state.
+   *
+   * Phase outputs are stored in jobMetadata so subsequent phases
+   * can read them without passing data through Step Functions payloads.
+   */
+  async executePhase(phase: number, jobId: string): Promise<{
+    success: boolean;
+    phase: number;
+    jobId: string;
+    skipWebResearch?: boolean;
+  }> {
+    console.log(`[Learning] ========== EXECUTING PHASE ${phase} (Job: ${jobId}) ==========`);
+
+    // Initialize Prisma for this Lambda invocation
+    await initializePrisma();
+
+    // Load job record and reconstruct state
+    const job = await prisma.dailyLearningJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new Error(`Job ${jobId} not found`);
+    if (job.status !== 'running') throw new Error(`Job ${jobId} is not running (status: ${job.status})`);
+
+    const metadata = (job.jobMetadata as unknown as JobMetadata) || {
+      webResearchSkipped: false,
+      phaseTimings: {},
+      phaseMetrics: [],
+    };
+
+    const state: DailyLearningJobState = {
+      jobId,
+      inputTokens: job.inputTokens,
+      outputTokens: job.outputTokens,
+      searchesUsed: job.searchesUsed,
+      metadata,
+    };
+    if (!state.metadata.phaseMetrics) state.metadata.phaseMetrics = [];
+    if (!state.metadata.phaseTimings) state.metadata.phaseTimings = {};
+
+    // Start log capture for this phase
+    startLogCapture(jobId);
+
+    try {
+      switch (phase) {
+        case 1: {
+          // PHASE 1: Data Review
+          const phaseCfg = PHASE_CONFIGS.data_review;
+          const metric = this.startPhaseMetric('data_review');
+          const tokensBefore = { input: state.inputTokens, output: state.outputTokens };
+          state.metadata.phaseTimings!['data_review'] = { start: new Date().toISOString() };
+          await this.updateJobPhase(jobId, 'data_review');
+
+          console.log(`[Phase1] Model: ${phaseCfg.model}, Token budget: ${phaseCfg.tokenBudget}`);
+          const { result, dataSources } = await withTimeout(
+            this.phase1DataReviewWithMetrics(state),
+            PHASE1_OVERALL_TIMEOUT_MS,
+            'Phase 1 Data Review (overall)'
+          );
+
+          metric.inputTokens = state.inputTokens - tokensBefore.input;
+          metric.outputTokens = state.outputTokens - tokensBefore.output;
+          this.completePhaseMetric(metric, 'success', { dataSources });
+
+          state.metadata.phaseTimings!['data_review'].end = new Date().toISOString();
+          state.metadata.phaseMetrics!.push(metric);
+          await this.persistPhaseMetric(jobId, metric);
+          await this.markPhaseComplete(jobId, 'dataReviewDone');
+
+          // Store phase output in jobMetadata
+          await this.storePhaseOutput(jobId, state, 'phase1Output', result);
+          break;
+        }
+
+        case 2: {
+          // PHASE 2: Question Generation
+          const phaseCfg = PHASE_CONFIGS.question_gen;
+          const metric = this.startPhaseMetric('question_gen');
+          const tokensBefore = { input: state.inputTokens, output: state.outputTokens };
+          state.metadata.phaseTimings!['question_gen'] = { start: new Date().toISOString() };
+          await this.updateJobPhase(jobId, 'question_gen');
+
+          const dataReview = await this.loadPhaseOutput<DataReviewResult>(jobId, 'phase1Output');
+          if (!dataReview) throw new Error('Phase 1 output not found');
+
+          console.log(`[Phase2] Model: ${phaseCfg.model}, Token budget: ${phaseCfg.tokenBudget}`);
+          const questions = await this.phase2QuestionGeneration(state, dataReview);
+
+          metric.inputTokens = state.inputTokens - tokensBefore.input;
+          metric.outputTokens = state.outputTokens - tokensBefore.output;
+          this.completePhaseMetric(metric, 'success', { itemsProcessed: questions.length });
+
+          state.metadata.phaseTimings!['question_gen'].end = new Date().toISOString();
+          state.metadata.phaseMetrics!.push(metric);
+          await this.persistPhaseMetric(jobId, metric);
+          await this.markPhaseComplete(jobId, 'questionGenDone');
+
+          await this.storePhaseOutput(jobId, state, 'phase2Output', questions);
+          break;
+        }
+
+        case 3: {
+          // PHASE 3: Web Research
+          const phaseCfg = PHASE_CONFIGS.web_research;
+          const metric = this.startPhaseMetric('web_research');
+          const tokensBefore = { input: state.inputTokens, output: state.outputTokens };
+          state.metadata.phaseTimings!['web_research'] = { start: new Date().toISOString() };
+          await this.updateJobPhase(jobId, 'web_research');
+
+          const questions = await this.loadPhaseOutput<GeneratedQuestion[]>(jobId, 'phase2Output');
+          if (!questions) throw new Error('Phase 2 output not found');
+
+          console.log(`[Phase3] Model: ${phaseCfg.model}, Token budget: ${phaseCfg.tokenBudget}`);
+          const webResearchResults = await this.phase3WebResearch(state, questions);
+
+          const articlesFound = webResearchResults.reduce((sum, r) => sum + r.findings.length, 0);
+          metric.inputTokens = state.inputTokens - tokensBefore.input;
+          metric.outputTokens = state.outputTokens - tokensBefore.output;
+          this.completePhaseMetric(metric, 'success', { itemsProcessed: articlesFound });
+
+          state.metadata.phaseTimings!['web_research'].end = new Date().toISOString();
+          state.metadata.phaseMetrics!.push(metric);
+          await this.persistPhaseMetric(jobId, metric);
+          await this.markPhaseComplete(jobId, 'webResearchDone');
+
+          await this.storePhaseOutput(jobId, state, 'phase3Output', webResearchResults);
+          break;
+        }
+
+        case 4: {
+          // PHASE 4: Correlation Analysis
+          const phaseCfg = PHASE_CONFIGS.correlation;
+          const metric = this.startPhaseMetric('correlation');
+          const tokensBefore = { input: state.inputTokens, output: state.outputTokens };
+          state.metadata.phaseTimings!['correlation'] = { start: new Date().toISOString() };
+          await this.updateJobPhase(jobId, 'correlation');
+
+          const dataReview = await this.loadPhaseOutput<DataReviewResult>(jobId, 'phase1Output');
+          const webResearchResults = await this.loadPhaseOutput<WebResearchResult[]>(jobId, 'phase3Output') || [];
+          if (!dataReview) throw new Error('Phase 1 output not found');
+
+          console.log(`[Phase4] Model: ${phaseCfg.model}, Token budget: ${phaseCfg.tokenBudget}`);
+          const correlatedInsights = await this.phase4Correlation(state, dataReview, webResearchResults);
+
+          metric.inputTokens = state.inputTokens - tokensBefore.input;
+          metric.outputTokens = state.outputTokens - tokensBefore.output;
+          this.completePhaseMetric(metric, 'success', { itemsProcessed: correlatedInsights.length });
+
+          state.metadata.phaseTimings!['correlation'].end = new Date().toISOString();
+          state.metadata.phaseMetrics!.push(metric);
+          await this.persistPhaseMetric(jobId, metric);
+          await this.markPhaseComplete(jobId, 'correlationDone');
+
+          // Insight re-validation (between Phase 4 and 5)
+          if (isEmbeddingEnabled()) {
+            try {
+              const { revalidateInsight } = await import('./knowledge-base');
+              const { generateQueryEmbedding: genQueryEmb, searchSimilarInsights: searchSimilar } = await import('./embedding-service');
+              let revalidated = 0;
+              for (const ci of correlatedInsights.filter(c => c.confidence >= 0.7)) {
+                try {
+                  const queryEmb = await genQueryEmb(ci.internalObservation);
+                  const similar = await searchSimilar(queryEmb, { limit: 3, minSimilarity: 0.7 });
+                  for (const match of similar) {
+                    await revalidateInsight(match.id, ci.confidence);
+                    revalidated++;
+                  }
+                } catch { /* non-critical, continue */ }
+              }
+              if (revalidated > 0) {
+                console.log(`[Learning] Re-validated ${revalidated} existing insights`);
+              }
+            } catch (err) {
+              console.warn('[Learning] Insight re-validation skipped:', err);
+            }
+          }
+
+          await this.storePhaseOutput(jobId, state, 'phase4Output', correlatedInsights);
+          break;
+        }
+
+        case 5: {
+          // PHASE 5: Digest Generation
+          const phaseCfg = PHASE_CONFIGS.digest_gen;
+          const metric = this.startPhaseMetric('digest_gen');
+          const tokensBefore = { input: state.inputTokens, output: state.outputTokens };
+          state.metadata.phaseTimings!['digest_gen'] = { start: new Date().toISOString() };
+          await this.updateJobPhase(jobId, 'digest_gen');
+
+          const dataReview = await this.loadPhaseOutput<DataReviewResult>(jobId, 'phase1Output');
+          const questions = await this.loadPhaseOutput<GeneratedQuestion[]>(jobId, 'phase2Output');
+          const webResearchResults = await this.loadPhaseOutput<WebResearchResult[]>(jobId, 'phase3Output') || [];
+          const correlatedInsights = await this.loadPhaseOutput<CorrelatedInsight[]>(jobId, 'phase4Output');
+          if (!dataReview || !questions || !correlatedInsights) throw new Error('Prior phase outputs not found');
+
+          console.log(`[Phase5] Model: ${phaseCfg.model}, Token budget: ${phaseCfg.tokenBudget}`);
+          const digest = await this.phase5DigestGeneration(state, dataReview, questions, webResearchResults, correlatedInsights);
+
+          metric.inputTokens = state.inputTokens - tokensBefore.input;
+          metric.outputTokens = state.outputTokens - tokensBefore.output;
+          this.completePhaseMetric(metric, 'success', {
+            itemsProcessed: digest.priorityActions.length + digest.quickWins.length,
+          });
+
+          state.metadata.phaseTimings!['digest_gen'].end = new Date().toISOString();
+          state.metadata.phaseMetrics!.push(metric);
+          await this.persistPhaseMetric(jobId, metric);
+          await this.markPhaseComplete(jobId, 'digestGenDone');
+
+          // Save digest to database
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const digestData = {
+            executiveSummary: digest.executiveSummary,
+            priorityActions: JSON.parse(JSON.stringify(digest.priorityActions)),
+            quickWins: JSON.parse(JSON.stringify(digest.quickWins)),
+            watchItems: JSON.parse(JSON.stringify(digest.watchItems)),
+            industryHighlights: JSON.parse(JSON.stringify(digest.industryHighlights)),
+            regulatoryUpdates: JSON.parse(JSON.stringify(digest.regulatoryUpdates)),
+            marketTrends: JSON.parse(JSON.stringify(digest.marketTrends)),
+            questionsForTomorrow: JSON.parse(JSON.stringify(digest.questionsForTomorrow)),
+            correlatedInsights: JSON.parse(JSON.stringify(digest.correlatedInsights)),
+            dataHealthScore: digest.dataHealthScore,
+            confidenceScore: digest.confidenceScore,
+          };
+
+          const digestRecord = await prisma.dailyDigest.upsert({
+            where: { digestDate: today },
+            create: { digestDate: today, ...digestData },
+            update: digestData,
+          });
+
+          // Clear any existing job's link to this digest (unique constraint)
+          await prisma.dailyLearningJob.updateMany({
+            where: { digestId: digestRecord.id, id: { not: jobId } },
+            data: { digestId: null },
+          });
+
+          // Save insights and actions
+          const savedInsightsCount = await this.extractAndSaveInsights(digest, jobId);
+          console.log(`[Learning] Saved ${savedInsightsCount} insights`);
+
+          const savedActionsCount = await this.extractAndSaveActions(digest, jobId, digestRecord.id);
+          console.log(`[Learning] Saved ${savedActionsCount} action items`);
+
+          // Store digest record ID for finalization
+          await this.storePhaseOutput(jobId, state, 'phase5Output', {
+            digestId: digestRecord.id,
+            questionsGenerated: questions.length,
+            insightsDiscovered: correlatedInsights.length,
+            articlesAnalyzed: webResearchResults.reduce((sum, r) => sum + r.findings.length, 0),
+          });
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown phase: ${phase}`);
+      }
+
+      // Flush logs before returning
+      await flushLogBufferToDb().catch(() => {});
+      stopLogCapture();
+
+      return {
+        success: true,
+        phase,
+        jobId,
+        skipWebResearch: state.metadata.webResearchSkipped,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[Learning] Phase ${phase} failed: ${errorMessage}`);
+
+      // Mark job as failed
+      await prisma.dailyLearningJob.update({
+        where: { id: jobId },
+        data: {
+          status: 'failed',
+          completedAt: new Date(),
+          errorMessage,
+          errorPhase: job.currentPhase || `phase_${phase}`,
+          jobMetadata: state.metadata as object,
+          inputTokens: state.inputTokens,
+          outputTokens: state.outputTokens,
+          searchesUsed: state.searchesUsed,
+        },
+      });
+
+      await flushLogBufferToDb().catch(() => {});
+      stopLogCapture();
+
+      throw error;
+    }
+  }
+
+  /**
+   * Finalizes a completed learning job.
+   * Called as the last step in the Step Functions workflow.
+   */
+  async finalizeJob(jobId: string): Promise<{ success: boolean; jobId: string }> {
+    console.log(`[Learning] ========== FINALIZING JOB ${jobId} ==========`);
+
+    await initializePrisma();
+
+    const job = await prisma.dailyLearningJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new Error(`Job ${jobId} not found`);
+
+    const metadata = (job.jobMetadata as unknown as JobMetadata) || {};
+
+    // Calculate health summary from phase metrics
+    if (metadata.phaseMetrics) {
+      metadata.healthSummary = this.calculateHealthSummary(metadata.phaseMetrics);
+    }
+
+    // Calculate phase durations
+    for (const [, timing] of Object.entries(metadata.phaseTimings || {})) {
+      if (timing.start && timing.end) {
+        timing.durationMs = new Date(timing.end).getTime() - new Date(timing.start).getTime();
+      }
+    }
+
+    // Load phase 5 output for final stats
+    const phase5Output = await this.loadPhaseOutput<{
+      digestId: string;
+      questionsGenerated: number;
+      insightsDiscovered: number;
+      articlesAnalyzed: number;
+    }>(jobId, 'phase5Output');
+
+    await prisma.dailyLearningJob.update({
+      where: { id: jobId },
+      data: {
+        status: 'completed',
+        completedAt: new Date(),
+        inputTokens: job.inputTokens,
+        outputTokens: job.outputTokens,
+        searchesUsed: job.searchesUsed,
+        questionsGenerated: phase5Output?.questionsGenerated || 0,
+        insightsDiscovered: phase5Output?.insightsDiscovered || 0,
+        articlesAnalyzed: phase5Output?.articlesAnalyzed || 0,
+        digestId: phase5Output?.digestId || null,
+        estimatedCost: this.calculateCost(job.inputTokens, job.outputTokens),
+        jobMetadata: metadata as object,
+      },
+    });
+
+    console.log(`[Learning] Job ${jobId} finalized successfully`);
+    return { success: true, jobId };
+  }
+
+  /**
+   * Marks a phase as skipped (e.g., web research when quota exhausted).
+   * Called by Step Functions when a Choice state bypasses a phase.
+   */
+  async skipPhase(phase: number, jobId: string, reason: string): Promise<{
+    success: boolean;
+    phase: number;
+    jobId: string;
+  }> {
+    console.log(`[Learning] Skipping phase ${phase} for job ${jobId}: ${reason}`);
+    await initializePrisma();
+
+    const job = await prisma.dailyLearningJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new Error(`Job ${jobId} not found`);
+
+    const metadata = (job.jobMetadata as unknown as JobMetadata) || {};
+    if (!metadata.phaseMetrics) metadata.phaseMetrics = [];
+
+    if (phase === 3) {
+      const metric = this.startPhaseMetric('web_research');
+      this.completePhaseMetric(metric, 'skipped', { error: reason });
+      metadata.phaseMetrics.push(metric);
+      await this.persistPhaseMetric(jobId, metric);
+      await this.markPhaseComplete(jobId, 'webResearchDone');
+
+      // Store empty web research results
+      await prisma.dailyLearningJob.update({
+        where: { id: jobId },
+        data: { jobMetadata: metadata as object },
+      });
+    }
+
+    return { success: true, phase, jobId };
+  }
+
+  // ============================================
+  // PHASE OUTPUT STORAGE HELPERS
+  // Store/load intermediate results in jobMetadata
+  // ============================================
+
+  private async storePhaseOutput(
+    jobId: string,
+    state: DailyLearningJobState,
+    key: string,
+    data: unknown,
+  ): Promise<void> {
+    // Reload metadata from DB to merge with any concurrent writes
+    const job = await prisma.dailyLearningJob.findUnique({
+      where: { id: jobId },
+      select: { jobMetadata: true },
+    });
+    const currentMetadata = (job?.jobMetadata as Record<string, unknown>) || {};
+
+    // Merge state metadata (which has updated token counts, timings, etc.)
+    const merged = {
+      ...currentMetadata,
+      ...state.metadata,
+      [key]: data,
+    };
+
+    await prisma.dailyLearningJob.update({
+      where: { id: jobId },
+      data: {
+        jobMetadata: merged as object,
+        inputTokens: state.inputTokens,
+        outputTokens: state.outputTokens,
+        searchesUsed: state.searchesUsed,
+      },
+    });
+  }
+
+  private async loadPhaseOutput<T>(jobId: string, key: string): Promise<T | null> {
+    const job = await prisma.dailyLearningJob.findUnique({
+      where: { id: jobId },
+      select: { jobMetadata: true },
+    });
+    const metadata = job?.jobMetadata as Record<string, unknown> | null;
+    return (metadata?.[key] as T) || null;
+  }
+
   /**
    * Calculates the expiration date for insights based on their category.
    * Different insight types have different relevance windows.
