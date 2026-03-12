@@ -59,13 +59,13 @@ export interface PhaseConfig {
 export const PHASE_CONFIGS: Record<string, PhaseConfig> = {
   data_review: {
     model: envStr('LEARNING_PHASE1_MODEL', CLAUDE_CONFIG.defaultModel),
-    tokenBudget: envInt('LEARNING_PHASE1_TOKEN_BUDGET', 16000),
+    tokenBudget: envInt('LEARNING_PHASE1_TOKEN_BUDGET', 20000),
     timeoutMs: envInt('LEARNING_PHASE1_TIMEOUT_MS', 5 * 60 * 1000),
     enabled: process.env.LEARNING_PHASE1_ENABLED !== 'false',
   },
   question_gen: {
     model: envStr('LEARNING_PHASE2_MODEL', CLAUDE_CONFIG.defaultModel),
-    tokenBudget: envInt('LEARNING_PHASE2_TOKEN_BUDGET', 12000),
+    tokenBudget: envInt('LEARNING_PHASE2_TOKEN_BUDGET', 10000),
     timeoutMs: envInt('LEARNING_PHASE2_TIMEOUT_MS', 3 * 60 * 1000),
     enabled: process.env.LEARNING_PHASE2_ENABLED !== 'false',
   },
@@ -77,7 +77,7 @@ export const PHASE_CONFIGS: Record<string, PhaseConfig> = {
   },
   correlation: {
     model: envStr('LEARNING_PHASE4_MODEL', CLAUDE_CONFIG.defaultModel),
-    tokenBudget: envInt('LEARNING_PHASE4_TOKEN_BUDGET', 20000),
+    tokenBudget: envInt('LEARNING_PHASE4_TOKEN_BUDGET', 18000),
     timeoutMs: envInt('LEARNING_PHASE4_TIMEOUT_MS', 5 * 60 * 1000),
     enabled: process.env.LEARNING_PHASE4_ENABLED !== 'false',
   },

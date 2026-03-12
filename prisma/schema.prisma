@@ -41,14 +41,16 @@ model Storefront {
   dashboardUrl     String?           @map("dashboard_url")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
-  brandRecords     BrandRecord[]
-  budtenderRecords BudtenderRecord[]
-  customers        Customer[]
-  dataFlags        DataFlag[]
-  invoices         Invoice[]
-  productRecords   ProductRecord[]
-  salesRecords     SalesRecord[]
-  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  brandRecords      BrandRecord[]
+  budtenderRecords  BudtenderRecord[]
+  customers         Customer[]
+  dailyProductSales DailyProductSale[]
+  dataFlags         DataFlag[]
+  invoices          Invoice[]
+  productRecords    ProductRecord[]
+  salesLineItems    SalesLineItem[]
+  salesRecords      SalesRecord[]
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("storefronts")
 }
@@ -149,14 +151,17 @@ model VendorBrand {
 }
 
 model CanonicalBrand {
-  id            String            @id @default(uuid())
-  canonicalName String            @unique @map("canonical_name")
-  createdAt     DateTime          @default(now()) @map("created_at")
-  updatedAt     DateTime          @updatedAt @map("updated_at")
-  aliases       BrandAlias[]
-  brandRecords  BrandRecord[]
-  lineItems     InvoiceLineItem[]
-  vendorBrands  VendorBrand[]
+  id                String             @id @default(uuid())
+  canonicalName     String             @unique @map("canonical_name")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  aliases           BrandAlias[]
+  brandRecords      BrandRecord[]
+  dailyProductSales DailyProductSale[]
+  lineItems         InvoiceLineItem[]
+  products          Product[]
+  salesLineItems    SalesLineItem[]
+  vendorBrands      VendorBrand[]
 
   @@map("canonical_brands")
 }
@@ -404,20 +409,26 @@ model BudtenderAssignment {
 }
 
 model BusinessInsight {
-  id           String    @id @default(uuid())
-  category     String
-  subcategory  String?
-  insight      String
-  confidence   String    @default("medium")
-  source       String
-  sourceData   String?   @map("source_data")
-  dataRange    String?   @map("data_range")
-  storefrontId String?   @map("storefront_id")
-  isActive     Boolean   @default(true) @map("is_active")
-  validatedAt  DateTime? @map("validated_at")
-  expiresAt    DateTime? @map("expires_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  category        String
+  subcategory     String?
+  insight         String
+  confidence      String    @default("medium")
+  source          String
+  sourceData      String?   @map("source_data")
+  dataRange       String?   @map("data_range")
+  storefrontId    String?   @map("storefront_id")
+  isActive        Boolean   @default(true) @map("is_active")
+  validatedAt     DateTime? @map("validated_at")
+  expiresAt       DateTime? @map("expires_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  // Lifecycle management fields
+  validationCount Int       @default(0) @map("validation_count")
+  lastValidated   DateTime? @map("last_validated")
+  impactScore     Float?    @map("impact_score")
+  retentionScore  Float?    @map("retention_score")
+  // Note: embedding vector(1024) column added via raw SQL migration (pgvector)
 
   @@index([category])
   @@index([storefrontId])
@@ -932,4 +943,169 @@ model DataFlag {
   @@index([status])
   @@index([storefrontId])
   @@map("data_flags")
+}
+
+model Product {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  treezProductId    String?            @unique @map("treez_product_id")
+  brandId           String?            @map("brand_id")
+  productName       String?            @map("product_name")
+  productType       String?            @map("product_type")
+  productSubtype    String?            @map("product_subtype")
+  size              String?
+  classification    String?
+  stateTrackingId   String?            @map("state_tracking_id")
+  dataSource        String?            @default("treez_sync") @map("data_source")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  brand             CanonicalBrand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  dailyProductSales DailyProductSale[]
+  salesLineItems    SalesLineItem[]
+
+  @@map("products")
+}
+
+model SalesLineItem {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  storefrontId      String?         @map("storefront_id")
+  storeName         String?         @map("store_name")
+  ticketId          String          @map("ticket_id")
+  ticketLineId      String          @map("ticket_line_id")
+  dateOpen          DateTime        @map("date_open") @db.Date
+  dateClose         DateTime?       @map("date_close") @db.Date
+  productId         String?         @map("product_id") @db.Uuid
+  brandId           String?         @map("brand_id")
+  originalBrandName String?         @map("original_brand_name")
+  productName       String?         @map("product_name")
+  productType       String?         @map("product_type")
+  productSubtype    String?         @map("product_subtype")
+  classification    String?
+  stateTrackingId   String?         @map("state_tracking_id")
+  batch             String?
+  distributor       String?
+  quantity          Int             @default(0)
+  pricePerUnit      Decimal?        @default(0) @map("price_per_unit") @db.Decimal(10, 2)
+  grossSales        Decimal?        @default(0) @map("gross_sales") @db.Decimal(12, 2)
+  discounts         Decimal?        @default(0) @db.Decimal(12, 2)
+  returns           Decimal?        @default(0) @db.Decimal(12, 2)
+  netSales          Decimal?        @default(0) @map("net_sales") @db.Decimal(12, 2)
+  taxes             Decimal?        @default(0) @db.Decimal(12, 2)
+  costWithoutExcise Decimal?        @default(0) @map("cost_without_excise") @db.Decimal(12, 2)
+  costWithExcise    Decimal?        @default(0) @map("cost_with_excise") @db.Decimal(12, 2)
+  customerDbId      String?         @map("customer_db_id")
+  customerTreezId   String?         @map("customer_treez_id")
+  customerName      String?         @map("customer_name")
+  customerDob       DateTime?       @map("customer_dob") @db.Date
+  customerGender    String?         @map("customer_gender")
+  customerAge       Int?            @map("customer_age")
+  customerCity      String?         @map("customer_city")
+  customerState     String?         @map("customer_state")
+  customerZip       String?         @map("customer_zip")
+  size              String?
+  totalMgThc        Decimal?        @map("total_mg_thc") @db.Decimal(10, 2)
+  totalMgCbd        Decimal?        @map("total_mg_cbd") @db.Decimal(10, 2)
+  cashier           String?
+  registerNumber    String?         @map("register_number")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  brand             CanonicalBrand? @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  product           Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  storefront        Storefront?     @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
+
+  @@unique([ticketId, ticketLineId, dateOpen])
+  @@index([dateOpen])
+  @@index([ticketId])
+  @@index([brandId])
+  @@index([productId])
+  @@index([productType])
+  @@index([stateTrackingId])
+  @@index([customerTreezId])
+  @@index([storefrontId])
+  @@map("sales_line_items")
+}
+
+model DailyProductSale {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  storefrontId         String?         @map("storefront_id")
+  storeName            String?         @map("store_name")
+  date                 DateTime        @db.Date
+  treezProductId       String?         @map("treez_product_id")
+  productId            String?         @map("product_id") @db.Uuid
+  brandId              String?         @map("brand_id")
+  originalBrandName    String?         @map("original_brand_name")
+  productName          String?         @map("product_name")
+  productType          String?         @map("product_type")
+  productSubtype       String?         @map("product_subtype")
+  size                 String?
+  salesOrInventory     String?         @map("sales_or_inventory")
+  unitsSold            Int?            @default(0) @map("units_sold")
+  sellableVelocity     Decimal?        @default(0) @map("sellable_velocity") @db.Decimal(10, 4)
+  grossSales           Decimal?        @default(0) @map("gross_sales") @db.Decimal(12, 2)
+  discounts            Decimal?        @default(0) @db.Decimal(12, 2)
+  returns              Decimal?        @default(0) @db.Decimal(12, 2)
+  netSales             Decimal?        @default(0) @map("net_sales") @db.Decimal(12, 2)
+  cogsWithExcise       Decimal?        @default(0) @map("cogs_with_excise") @db.Decimal(12, 2)
+  avgUnitRetailPrice   Decimal?        @default(0) @map("avg_unit_retail_price") @db.Decimal(10, 2)
+  avgUnitSalePrice     Decimal?        @default(0) @map("avg_unit_sale_price") @db.Decimal(10, 2)
+  grossMarginFromSales Decimal?        @default(0) @map("gross_margin_from_sales") @db.Decimal(12, 2)
+  unitsRemaining       Int?            @default(0) @map("units_remaining")
+  costOfInventory      Decimal?        @default(0) @map("cost_of_inventory") @db.Decimal(12, 2)
+  inventoryBatches     String?         @map("inventory_batches")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+  brand                CanonicalBrand? @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  product              Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  storefront           Storefront?     @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
+
+  @@unique([date, treezProductId, storeName])
+  @@index([date])
+  @@index([productId])
+  @@index([brandId])
+  @@index([productType])
+  @@index([treezProductId])
+  @@index([storefrontId])
+  @@map("daily_product_sales")
+}
+
+// ============================================
+// ACTION OUTCOME TRACKING
+// ============================================
+
+model ActionItem {
+  id           String    @id @default(uuid())
+  digestId     String    @map("digest_id")
+  jobId        String    @map("job_id")
+  action       String
+  category     String
+  timeframe    String?
+  impact       String?
+  effort       String?
+  actionType   String    @default("priority") @map("action_type") // 'priority' | 'quick_win'
+  status       String    @default("pending") // 'pending' | 'in_progress' | 'completed' | 'dismissed'
+  outcome      String? // 'success' | 'partial' | 'failure' | 'abandoned'
+  outcomeNotes String?   @map("outcome_notes")
+  completedAt  DateTime? @map("completed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([digestId])
+  @@index([jobId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@map("action_items")
+}
+
+model FeedbackCycle {
+  id               String   @id @default(uuid())
+  cycleDate        DateTime @unique @map("cycle_date") @db.Date
+  totalActions     Int      @default(0) @map("total_actions")
+  completedActions Int      @default(0) @map("completed_actions")
+  dismissedActions Int      @default(0) @map("dismissed_actions")
+  avgCompletionDays Float?  @map("avg_completion_days")
+  topCategories    Json     @default("[]") @map("top_categories")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([cycleDate])
+  @@map("feedback_cycles")
 }

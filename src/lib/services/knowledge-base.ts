@@ -5,6 +5,15 @@
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import {
+  isEmbeddingEnabled,
+  generateEmbedding,
+  generateEmbeddingsBatch,
+  generateQueryEmbedding,
+  insightToEmbeddingText,
+  storeInsightEmbedding,
+  searchSimilarInsights,
+} from './embedding-service';
 
 // Types for the knowledge base
 export interface InsightInput {
@@ -53,27 +62,84 @@ export async function saveInsight(input: InsightInput): Promise<string> {
       expiresAt: input.expiresAt,
     },
   });
+
+  // Generate and store embedding (non-blocking, best-effort)
+  if (isEmbeddingEnabled()) {
+    try {
+      const text = insightToEmbeddingText(insight);
+      const embedding = await generateEmbedding(text);
+      await storeInsightEmbedding(insight.id, embedding);
+    } catch (err) {
+      console.warn(`[KnowledgeBase] Failed to embed insight ${insight.id}:`, err);
+    }
+  }
+
   return insight.id;
 }
 
 export async function saveInsights(inputs: InsightInput[]): Promise<number> {
-  const result = await prisma.businessInsight.createMany({
-    data: inputs.map(input => ({
-      category: input.category,
-      subcategory: input.subcategory,
-      insight: input.insight,
-      confidence: input.confidence || 'medium',
-      source: input.source,
-      sourceData: input.sourceData,
-      dataRange: input.dataRange,
-      storefrontId: input.storefrontId,
-      expiresAt: input.expiresAt,
-    })),
-  });
+  // Create all insights first
+  const dataItems = inputs.map(input => ({
+    category: input.category,
+    subcategory: input.subcategory,
+    insight: input.insight,
+    confidence: input.confidence || 'medium',
+    source: input.source,
+    sourceData: input.sourceData,
+    dataRange: input.dataRange,
+    storefrontId: input.storefrontId,
+    expiresAt: input.expiresAt,
+  }));
+
+  const result = await prisma.businessInsight.createMany({ data: dataItems });
+
+  // Batch-embed newly created insights (best-effort)
+  if (isEmbeddingEnabled() && inputs.length > 0) {
+    try {
+      // Fetch the recently created insights to get their IDs
+      const recentInsights = await prisma.businessInsight.findMany({
+        where: {
+          source: inputs[0].source, // Match by source (e.g., "daily-learning-{jobId}")
+          createdAt: { gte: new Date(Date.now() - 60000) }, // Created in last minute
+        },
+        orderBy: { createdAt: 'desc' },
+        take: inputs.length,
+      });
+
+      if (recentInsights.length > 0) {
+        const texts = recentInsights.map(insightToEmbeddingText);
+        const embeddings = await generateEmbeddingsBatch(texts);
+        for (let i = 0; i < recentInsights.length; i++) {
+          await storeInsightEmbedding(recentInsights[i].id, embeddings[i]).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn(`[KnowledgeBase] Failed to batch-embed insights:`, err);
+    }
+  }
+
   return result.count;
 }
 
-export async function getRelevantInsights(query: ContextQuery) {
+export async function getRelevantInsights(query: ContextQuery & { semanticQuery?: string }) {
+  // If semantic query is provided and embeddings are enabled, use vector similarity
+  if (query.semanticQuery && isEmbeddingEnabled()) {
+    try {
+      const queryEmbedding = await generateQueryEmbedding(query.semanticQuery);
+      const semanticResults = await searchSimilarInsights(queryEmbedding, {
+        limit: query.limit || 50,
+        categories: query.categories,
+        minSimilarity: 0.3,
+        activeOnly: true,
+      });
+      return semanticResults;
+    } catch (err) {
+      console.warn(`[KnowledgeBase] Semantic search failed, falling back to category search:`, err);
+      // Fall through to traditional search
+    }
+  }
+
+  // Traditional category + date search (fallback)
   const where: Prisma.BusinessInsightWhereInput = {
     isActive: true,
     OR: [
@@ -131,6 +197,101 @@ export async function deactivateOldInsights(
     },
     data: { isActive: false },
   });
+  return result.count;
+}
+
+// ============================================
+// INSIGHT LIFECYCLE MANAGEMENT
+// ============================================
+
+/**
+ * Calculate a retention score for an insight based on confidence, validations, recency, and impact.
+ * Score range: 0.0 - 1.0
+ * - Insights with retentionScore >= 0.7 are never auto-expired
+ * - Insights with retentionScore < 0.3 (and age > 30 days) are candidates for deactivation
+ */
+export function calculateRetentionScore(insight: {
+  confidence: string;
+  validationCount: number;
+  lastValidated: Date | null;
+  impactScore: number | null;
+  createdAt: Date;
+}): number {
+  let score = 0;
+
+  // Confidence weight (0-0.3)
+  const confMap: Record<string, number> = { high: 0.3, medium: 0.2, low: 0.1 };
+  score += confMap[insight.confidence] || 0.1;
+
+  // Validation frequency (0-0.3) — more validations = higher retention
+  score += Math.min(insight.validationCount * 0.05, 0.3);
+
+  // Recency of last validation (0-0.2) — decays over 180 days
+  if (insight.lastValidated) {
+    const daysSinceValidation = (Date.now() - insight.lastValidated.getTime()) / (1000 * 60 * 60 * 24);
+    score += Math.max(0, 0.2 - (daysSinceValidation / 180) * 0.2);
+  }
+
+  // Impact score contribution (0-0.2)
+  if (insight.impactScore !== null && insight.impactScore !== undefined) {
+    score += Math.min(insight.impactScore * 0.2, 0.2);
+  }
+
+  return Math.min(score, 1.0);
+}
+
+/**
+ * Re-validate an existing insight — increment validation count, update timestamps,
+ * and recalculate retention score. Called when new data confirms an existing insight.
+ */
+export async function revalidateInsight(id: string, impactScore?: number): Promise<void> {
+  const insight = await prisma.businessInsight.update({
+    where: { id },
+    data: {
+      validationCount: { increment: 1 },
+      lastValidated: new Date(),
+      validatedAt: new Date(),
+      ...(impactScore !== undefined ? { impactScore } : {}),
+    },
+  });
+
+  // Recalculate retention score
+  const retentionScore = calculateRetentionScore({
+    confidence: insight.confidence,
+    validationCount: insight.validationCount,
+    lastValidated: insight.lastValidated,
+    impactScore: insight.impactScore,
+    createdAt: insight.createdAt,
+  });
+
+  await prisma.businessInsight.update({
+    where: { id },
+    data: { retentionScore },
+  });
+}
+
+/**
+ * Expire insights based on retention score instead of just time.
+ * - retentionScore < 0.3 and age > 30 days → deactivated
+ * - retentionScore >= 0.7 → never auto-expired
+ * Returns the number of deactivated insights.
+ */
+export async function expireByRetentionScore(): Promise<number> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const result = await prisma.businessInsight.updateMany({
+    where: {
+      isActive: true,
+      retentionScore: { lt: 0.3 },
+      createdAt: { lt: thirtyDaysAgo },
+    },
+    data: { isActive: false },
+  });
+
+  if (result.count > 0) {
+    console.log(`[KnowledgeBase] Expired ${result.count} low-retention insights`);
+  }
+
   return result.count;
 }
 
@@ -207,11 +368,12 @@ export async function buildContextForAnalysis(
 
   const categories = categoryMap[analysisType] || [analysisType];
 
-  // Get relevant insights
+  // Get relevant insights (use semantic search when embeddings are available)
   const insights = await getRelevantInsights({
     categories,
     storefrontId,
     limit: 30,
+    semanticQuery: `${analysisType} analysis for cannabis retail dispensary`,
   });
 
   // Get relevant rules
@@ -231,11 +393,11 @@ export async function buildContextForAnalysis(
     contextParts.push('\n=== PREVIOUS FINDINGS & CONTEXT ===');
 
     // Group insights by category
-    const byCategory = insights.reduce((acc, insight) => {
+    const byCategory = insights.reduce((acc: Record<string, Array<{ category: string; insight: string; confidence: string }>>, insight) => {
       if (!acc[insight.category]) acc[insight.category] = [];
       acc[insight.category].push(insight);
       return acc;
-    }, {} as Record<string, typeof insights>);
+    }, {});
 
     for (const [category, categoryInsights] of Object.entries(byCategory)) {
       contextParts.push(`\n[${category.toUpperCase()}]`);

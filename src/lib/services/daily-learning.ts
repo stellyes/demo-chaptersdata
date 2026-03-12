@@ -10,6 +10,7 @@ import { prisma, initializePrisma } from '@/lib/prisma';
 import { getAnthropicClient } from './claude';
 import { webSearchService, SearchResult } from './web-search';
 import { saveInsights, InsightInput } from './knowledge-base';
+import { isEmbeddingEnabled } from './embedding-service';
 import { dataCorrelationsService, CorrelationSummary } from './data-correlations';
 import { CLAUDE_CONFIG } from '@/lib/config';
 import { parseClaudeJson, ParseJsonResult } from '@/lib/utils/json-response';
@@ -1025,6 +1026,33 @@ export class DailyLearningService {
       await this.markPhaseComplete(state.jobId, 'correlationDone');
 
       // ============================================
+      // INSIGHT RE-VALIDATION (between Phase 4 and 5)
+      // Re-validate existing insights confirmed by new correlations
+      // ============================================
+      if (isEmbeddingEnabled()) {
+        try {
+          const { revalidateInsight } = await import('./knowledge-base');
+          const { generateQueryEmbedding: genQueryEmb, searchSimilarInsights: searchSimilar } = await import('./embedding-service');
+          let revalidated = 0;
+          for (const ci of correlatedInsights.filter(c => c.confidence >= 0.7)) {
+            try {
+              const queryEmb = await genQueryEmb(ci.internalObservation);
+              const similar = await searchSimilar(queryEmb, { limit: 3, minSimilarity: 0.7 });
+              for (const match of similar) {
+                await revalidateInsight(match.id, ci.confidence);
+                revalidated++;
+              }
+            } catch { /* non-critical, continue */ }
+          }
+          if (revalidated > 0) {
+            console.log(`[Learning] Re-validated ${revalidated} existing insights from Phase 4 correlations`);
+          }
+        } catch (err) {
+          console.warn('[Learning] Insight re-validation skipped:', err);
+        }
+      }
+
+      // ============================================
       // PHASE 5: Digest Generation
       // ============================================
       const phase5Cfg = PHASE_CONFIGS.digest_gen;
@@ -1091,6 +1119,10 @@ export class DailyLearningService {
       console.log(`[Learning] Extracting and saving insights to knowledge base...`);
       const savedInsightsCount = await this.extractAndSaveInsights(digest, state.jobId);
       console.log(`[Learning] Saved ${savedInsightsCount} insights to knowledge base`);
+
+      // Extract and save action items for outcome tracking
+      const savedActionsCount = await this.extractAndSaveActions(digest, state.jobId, digestRecord.id);
+      console.log(`[Learning] Saved ${savedActionsCount} action items for outcome tracking`);
 
       // Calculate phase durations
       for (const [phase, timing] of Object.entries(state.metadata.phaseTimings || {})) {
@@ -1222,6 +1254,8 @@ export class DailyLearningService {
     const dataFlagData = await loadAndTrack('data_flags', () => this.loadDataFlagSummary(), {});
     const correlationSummary = await loadAndTrack('correlations',
       () => dataCorrelationsService.getCorrelationSummaryForAI(), '');
+    const monthlyAggregates = await loadAndTrack('monthly_aggregates',
+      () => this.loadMonthlyAggregates(), {});
 
     const dataLoadElapsed = Date.now() - dataLoadStart;
     console.log(`[Phase1] ---- All data sources loaded in ${dataLoadElapsed}ms ----`);
@@ -1245,7 +1279,8 @@ export class DailyLearningService {
       productData,
       researchData,
       dataFlagData,
-      correlationSummary
+      correlationSummary,
+      monthlyAggregates
     );
     const claudeElapsed = Date.now() - claudeStart;
     console.log(`[Phase1] Claude analysis complete in ${claudeElapsed}ms`);
@@ -1270,7 +1305,8 @@ export class DailyLearningService {
     productData: unknown,
     researchData: unknown,
     dataFlagData: unknown,
-    correlationSummary: string
+    correlationSummary: string,
+    monthlyAggregates: unknown = {}
   ): Promise<DataReviewResult> {
     console.log(`[Phase1:Analysis] Building Claude prompt...`);
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
@@ -1288,6 +1324,10 @@ QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
 WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
 DATA QUALITY FLAGS (unresolved issues): ${JSON.stringify(dataFlagData, null, 2)}
 
+## SEASONAL CONTEXT (12-Month Monthly Aggregates)
+Use this data to identify seasonal patterns, year-over-year trends, and monthly cycles:
+${JSON.stringify(monthlyAggregates, null, 2)}
+
 ## CROSS-TABLE CORRELATIONS & ANALYTICS
 The following links data across multiple tables to reveal deeper insights:
 
@@ -1304,6 +1344,7 @@ ${correlationSummary}
 8. Cross-reference the knowledge base insights with current data
 9. Look for patterns in dates with regulatory events vs sales performance
 10. Analyze the long-tail of brands (beyond top 10) for emerging opportunities
+11. Compare current performance against monthly aggregates to identify seasonal patterns and year-over-year changes
 
 Return JSON:
 {
@@ -1409,6 +1450,7 @@ Return JSON:
       researchData,
       dataFlagData,
       correlationSummary,
+      monthlyAggregates,
     ] = await Promise.all([
       safeQuery(() => this.loadRecentSalesData(), {}, 'loadRecentSalesData'),
       safeQuery(() => this.loadRecentBrandData(), {}, 'loadRecentBrandData'),
@@ -1421,6 +1463,7 @@ Return JSON:
       safeQuery(() => this.loadResearchData(), {}, 'loadResearchData'),
       safeQuery(() => this.loadDataFlagSummary(), {}, 'loadDataFlagSummary'),
       safeQuery(() => dataCorrelationsService.getCorrelationSummaryForAI(), '', 'getCorrelationSummaryForAI'),
+      safeQuery(() => this.loadMonthlyAggregates(), {}, 'loadMonthlyAggregates'),
     ]);
 
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
@@ -1438,6 +1481,10 @@ QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
 WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
 DATA QUALITY FLAGS (unresolved issues): ${JSON.stringify(dataFlagData, null, 2)}
 
+## SEASONAL CONTEXT (12-Month Monthly Aggregates)
+Use this data to identify seasonal patterns, year-over-year trends, and monthly cycles:
+${JSON.stringify(monthlyAggregates, null, 2)}
+
 ## CROSS-TABLE CORRELATIONS & ANALYTICS
 The following links data across multiple tables to reveal deeper insights:
 
@@ -1454,6 +1501,7 @@ ${correlationSummary}
 8. Cross-reference the knowledge base insights with current data
 9. Look for patterns in dates with regulatory events vs sales performance
 10. Analyze the long-tail of brands (beyond top 10) for emerging opportunities
+11. Compare current performance against monthly aggregates to identify seasonal patterns and year-over-year changes
 
 Return JSON:
 {
@@ -2407,6 +2455,9 @@ ${categories.map(c => `- ${c.productType}: ${c.markupRatio.toFixed(2)}x markup, 
     webResearchResults: WebResearchResult[],
     correlatedInsights: CorrelatedInsight[]
   ): Promise<DailyDigestContent> {
+    // Load past action outcomes for feedback loop
+    const pastActionOutcomes = await this.loadPastActionOutcomes();
+
     const prompt = `Generate a daily business intelligence digest for cannabis dispensaries based on the provided data.
 
 DATA REVIEW:
@@ -2420,6 +2471,10 @@ ${webResearchResults.length > 0 ? webResearchResults.map(r => `Query: ${r.search
 
 CORRELATED INSIGHTS (${correlatedInsights.length}):
 ${correlatedInsights.map(i => `- ${i.correlation} (confidence: ${i.confidence})`).join('\n')}
+
+PAST ACTION OUTCOMES (feedback loop):
+${JSON.stringify(pastActionOutcomes, null, 2)}
+Consider which past recommendations were completed and their outcomes. For pending actions that haven't been addressed, re-recommend if still relevant. Learn from successful actions to improve future recommendations.
 
 Return a JSON object with this EXACT structure (all arrays must contain objects with the specified properties):
 
@@ -2620,6 +2675,63 @@ Return ONLY valid JSON, no markdown or explanation.`;
       avgOrderProfit: totalTickets > 0 ? (totalGrossIncome / totalTickets).toFixed(2) : '0.00',
       recordCount: salesRecords.length,
       dailyDetail,
+    };
+  }
+
+  /**
+   * Load 12 months of monthly-aggregated sales data for seasonal pattern detection.
+   * Returns ~24 rows (2 stores x 12 months) — minimal token impact (<1KB).
+   */
+  private async loadMonthlyAggregates(): Promise<Record<string, unknown>> {
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+
+    console.log(`[DataLoader:monthly] Querying monthly sales aggregates (12 months)...`);
+    const queryStart = Date.now();
+
+    const monthlyData = await prisma.$queryRaw<Array<{
+      month: string;
+      store_name: string;
+      total_net_sales: number;
+      total_gross_income: number;
+      avg_margin_pct: number;
+      total_tickets: number;
+      total_customers: number;
+      avg_order_value: number;
+    }>>`
+      SELECT
+        TO_CHAR(date, 'YYYY-MM') as month,
+        COALESCE(store_name, store_id) as store_name,
+        SUM(net_sales::numeric) as total_net_sales,
+        SUM(gross_income::numeric) as total_gross_income,
+        AVG(gross_margin_pct::numeric) as avg_margin_pct,
+        SUM(tickets_count) as total_tickets,
+        SUM(customers_count) as total_customers,
+        CASE WHEN SUM(tickets_count) > 0
+          THEN SUM(net_sales::numeric) / SUM(tickets_count)
+          ELSE 0 END as avg_order_value
+      FROM sales_records
+      WHERE date >= ${twelveMonthsAgo}
+      GROUP BY TO_CHAR(date, 'YYYY-MM'), COALESCE(store_name, store_id)
+      ORDER BY month DESC, store_name
+    `;
+
+    console.log(`[DataLoader:monthly] Query returned ${monthlyData.length} rows in ${Date.now() - queryStart}ms`);
+
+    return {
+      periodMonths: 12,
+      description: 'Monthly aggregated sales for seasonal pattern detection and year-over-year comparison',
+      monthlyAggregates: monthlyData.map(r => ({
+        month: r.month,
+        store: r.store_name,
+        netSales: Number(r.total_net_sales).toFixed(2),
+        grossIncome: Number(r.total_gross_income).toFixed(2),
+        avgMarginPct: Number(r.avg_margin_pct).toFixed(1),
+        tickets: Number(r.total_tickets),
+        customers: Number(r.total_customers),
+        avgOrderValue: Number(r.avg_order_value).toFixed(2),
+      })),
+      recordCount: monthlyData.length,
     };
   }
 
@@ -3905,6 +4017,114 @@ Return JSON: { "findings": [{ "title": "", "url": "", "snippet": "", "relevance"
     }
 
     return await saveInsights(insightsToSave);
+  }
+
+  /**
+   * Extracts action items from the daily digest and saves them to the ActionItem table.
+   * This enables tracking which recommendations were implemented and their outcomes.
+   */
+  private async extractAndSaveActions(
+    digest: DailyDigestContent,
+    jobId: string,
+    digestId: string
+  ): Promise<number> {
+    const actions: Array<{
+      digestId: string;
+      jobId: string;
+      action: string;
+      category: string;
+      timeframe?: string;
+      impact?: string;
+      effort?: string;
+      actionType: string;
+    }> = [];
+
+    // Extract priority actions
+    for (const pa of digest.priorityActions) {
+      actions.push({
+        digestId,
+        jobId,
+        action: pa.action,
+        category: pa.category || 'operations',
+        timeframe: pa.timeframe,
+        impact: pa.impact,
+        actionType: 'priority',
+      });
+    }
+
+    // Extract quick wins
+    for (const qw of digest.quickWins) {
+      actions.push({
+        digestId,
+        jobId,
+        action: qw.action,
+        category: 'operations',
+        effort: qw.effort,
+        impact: qw.impact,
+        actionType: 'quick_win',
+      });
+    }
+
+    if (actions.length === 0) return 0;
+
+    try {
+      const result = await prisma.actionItem.createMany({ data: actions });
+      return result.count;
+    } catch (err) {
+      console.warn(`[Learning] Failed to save action items:`, err);
+      return 0;
+    }
+  }
+
+  /**
+   * Loads past action outcomes to provide feedback context for Phase 5.
+   * Returns completed/dismissed actions (last 30 days) and pending actions.
+   */
+  private async loadPastActionOutcomes(): Promise<Record<string, unknown>> {
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const recentActions = await prisma.actionItem.findMany({
+        where: {
+          status: { in: ['completed', 'dismissed'] },
+          completedAt: { gte: thirtyDaysAgo },
+        },
+        orderBy: { completedAt: 'desc' },
+        take: 20,
+      });
+
+      const pendingActions = await prisma.actionItem.findMany({
+        where: { status: 'pending' },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+
+      return {
+        recentOutcomes: recentActions.map(a => ({
+          action: a.action,
+          category: a.category,
+          type: a.actionType,
+          status: a.status,
+          outcome: a.outcome,
+          outcomeNotes: a.outcomeNotes,
+          completedAt: a.completedAt?.toISOString().split('T')[0],
+        })),
+        pendingActions: pendingActions.map(a => ({
+          action: a.action,
+          category: a.category,
+          type: a.actionType,
+          createdAt: a.createdAt.toISOString().split('T')[0],
+        })),
+        summary: {
+          recentCompleted: recentActions.filter(a => a.status === 'completed').length,
+          recentDismissed: recentActions.filter(a => a.status === 'dismissed').length,
+          pendingCount: pendingActions.length,
+        },
+      };
+    } catch (err) {
+      console.warn('[Learning] Failed to load past action outcomes:', err);
+      return { recentOutcomes: [], pendingActions: [], summary: {} };
+    }
   }
 
   /**
