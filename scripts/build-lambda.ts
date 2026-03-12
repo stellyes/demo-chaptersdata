@@ -103,6 +103,14 @@ async function main() {
     }
   }
 
+  // Copy Prisma client runtime directory (required for library.js, etc.)
+  const runtimeSrc = join(prismaPackageSrc, 'runtime');
+  const runtimeDest = join(prismaPackageDest, 'runtime');
+  if (existsSync(runtimeSrc)) {
+    cpSync(runtimeSrc, runtimeDest, { recursive: true });
+    console.log('  Copied: @prisma/client/runtime/');
+  }
+
   // Copy the Prisma schema
   const schemaSrc = join(ROOT, 'prisma', 'schema.prisma');
   if (existsSync(schemaSrc)) {
