@@ -1,10 +1,13 @@
 // ============================================
 // CUSTOMER DATA API ROUTE
-// Loads customer data from Aurora PostgreSQL (paginated)
+// Loads customer data from Aurora PostgreSQL
+// Uses true server-side pagination (skip/take) to avoid
+// loading 830k+ records into memory on cold starts.
 // ============================================
 
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { gzipSync } from 'zlib';
 import { getGzipResponseHeaders, shouldUseGzip } from '@/lib/cors';
 
@@ -24,32 +27,9 @@ interface CustomerRecord {
   recency_segment: string;
 }
 
-// Cache - keyed by date range for filtered queries
-interface CacheEntry {
-  data: CustomerRecord[];
-  timestamp: number;
-  hash: string;
-}
-
-const customerCacheByKey = new Map<string, CacheEntry>();
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-
-// Compute cache hash based on count for the given filter
-async function computeCustomerHash(startDate?: string, endDate?: string): Promise<string> {
-  if (startDate && endDate) {
-    const count = await prisma.customer.count({
-      where: {
-        lastVisitDate: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
-        },
-      },
-    });
-    return `customers:${startDate}:${endDate}:${count}`;
-  }
-  const count = await prisma.customer.count();
-  return `customers:all:${count}`;
-}
+// Lightweight count cache to avoid repeated COUNT queries within a short window
+let countCache: { key: string; count: number; timestamp: number } | null = null;
+const COUNT_CACHE_TTL = 60 * 1000; // 1 minute
 
 // Transform Prisma customer to frontend format
 function transformCustomer(c: {
@@ -84,31 +64,37 @@ function transformCustomer(c: {
   };
 }
 
-async function loadCustomerData(startDate?: string, endDate?: string): Promise<CustomerRecord[]> {
-  const filterDesc = startDate && endDate ? `with last visit between ${startDate} and ${endDate}` : 'all';
-  console.log(`Loading customer data from Aurora PostgreSQL (${filterDesc})...`);
-  const startTime = Date.now();
+// Build Prisma where clause from query parameters
+function buildWhereClause(startDate?: string, endDate?: string, segment?: string): Prisma.CustomerWhereInput {
+  const where: Prisma.CustomerWhereInput = {};
 
-  // Build where clause for date filtering
-  const whereClause = startDate && endDate ? {
-    lastVisitDate: {
+  if (startDate && endDate) {
+    where.lastVisitDate = {
       gte: new Date(startDate),
       lte: new Date(endDate),
-    },
-  } : {};
+    };
+  }
 
-  const customers = await prisma.customer.findMany({
-    where: whereClause,
-    orderBy: { lifetimeNetSales: 'desc' },
-  });
+  if (segment) {
+    where.OR = [
+      { customerSegment: segment },
+      { recencySegment: segment },
+    ];
+  }
 
-  // Transform to frontend format
-  const records: CustomerRecord[] = customers.map(transformCustomer);
+  return where;
+}
 
-  const duration = Date.now() - startTime;
-  console.log(`Aurora customer data load complete in ${duration}ms: ${records.length} customers`);
+// Get total count with lightweight caching
+async function getFilteredCount(where: Prisma.CustomerWhereInput): Promise<number> {
+  const cacheKey = JSON.stringify(where);
+  if (countCache && countCache.key === cacheKey && Date.now() - countCache.timestamp < COUNT_CACHE_TTL) {
+    return countCache.count;
+  }
 
-  return records;
+  const count = await prisma.customer.count({ where });
+  countCache = { key: cacheKey, count, timestamp: Date.now() };
+  return count;
 }
 
 // POST - Save customer data to database
@@ -147,8 +133,8 @@ export async function POST(request: NextRequest) {
       skipDuplicates: true,
     });
 
-    // Invalidate cache
-    customerCacheByKey.clear();
+    // Invalidate count cache
+    countCache = null;
 
     return Response.json({
       success: true,
@@ -172,45 +158,34 @@ export async function GET(request: NextRequest) {
     // Get pagination and filter params
     const url = new URL(request.url);
     const page = parseInt(url.searchParams.get('page') || '1');
-    const pageSize = parseInt(url.searchParams.get('pageSize') || '5000');
-    const segment = url.searchParams.get('segment'); // Optional segment filter
-    const startDate = url.searchParams.get('startDate'); // Date range filter (YYYY-MM-DD)
-    const endDate = url.searchParams.get('endDate'); // Date range filter (YYYY-MM-DD)
+    const pageSize = Math.min(parseInt(url.searchParams.get('pageSize') || '5000'), 50000); // Cap at 50k
+    const segment = url.searchParams.get('segment') || undefined;
+    const startDate = url.searchParams.get('startDate') || undefined;
+    const endDate = url.searchParams.get('endDate') || undefined;
 
-    // Create cache key based on date filter
-    const cacheKey = startDate && endDate ? `${startDate}:${endDate}` : 'all';
+    const startTime = Date.now();
 
-    // Check cache for this specific query
-    const currentHash = await computeCustomerHash(startDate || undefined, endDate || undefined);
-    let cacheEntry = customerCacheByKey.get(cacheKey);
+    // Build where clause with all filters pushed to the database
+    const where = buildWhereClause(startDate, endDate, segment);
 
-    if (
-      !cacheEntry ||
-      cacheEntry.hash !== currentHash ||
-      Date.now() - cacheEntry.timestamp > CACHE_TTL
-    ) {
-      const data = await loadCustomerData(startDate || undefined, endDate || undefined);
-      cacheEntry = { data, timestamp: Date.now(), hash: currentHash };
-      customerCacheByKey.set(cacheKey, cacheEntry);
+    // Run count and paginated query in parallel
+    // Both are lightweight: COUNT uses index, findMany uses LIMIT/OFFSET
+    const [totalCount, customers] = await Promise.all([
+      getFilteredCount(where),
+      prisma.customer.findMany({
+        where,
+        orderBy: { lifetimeNetSales: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
-      // Limit cache size - keep only last 5 date range queries
-      if (customerCacheByKey.size > 5) {
-        const oldestKey = customerCacheByKey.keys().next().value;
-        if (oldestKey) customerCacheByKey.delete(oldestKey);
-      }
-    }
+    // Transform only the page we fetched (not 830k records)
+    const paginatedData = customers.map(transformCustomer);
 
-    let filteredData = cacheEntry.data;
-
-    // Apply segment filter if provided (post-cache filter)
-    if (segment) {
-      filteredData = filteredData.filter(c => c.customer_segment === segment || c.recency_segment === segment);
-    }
-
-    const totalCount = filteredData.length;
     const totalPages = Math.ceil(totalCount / pageSize);
-    const startIndex = (page - 1) * pageSize;
-    const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
+    const duration = Date.now() - startTime;
+    console.log(`Customer page ${page} loaded in ${duration}ms: ${paginatedData.length}/${totalCount} records`);
 
     const responseData = {
       success: true,
@@ -222,7 +197,7 @@ export async function GET(request: NextRequest) {
         totalPages,
         hasMore: page < totalPages,
       },
-      cached: cacheEntry.hash === currentHash,
+      cached: false,
       source: 'aurora',
       dateFilter: startDate && endDate ? { startDate, endDate } : null,
     };
