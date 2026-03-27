@@ -231,7 +231,7 @@ export const handler = async (event: IngestEvent = {}) => {
           for (let i = 0; i < records.length; i += batchSize) {
             const batch = records.slice(i, i + batchSize);
 
-            for (const row of batch) {
+            for (const row of batch as Record<string, string>[]) {
               const dateOpen = parseDate(row['Date Open']);
               const ticketId = (row['Ticket ID'] || '').replace(/"/g, '').trim();
               const ticketLineId = (row['Ticket Line ID'] || '').replace(/"/g, '').trim();
