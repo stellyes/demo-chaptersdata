@@ -10,7 +10,7 @@ import { FileUpload } from '@/components/ui/FileUpload';
 import { DataTable } from '@/components/ui/DataTable';
 import { useAppStore } from '@/store/app-store';
 import { parseCSV, cleanSalesData, cleanBrandData, cleanProductData, cleanCustomerData } from '@/lib/services/data-processor';
-import { STORES, SEO_SITES, RESEARCH_CATEGORIES } from '@/lib/config';
+import { STORES, SEO_SITES, RESEARCH_CATEGORIES, getDefaultStoreId } from '@/lib/config';
 import { StoreId } from '@/types';
 import {
   Check,
@@ -78,7 +78,7 @@ function SalesDataTab() {
     addNotification,
   } = useAppStore();
 
-  const [uploadStore, setUploadStore] = useState<StoreId>('grass_roots');
+  const [uploadStore, setUploadStore] = useState<StoreId>(getDefaultStoreId());
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -551,7 +551,7 @@ function InvoiceDataTab() {
 // ============================================
 function CustomerDataTab() {
   const { setCustomerData, customerData, dataStatus, addNotification } = useAppStore();
-  const [uploadStore, setUploadStore] = useState<StoreId>('grass_roots');
+  const [uploadStore, setUploadStore] = useState<StoreId>(getDefaultStoreId());
 
   const handleCustomerUpload = async (file: File) => {
     const text = await file.text();
@@ -968,7 +968,7 @@ function BudtenderPerformanceTab() {
             // Parse and append to existing data
             const newRecords = rawData.map((row) => ({
               store: String(row.store || row.Store || ''),
-              store_id: (row.store_id || row.StoreId || 'grass_roots') as StoreId,
+              store_id: (row.store_id || row.StoreId || getDefaultStoreId()) as StoreId,
               employee_name: String(row.employee_name || row.EmployeeName || row.Employee || ''),
               date: String(row.date || row.Date || ''),
               tickets_count: Number(row.tickets_count || row.TicketsCount || row.Tickets || 0),

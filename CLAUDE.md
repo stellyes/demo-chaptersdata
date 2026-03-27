@@ -1,6 +1,8 @@
-# CLAUDE.md - Chapters Data Analytics Platform
+# CLAUDE.md - Chapters Data Demo App (demo.chaptersdata.com)
 
-This file provides context for Claude Code when working on this codebase.
+This is the **demo** deployment of Chapters Data. It uses generalized store names
+(Greenleaf Market, Emerald Collective) and seeded dummy data for client demonstrations.
+Deployed at demo.chaptersdata.com via AWS Amplify.
 
 ## Project Overview
 
@@ -323,4 +325,4 @@ const filteredSales = useAppStore(state => state.getFilteredSales())
 - **Customers:** 830k+ records
 - **Invoice Line Items:** 500k+
 - **Daily Sales Records:** 2k+
-- **Stores:** 2 (Grass Roots SF, Barbary Coast SF) + combined view
+- **Stores:** 2 (Greenleaf Market, Emerald Collective) + combined view

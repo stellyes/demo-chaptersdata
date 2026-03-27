@@ -56,7 +56,7 @@ resource "aws_iam_role_policy" "lambda_worker_policy" {
           aws_sqs_queue.custom_queries.arn
         ]
       },
-      # S3 permissions
+      # S3 permissions (retail-data-bcgr + treez-data-export buckets)
       {
         Effect = "Allow"
         Action = [
@@ -66,7 +66,9 @@ resource "aws_iam_role_policy" "lambda_worker_policy" {
         ]
         Resource = [
           "arn:aws:s3:::${var.s3_bucket_name}",
-          "arn:aws:s3:::${var.s3_bucket_name}/*"
+          "arn:aws:s3:::${var.s3_bucket_name}/*",
+          "arn:aws:s3:::treez-data-export",
+          "arn:aws:s3:::treez-data-export/*"
         ]
       },
       # Secrets Manager for database credentials

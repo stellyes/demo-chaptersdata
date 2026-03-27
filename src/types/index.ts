@@ -2,8 +2,8 @@
 // TYPE DEFINITIONS
 // ============================================
 
-// Store types
-export type StoreId = 'grass_roots' | 'barbary_coast' | 'combined';
+// Store types - dynamic, driven by config.ts STORES
+export type StoreId = string;
 
 export interface StoreConfig {
   id: StoreId;

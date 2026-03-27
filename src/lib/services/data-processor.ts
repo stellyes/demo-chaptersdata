@@ -18,6 +18,7 @@ import {
   STORE_NAME_TO_ID,
   CUSTOMER_SEGMENTS,
   RECENCY_SEGMENTS,
+  getIndividualStoreIds,
 } from '@/lib/config';
 
 // ============================================
@@ -243,8 +244,8 @@ export function cleanSalesData(
   return rawData
     .map((row) => {
       const storeName = row.store || row.Store || '';
-      // Use override if provided, otherwise try to detect from CSV, fallback to grass_roots
-      const storeId = overrideStoreId || STORE_NAME_TO_ID[storeName] || 'grass_roots';
+      // Use override if provided, otherwise try to detect from CSV, fallback to first configured store
+      const storeId = overrideStoreId || STORE_NAME_TO_ID[storeName] || getIndividualStoreIds()[0] || 'combined';
 
       const record: SalesRecord = {
         date: formatDate(row.date || row.Date || ''),
@@ -463,11 +464,10 @@ export function calculateSalesSummary(salesData: SalesRecord[]): {
   avgMargin: number;
   byStore: Record<StoreId, { revenue: number; transactions: number; margin: number }>;
 } {
-  const byStore: Record<StoreId, { revenue: number; transactions: number; margin: number; aovSum: number; count: number }> = {
-    grass_roots: { revenue: 0, transactions: 0, margin: 0, aovSum: 0, count: 0 },
-    barbary_coast: { revenue: 0, transactions: 0, margin: 0, aovSum: 0, count: 0 },
-    combined: { revenue: 0, transactions: 0, margin: 0, aovSum: 0, count: 0 },
-  };
+  const byStore: Record<StoreId, { revenue: number; transactions: number; margin: number; aovSum: number; count: number }> = {};
+  for (const sid of [...getIndividualStoreIds(), 'combined']) {
+    byStore[sid] = { revenue: 0, transactions: 0, margin: 0, aovSum: 0, count: 0 };
+  }
 
   let totalRevenue = 0;
   let totalTransactions = 0;
@@ -479,59 +479,37 @@ export function calculateSalesSummary(salesData: SalesRecord[]): {
     totalCustomers += record.customers_count;
 
     const storeId = record.store_id;
-    if (byStore[storeId]) {
-      byStore[storeId].revenue += record.net_sales;
-      byStore[storeId].transactions += record.tickets_count;
-      byStore[storeId].margin += record.gross_margin_pct;
-      byStore[storeId].aovSum += record.avg_order_value;
-      byStore[storeId].count++;
+    if (!byStore[storeId]) {
+      byStore[storeId] = { revenue: 0, transactions: 0, margin: 0, aovSum: 0, count: 0 };
+    }
+    byStore[storeId].revenue += record.net_sales;
+    byStore[storeId].transactions += record.tickets_count;
+    byStore[storeId].margin += record.gross_margin_pct;
+    byStore[storeId].aovSum += record.avg_order_value;
+    byStore[storeId].count++;
+  }
+
+  const activeStores: { id: StoreId; aov: number; margin: number }[] = [];
+  const byStoreResult: Record<StoreId, { revenue: number; transactions: number; margin: number }> = {};
+
+  for (const sid of getIndividualStoreIds()) {
+    const store = byStore[sid] || { revenue: 0, transactions: 0, margin: 0, aovSum: 0, count: 0 };
+    const marginDecimal = store.count > 0 ? store.margin / store.count : 0;
+    const margin = marginDecimal <= 1 ? marginDecimal * 100 : marginDecimal;
+    const aov = store.count > 0 ? store.aovSum / store.count : 0;
+
+    byStoreResult[sid] = { revenue: store.revenue, transactions: store.transactions, margin };
+
+    if (store.count > 0) {
+      activeStores.push({ id: sid, aov, margin });
     }
   }
 
-  // Calculate per-store averages first (matching Streamlit's calculate_store_metrics)
-  // Margin: store_df['Gross Margin %'].mean() * 100 (source data is decimal like 0.708)
-  // AOV: store_df['Avg Order Value'].mean()
-  const grMarginDecimal = byStore.grass_roots.count > 0 ? byStore.grass_roots.margin / byStore.grass_roots.count : 0;
-  const bcMarginDecimal = byStore.barbary_coast.count > 0 ? byStore.barbary_coast.margin / byStore.barbary_coast.count : 0;
-  const grMargin = grMarginDecimal <= 1 ? grMarginDecimal * 100 : grMarginDecimal;
-  const bcMargin = bcMarginDecimal <= 1 ? bcMarginDecimal * 100 : bcMarginDecimal;
-
-  const grAvgOrderValue = byStore.grass_roots.count > 0 ? byStore.grass_roots.aovSum / byStore.grass_roots.count : 0;
-  const bcAvgOrderValue = byStore.barbary_coast.count > 0 ? byStore.barbary_coast.aovSum / byStore.barbary_coast.count : 0;
-
-  // Count active stores (stores with data)
-  const activeStores: { aov: number; margin: number }[] = [];
-  if (byStore.grass_roots.count > 0) {
-    activeStores.push({ aov: grAvgOrderValue, margin: grMargin });
-  }
-  if (byStore.barbary_coast.count > 0) {
-    activeStores.push({ aov: bcAvgOrderValue, margin: bcMargin });
-  }
-
-  // Calculate combined averages by averaging per-store metrics (matching Streamlit exactly)
-  // avg_aov = sum(m['avg_order_value'] for m in metrics.values()) / len(metrics)
-  // avg_margin = sum(m['avg_margin'] for m in metrics.values()) / len(metrics)
   const numStores = activeStores.length || 1;
   const avgOrderValue = activeStores.reduce((sum, s) => sum + s.aov, 0) / numStores;
   const avgMargin = activeStores.reduce((sum, s) => sum + s.margin, 0) / numStores;
 
-  const byStoreResult: Record<StoreId, { revenue: number; transactions: number; margin: number }> = {
-    grass_roots: {
-      revenue: byStore.grass_roots.revenue,
-      transactions: byStore.grass_roots.transactions,
-      margin: grMargin,
-    },
-    barbary_coast: {
-      revenue: byStore.barbary_coast.revenue,
-      transactions: byStore.barbary_coast.transactions,
-      margin: bcMargin,
-    },
-    combined: {
-      revenue: totalRevenue,
-      transactions: totalTransactions,
-      margin: avgMargin,
-    },
-  };
+  byStoreResult['combined'] = { revenue: totalRevenue, transactions: totalTransactions, margin: avgMargin };
 
   return {
     totalRevenue,

@@ -11,7 +11,10 @@ import { SalesChart, TransactionChart } from '@/components/charts/SalesChart';
 import { CategoryPieChart } from '@/components/charts/PieChart';
 import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat, useFilteredBudtenderData, useFilteredCustomerData } from '@/store/app-store';
 import { calculateSalesSummary, calculateCustomerSummary } from '@/lib/services/data-processor';
+import { STORES, getIndividualStoreIds, getStoreColor } from '@/lib/config';
 import { format } from 'date-fns';
+
+const storeIds = getIndividualStoreIds();
 
 export const DashboardPage = memo(function DashboardPage() {
   const { dataStatus } = useAppStore();
@@ -64,50 +67,38 @@ export const DashboardPage = memo(function DashboardPage() {
 
   // Prepare sales chart data
   const salesChartData = useMemo(() => {
-    const byDate: Record<string, { date: string; grass_roots: number; barbary_coast: number }> = {};
-
+    const byDate: Record<string, Record<string, string | number>> = {};
     for (const record of salesData) {
       const dateKey = record.date;
       if (!byDate[dateKey]) {
-        byDate[dateKey] = { date: dateKey, grass_roots: 0, barbary_coast: 0 };
+        byDate[dateKey] = { date: dateKey };
+        for (const sid of storeIds) byDate[dateKey][sid] = 0;
       }
-      if (record.store_id === 'grass_roots') {
-        byDate[dateKey].grass_roots += record.net_sales;
-      } else if (record.store_id === 'barbary_coast') {
-        byDate[dateKey].barbary_coast += record.net_sales;
+      if (storeIds.includes(record.store_id)) {
+        byDate[dateKey][record.store_id] = (byDate[dateKey][record.store_id] as number) + record.net_sales;
       }
     }
-
     return Object.values(byDate)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map((d) => ({
-        ...d,
-        date: format(new Date(d.date), 'MMM d'),
-      }));
+      .sort((a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime())
+      .map((d) => ({ ...d, date: format(new Date(d.date as string), 'MMM d') }));
   }, [salesData]);
 
   // Prepare transaction count chart data
   const transactionChartData = useMemo(() => {
-    const byDate: Record<string, { date: string; grass_roots: number; barbary_coast: number }> = {};
-
+    const byDate: Record<string, Record<string, string | number>> = {};
     for (const record of salesData) {
       const dateKey = record.date;
       if (!byDate[dateKey]) {
-        byDate[dateKey] = { date: dateKey, grass_roots: 0, barbary_coast: 0 };
+        byDate[dateKey] = { date: dateKey };
+        for (const sid of storeIds) byDate[dateKey][sid] = 0;
       }
-      if (record.store_id === 'grass_roots') {
-        byDate[dateKey].grass_roots += record.tickets_count;
-      } else if (record.store_id === 'barbary_coast') {
-        byDate[dateKey].barbary_coast += record.tickets_count;
+      if (storeIds.includes(record.store_id)) {
+        byDate[dateKey][record.store_id] = (byDate[dateKey][record.store_id] as number) + record.tickets_count;
       }
     }
-
     return Object.values(byDate)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map((d) => ({
-        ...d,
-        date: format(new Date(d.date), 'MMM d'),
-      }));
+      .sort((a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime())
+      .map((d) => ({ ...d, date: format(new Date(d.date as string), 'MMM d') }));
   }, [salesData]);
 
   // Prepare top brands data for pie chart (full brand names)
@@ -200,14 +191,12 @@ export const DashboardPage = memo(function DashboardPage() {
               <SectionTitle>Sales Trend</SectionTitle>
             </div>
             <div className="hidden sm:flex items-center gap-4 md:gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-[#1e391f]"></div>
-                <span className="text-[var(--muted)]">Grass Roots</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-[#3d6b3e]"></div>
-                <span className="text-[var(--muted)]">Barbary Coast</span>
-              </div>
+              {storeIds.map((sid) => (
+                <div key={sid} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: getStoreColor(sid) }}></div>
+                  <span className="text-[var(--muted)]">{STORES[sid]?.name ?? sid}</span>
+                </div>
+              ))}
             </div>
           </div>
           {salesChartData.length > 0 ? (
@@ -243,14 +232,12 @@ export const DashboardPage = memo(function DashboardPage() {
               <SectionTitle>Transaction Count</SectionTitle>
             </div>
             <div className="hidden sm:flex items-center gap-4 md:gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-[#1e391f]"></div>
-                <span className="text-[var(--muted)]">Grass Roots</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-[#3d6b3e]"></div>
-                <span className="text-[var(--muted)]">Barbary Coast</span>
-              </div>
+              {storeIds.map((sid) => (
+                <div key={sid} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: getStoreColor(sid) }}></div>
+                  <span className="text-[var(--muted)]">{STORES[sid]?.name ?? sid}</span>
+                </div>
+              ))}
             </div>
           </div>
           {transactionChartData.length > 0 ? (
@@ -278,55 +265,35 @@ export const DashboardPage = memo(function DashboardPage() {
 
       {/* Store Comparison */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <Card>
-          <SectionLabel>Store Performance</SectionLabel>
-          <SectionTitle>Grass Roots SF</SectionTitle>
-          <div className="grid grid-cols-3 gap-2 md:gap-4">
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Revenue</p>
-              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
-                {formatCurrency(summary.byStore.grass_roots.revenue)}
-              </p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Transactions</p>
-              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
-                {summary.byStore.grass_roots.transactions.toLocaleString()}
-              </p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
-              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
-                {summary.byStore.grass_roots.margin.toFixed(1)}%
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <SectionLabel>Store Performance</SectionLabel>
-          <SectionTitle>Barbary Coast SF</SectionTitle>
-          <div className="grid grid-cols-3 gap-2 md:gap-4">
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Revenue</p>
-              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
-                {formatCurrency(summary.byStore.barbary_coast.revenue)}
-              </p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Transactions</p>
-              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
-                {summary.byStore.barbary_coast.transactions.toLocaleString()}
-              </p>
-            </div>
-            <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-              <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
-              <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
-                {summary.byStore.barbary_coast.margin.toFixed(1)}%
-              </p>
-            </div>
-          </div>
-        </Card>
+        {storeIds.map((sid) => {
+          const storeData = summary.byStore[sid] || { revenue: 0, transactions: 0, margin: 0 };
+          return (
+            <Card key={sid}>
+              <SectionLabel>Store Performance</SectionLabel>
+              <SectionTitle>{STORES[sid]?.displayName ?? sid}</SectionTitle>
+              <div className="grid grid-cols-3 gap-2 md:gap-4">
+                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                  <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Revenue</p>
+                  <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
+                    {formatCurrency(storeData.revenue)}
+                  </p>
+                </div>
+                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                  <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Transactions</p>
+                  <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
+                    {storeData.transactions.toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
+                  <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
+                  <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
+                    {storeData.margin.toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Budtender Performance Section */}

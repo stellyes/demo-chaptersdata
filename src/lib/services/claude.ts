@@ -3,7 +3,7 @@
 // ============================================
 
 import Anthropic from '@anthropic-ai/sdk';
-import { CLAUDE_CONFIG } from '@/lib/config';
+import { CLAUDE_CONFIG, STORES, getIndividualStoreIds } from '@/lib/config';
 
 // Response type that includes token usage
 export interface ClaudeResponseWithUsage {
@@ -1212,7 +1212,8 @@ export async function customQuery(
   dataContext: string,
   model: string = CLAUDE_CONFIG.defaultModel
 ): Promise<string> {
-  const systemPrompt = `You are a cannabis retail business intelligence analyst for two San Francisco dispensaries: Barbary Coast and Grass Roots.
+  const storeNames = getIndividualStoreIds().map(sid => STORES[sid]?.name ?? sid).join(' and ');
+  const systemPrompt = `You are a cannabis retail business intelligence analyst for ${storeNames}.
 
 You have access to the following business data which has been summarized for efficiency. Use this data to answer the user's questions with specific, actionable insights.
 

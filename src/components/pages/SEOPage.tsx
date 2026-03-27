@@ -20,8 +20,8 @@ export function SEOPage() {
 
     // Map site IDs to display names for matching
     const siteNameMap: Record<string, string> = {
-      'barbarycoastsf': 'Barbary Coast',
-      'grassrootssf': 'Grass Roots',
+      'greenleaf': 'Greenleaf Market',
+      'emerald': 'Emerald Collective',
     };
 
     const displayName = siteNameMap[selectedSite];

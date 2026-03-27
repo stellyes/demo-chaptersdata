@@ -96,14 +96,14 @@ async function loadSEOData(): Promise<SEOSummary[]> {
     // This will be replaced when Phase 2 (SEO Audit Feature) is implemented
     return [
       {
-        site: 'Barbary Coast',
+        site: 'Greenleaf Market',
         score: 0,
         priorities: ['SEO audit feature coming soon'],
         quickWins: [],
         lastUpdated: new Date().toISOString(),
       },
       {
-        site: 'Grass Roots',
+        site: 'Emerald Collective',
         score: 0,
         priorities: ['SEO audit feature coming soon'],
         quickWins: [],

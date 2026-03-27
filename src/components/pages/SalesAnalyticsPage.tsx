@@ -15,6 +15,9 @@ import { format, subMonths } from 'date-fns';
 import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Percent, Calendar, User, Search, BarChart3, AlertCircle, Package, FileText, Tag } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { calculateCustomerSummary } from '@/lib/services/data-processor';
+import { STORES, getIndividualStoreIds, getStoreColor } from '@/lib/config';
+
+const storeIds = getIndividualStoreIds();
 
 // ============================================
 // SALES TRENDS TAB
@@ -23,17 +26,18 @@ function SalesTrendsTab() {
   const salesData = useFilteredSalesData();
 
   const salesChartData = useMemo(() => {
-    const byDate: Record<string, { date: string; grass_roots: number; barbary_coast: number }> = {};
+    const byDate: Record<string, Record<string, number> & { date: string }> = {};
 
     for (const record of salesData) {
       const dateKey = record.date;
       if (!byDate[dateKey]) {
-        byDate[dateKey] = { date: dateKey, grass_roots: 0, barbary_coast: 0 };
+        const entry: Record<string, number> & { date: string } = { date: dateKey } as any;
+        for (const sid of storeIds) entry[sid] = 0;
+        byDate[dateKey] = entry;
       }
-      if (record.store_id === 'grass_roots') {
-        byDate[dateKey].grass_roots += record.net_sales;
-      } else if (record.store_id === 'barbary_coast') {
-        byDate[dateKey].barbary_coast += record.net_sales;
+      const sid = record.store_id;
+      if (byDate[dateKey][sid] !== undefined) {
+        byDate[dateKey][sid] += record.net_sales;
       }
     }
 
@@ -46,17 +50,18 @@ function SalesTrendsTab() {
   }, [salesData]);
 
   const customerChartData = useMemo(() => {
-    const byDate: Record<string, { date: string; grass_roots: number; barbary_coast: number }> = {};
+    const byDate: Record<string, Record<string, number> & { date: string }> = {};
 
     for (const record of salesData) {
       const dateKey = record.date;
       if (!byDate[dateKey]) {
-        byDate[dateKey] = { date: dateKey, grass_roots: 0, barbary_coast: 0 };
+        const entry: Record<string, number> & { date: string } = { date: dateKey } as any;
+        for (const sid of storeIds) entry[sid] = 0;
+        byDate[dateKey] = entry;
       }
-      if (record.store_id === 'grass_roots') {
-        byDate[dateKey].grass_roots += record.customers_count;
-      } else if (record.store_id === 'barbary_coast') {
-        byDate[dateKey].barbary_coast += record.customers_count;
+      const sid = record.store_id;
+      if (byDate[dateKey][sid] !== undefined) {
+        byDate[dateKey][sid] += record.customers_count;
       }
     }
 
@@ -69,29 +74,35 @@ function SalesTrendsTab() {
   }, [salesData]);
 
   const marginChartData = useMemo(() => {
-    const byDate: Record<string, { date: string; grass_roots: number; barbary_coast: number; count_gr: number; count_bc: number }> = {};
+    const byDate: Record<string, Record<string, number> & { date: string }> = {};
+    const counts: Record<string, Record<string, number>> = {};
 
     for (const record of salesData) {
       const dateKey = record.date;
       if (!byDate[dateKey]) {
-        byDate[dateKey] = { date: dateKey, grass_roots: 0, barbary_coast: 0, count_gr: 0, count_bc: 0 };
+        const entry: Record<string, number> & { date: string } = { date: dateKey } as any;
+        for (const sid of storeIds) entry[sid] = 0;
+        byDate[dateKey] = entry;
+        counts[dateKey] = {};
+        for (const sid of storeIds) counts[dateKey][sid] = 0;
       }
-      if (record.store_id === 'grass_roots') {
-        byDate[dateKey].grass_roots += record.gross_margin_pct;
-        byDate[dateKey].count_gr++;
-      } else if (record.store_id === 'barbary_coast') {
-        byDate[dateKey].barbary_coast += record.gross_margin_pct;
-        byDate[dateKey].count_bc++;
+      const sid = record.store_id;
+      if (byDate[dateKey][sid] !== undefined) {
+        byDate[dateKey][sid] += record.gross_margin_pct;
+        counts[dateKey][sid]++;
       }
     }
 
     return Object.values(byDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map((d) => ({
-        date: format(new Date(d.date), 'MMM d'),
-        grass_roots: d.count_gr > 0 ? d.grass_roots / d.count_gr : 0,
-        barbary_coast: d.count_bc > 0 ? d.barbary_coast / d.count_bc : 0,
-      }));
+      .map((d) => {
+        const result: Record<string, any> = { date: format(new Date(d.date), 'MMM d') };
+        for (const sid of storeIds) {
+          const cnt = counts[d.date]?.[sid] || 0;
+          result[sid] = cnt > 0 ? d[sid] / cnt : 0;
+        }
+        return result;
+      });
   }, [salesData]);
 
   return (
@@ -433,7 +444,7 @@ function ProductCategoriesTab() {
 // ============================================
 function DailyBreakdownTab() {
   const salesData = useFilteredSalesData();
-  const [storeFilter, setStoreFilter] = useState<'all' | 'grass_roots' | 'barbary_coast'>('all');
+  const [storeFilter, setStoreFilter] = useState<string>('all');
 
   // Group by day of week
   const dayOfWeekData = useMemo(() => {
@@ -576,12 +587,13 @@ function DailyBreakdownTab() {
               <label className="text-sm text-[var(--muted)]">Store:</label>
               <select
                 value={storeFilter}
-                onChange={(e) => setStoreFilter(e.target.value as 'all' | 'grass_roots' | 'barbary_coast')}
+                onChange={(e) => setStoreFilter(e.target.value as string)}
                 className="px-3 py-2 border border-[var(--border)] rounded text-sm"
               >
                 <option value="all">All Stores</option>
-                <option value="grass_roots">Grass Roots</option>
-                <option value="barbary_coast">Barbary Coast</option>
+                {storeIds.map((sid) => (
+                  <option key={sid} value={sid}>{STORES[sid]?.name ?? sid}</option>
+                ))}
               </select>
             </div>
           </div>

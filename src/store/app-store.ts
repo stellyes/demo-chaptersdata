@@ -76,6 +76,7 @@ import {
   saveToCache,
   clearCache as clearCustomerCache,
 } from '@/lib/services/customer-cache';
+import { STORES } from '@/lib/config';
 
 // AI Recommendation type (kept here since it's store-specific)
 export interface AIRecommendation {
@@ -1242,11 +1243,12 @@ export const useFilteredCustomerData = () => {
       // For now, include all customers when combined, or filter by store name match
       if (selectedStore !== 'combined') {
         const storeNameLower = record.store_name.toLowerCase();
-        if (selectedStore === 'grass_roots' && !storeNameLower.includes('grass')) {
-          return false;
-        }
-        if (selectedStore === 'barbary_coast' && !storeNameLower.includes('barbary')) {
-          return false;
+        const storeConfig = STORES[selectedStore];
+        if (storeConfig) {
+          const nameWords = storeConfig.name.toLowerCase().split(/\s+/);
+          if (!nameWords.some(word => word.length > 2 && storeNameLower.includes(word))) {
+            return false;
+          }
         }
       }
       return true;

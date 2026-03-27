@@ -259,7 +259,7 @@ export function LoginPage() {
 
         <div className="bg-[var(--white)] rounded-lg p-8 shadow-[0_4px_30px_rgba(0,0,0,0.06)]">
           <h2 className="font-serif text-2xl font-medium text-[var(--ink)] mb-6 text-center">
-            BCSF, Inc
+            Retail Intelligence
           </h2>
 
           <form onSubmit={handleLogin} className="space-y-4">

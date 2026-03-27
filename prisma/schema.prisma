@@ -47,6 +47,7 @@ model Storefront {
   dailyProductSales DailyProductSale[]
   dataFlags         DataFlag[]
   invoices          Invoice[]
+  products          Product[]
   productRecords    ProductRecord[]
   salesLineItems    SalesLineItem[]
   salesRecords      SalesRecord[]
@@ -948,17 +949,25 @@ model DataFlag {
 model Product {
   id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   treezProductId    String?            @unique @map("treez_product_id")
+  storefrontId      String?            @map("storefront_id")
   brandId           String?            @map("brand_id")
+  originalBrandName String?            @map("original_brand_name")
   productName       String?            @map("product_name")
   productType       String?            @map("product_type")
   productSubtype    String?            @map("product_subtype")
   size              String?
+  unitSize          String?            @map("unit_size")
   classification    String?
   stateTrackingId   String?            @map("state_tracking_id")
+  thcContent        Decimal?           @map("thc_content") @db.Decimal(10, 2)
+  cbdContent        Decimal?           @map("cbd_content") @db.Decimal(10, 2)
+  isActive          Boolean?           @default(true) @map("is_active")
+  lastSyncedAt      DateTime?          @map("last_synced_at")
   dataSource        String?            @default("treez_sync") @map("data_source")
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   brand             CanonicalBrand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  storefront        Storefront?        @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
   dailyProductSales DailyProductSale[]
   salesLineItems    SalesLineItem[]
 

@@ -537,7 +537,7 @@ export async function seedDefaultRules(): Promise<void> {
       category: 'sales',
       name: 'store_comparison',
       description: 'How to compare store performance',
-      rule: 'Barbary Coast typically has 60% higher foot traffic than Grass Roots. Compare per-customer metrics, not totals.',
+      rule: 'When stores have different traffic volumes, compare per-customer metrics rather than totals for a fair comparison.',
       priority: 6,
     },
   ];

@@ -7,7 +7,7 @@ const allowedOrigins = [
   'http://localhost:3003',
   'https://chaptersdata.com',
   'https://www.chaptersdata.com',
-  // All subdomains of chaptersdata.com (e.g., bcsf.chaptersdata.com)
+  // All subdomains of chaptersdata.com (e.g., demo.chaptersdata.com)
   /^https:\/\/[a-z0-9-]+\.chaptersdata\.com$/,
   // Amplify preview URLs
   /^https:\/\/.*\.amplifyapp\.com$/,
