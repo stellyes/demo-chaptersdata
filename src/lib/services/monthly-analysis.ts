@@ -657,6 +657,82 @@ Return JSON:
     };
   }
 
+  async getReportByMonth(monthYear: string): Promise<{
+    report: MonthlyReportContent | null;
+    job: { id: string; status: string; monthYear: string; completedAt: Date | null } | null;
+  }> {
+    const job = await prisma.monthlyAnalysisJob.findFirst({
+      where: { monthYear, status: 'completed' },
+      orderBy: { completedAt: 'desc' },
+      include: { report: true },
+    });
+
+    if (!job || !job.report) {
+      return { report: null, job: null };
+    }
+
+    const r = job.report;
+    return {
+      report: {
+        executiveSummary: r.executiveSummary,
+        performanceGrade: r.performanceGrade,
+        monthOverMonthChange: r.monthOverMonthChange as Record<string, number>,
+        strengthsAnalysis: r.strengthsAnalysis as MonthlyReportContent['strengthsAnalysis'],
+        weaknessesAnalysis: r.weaknessesAnalysis as MonthlyReportContent['weaknessesAnalysis'],
+        opportunitiesAnalysis: r.opportunitiesAnalysis as MonthlyReportContent['opportunitiesAnalysis'],
+        threatsAnalysis: r.threatsAnalysis as MonthlyReportContent['threatsAnalysis'],
+        salesTrends: r.salesTrends as MonthlyReportContent['salesTrends'],
+        customerTrends: r.customerTrends as MonthlyReportContent['customerTrends'],
+        brandTrends: r.brandTrends as MonthlyReportContent['brandTrends'],
+        marketTrends: r.marketTrends as MonthlyReportContent['marketTrends'],
+        strategicPriorities: r.strategicPriorities as MonthlyReportContent['strategicPriorities'],
+        quarterlyGoals: r.quarterlyGoals as MonthlyReportContent['quarterlyGoals'],
+        resourceAllocations: r.resourceAllocations as MonthlyReportContent['resourceAllocations'],
+        riskMitigations: r.riskMitigations as MonthlyReportContent['riskMitigations'],
+        competitiveLandscape: r.competitiveLandscape as Record<string, unknown>,
+        marketPositioning: r.marketPositioning as Record<string, unknown>,
+        regulatoryOutlook: r.regulatoryOutlook as Record<string, unknown>,
+        revenueProjections: r.revenueProjections as MonthlyReportContent['revenueProjections'],
+        growthOpportunities: r.growthOpportunities as MonthlyReportContent['growthOpportunities'],
+        riskFactors: r.riskFactors as MonthlyReportContent['riskFactors'],
+        keyQuestionsNext: r.keyQuestionsNext as MonthlyReportContent['keyQuestionsNext'],
+        dataHealthScore: r.dataHealthScore,
+        confidenceScore: r.confidenceScore,
+        dailyDigestsIncluded: r.dailyDigestsIncluded,
+      },
+      job: {
+        id: job.id,
+        status: job.status,
+        monthYear: job.monthYear,
+        completedAt: job.completedAt,
+      },
+    };
+  }
+
+  async getAvailableReports(): Promise<Array<{
+    monthYear: string;
+    performanceGrade: string;
+    dataHealthScore: number;
+    confidenceScore: number;
+  }>> {
+    const reports = await prisma.monthlyStrategicReport.findMany({
+      select: {
+        monthYear: true,
+        performanceGrade: true,
+        dataHealthScore: true,
+        confidenceScore: true,
+      },
+      orderBy: { monthYear: 'desc' },
+    });
+
+    return reports.map(r => ({
+      monthYear: r.monthYear,
+      performanceGrade: r.performanceGrade,
+      dataHealthScore: r.dataHealthScore,
+      confidenceScore: r.confidenceScore,
+    }));
+  }
+
   async getJobHistory(limit: number = 12): Promise<Array<{
     id: string;
     monthYear: string;

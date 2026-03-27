@@ -11,6 +11,8 @@ import {
   Calendar,
   CheckCircle,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Download,
   FileText,
@@ -88,11 +90,42 @@ export function LearningProgressTab() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['summary', 'actions']));
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
+  // Report navigation state
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [selectedDateIndex, setSelectedDateIndex] = useState(0);
+  const [digestLoading, setDigestLoading] = useState(false);
+
   // Load data on mount
   useEffect(() => {
     loadData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load a specific digest by date
+  const loadDigestByDate = async (date: string) => {
+    setDigestLoading(true);
+    try {
+      const res = await fetch(`/api/ai/learning/digest?date=${date}`);
+      const data = await res.json();
+      if (data.success && data.data.digest) {
+        setLatestDigest(data.data.digest);
+        setLatestJob(data.data.job);
+      }
+    } catch (error) {
+      console.error('Failed to load digest for date:', date, error);
+    } finally {
+      setDigestLoading(false);
+    }
+  };
+
+  // Navigate to previous/next digest
+  const navigateDigest = (direction: 'prev' | 'next') => {
+    const newIndex = direction === 'prev' ? selectedDateIndex + 1 : selectedDateIndex - 1;
+    if (newIndex >= 0 && newIndex < availableDates.length) {
+      setSelectedDateIndex(newIndex);
+      loadDigestByDate(availableDates[newIndex]);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -101,16 +134,18 @@ export function LearningProgressTab() {
       headers['X-Org-Id'] = currentOrganization.orgId;
     }
     try {
-      const [digestRes, historyRes, statusRes] = await Promise.all([
+      const [digestRes, historyRes, statusRes, datesRes] = await Promise.all([
         fetch('/api/ai/learning/digest', { headers }),
         fetch('/api/ai/learning/history', { headers }),
         fetch('/api/ai/learning/status', { headers }),
+        fetch('/api/ai/learning/digest?action=list', { headers }),
       ]);
 
-      const [digestData, historyData, statusData] = await Promise.all([
+      const [digestData, historyData, statusData, datesData] = await Promise.all([
         digestRes.json(),
         historyRes.json(),
         statusRes.json(),
+        datesRes.json(),
       ]);
 
       if (digestData.success && digestData.data.digest) {
@@ -124,6 +159,12 @@ export function LearningProgressTab() {
 
       if (statusData.success) {
         setCurrentStatus(statusData.data);
+      }
+
+      if (datesData.success && datesData.data) {
+        const dates = datesData.data.map((d: { date: string }) => d.date);
+        setAvailableDates(dates);
+        setSelectedDateIndex(0); // Most recent
       }
     } catch (error) {
       console.error('Failed to load learning data:', error);
@@ -426,9 +467,59 @@ export function LearningProgressTab() {
         )}
       </Card>
 
-      {/* Latest Digest Summary */}
+      {/* Digest Navigation & Summary */}
       {latestDigest && (
         <>
+          {/* Date Navigator */}
+          {availableDates.length > 1 && (
+            <Card className="!py-3">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => navigateDigest('prev')}
+                  disabled={selectedDateIndex >= availableDates.length - 1 || digestLoading}
+                  className="p-2 rounded-lg hover:bg-[var(--paper)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Older report"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-4 h-4 text-[var(--muted)]" />
+                  <select
+                    value={availableDates[selectedDateIndex] || ''}
+                    onChange={(e) => {
+                      const idx = availableDates.indexOf(e.target.value);
+                      if (idx >= 0) {
+                        setSelectedDateIndex(idx);
+                        loadDigestByDate(e.target.value);
+                      }
+                    }}
+                    className="bg-transparent text-sm font-medium text-[var(--ink)] border-none focus:outline-none cursor-pointer"
+                  >
+                    {availableDates.map((date) => (
+                      <option key={date} value={date}>
+                        {format(new Date(date + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}
+                      </option>
+                    ))}
+                  </select>
+                  {digestLoading && <Loader2 className="w-4 h-4 animate-spin text-[var(--muted)]" />}
+                </div>
+
+                <button
+                  onClick={() => navigateDigest('next')}
+                  disabled={selectedDateIndex <= 0 || digestLoading}
+                  className="p-2 rounded-lg hover:bg-[var(--paper)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Newer report"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-center text-xs text-[var(--muted)] mt-1">
+                Report {availableDates.length - selectedDateIndex} of {availableDates.length}
+              </p>
+            </Card>
+          )}
+
           {/* Scores */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-4 text-center">

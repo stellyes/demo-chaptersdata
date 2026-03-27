@@ -1,14 +1,80 @@
 // ============================================
 // LEARNING DIGEST API ROUTE
-// Get latest daily learning digest
+// Get daily learning digests (latest, by date, or list available dates)
 // ============================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Get the latest completed job with its digest
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
+    const date = searchParams.get('date'); // YYYY-MM-DD
+
+    // List available digest dates
+    if (action === 'list') {
+      const digests = await prisma.dailyDigest.findMany({
+        select: { digestDate: true, dataHealthScore: true, confidenceScore: true },
+        orderBy: { digestDate: 'desc' },
+        take: 90,
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: digests.map(d => ({
+          date: d.digestDate.toISOString().split('T')[0],
+          dataHealthScore: d.dataHealthScore,
+          confidenceScore: d.confidenceScore,
+        })),
+      });
+    }
+
+    // Fetch a specific date's digest
+    if (date) {
+      const targetDate = new Date(date + 'T00:00:00Z');
+      const digest = await prisma.dailyDigest.findFirst({
+        where: { digestDate: targetDate },
+      });
+
+      if (!digest) {
+        return NextResponse.json({
+          success: true,
+          data: { digest: null, job: null },
+        });
+      }
+
+      // Find the associated job
+      const job = await prisma.dailyLearningJob.findFirst({
+        where: { digestId: digest.id },
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          digest: {
+            executiveSummary: digest.executiveSummary,
+            priorityActions: digest.priorityActions,
+            quickWins: digest.quickWins,
+            watchItems: digest.watchItems,
+            industryHighlights: digest.industryHighlights,
+            regulatoryUpdates: digest.regulatoryUpdates,
+            marketTrends: digest.marketTrends,
+            questionsForTomorrow: digest.questionsForTomorrow,
+            correlatedInsights: digest.correlatedInsights,
+            dataHealthScore: digest.dataHealthScore,
+            confidenceScore: digest.confidenceScore,
+          },
+          job: job ? {
+            id: job.id,
+            status: job.status,
+            completedAt: job.completedAt?.toISOString() || null,
+          } : null,
+        },
+      });
+    }
+
+    // Default: Get the latest completed job with its digest
     const latestJob = await prisma.dailyLearningJob.findFirst({
       where: { status: 'completed', digestId: { not: null } },
       orderBy: { completedAt: 'desc' },

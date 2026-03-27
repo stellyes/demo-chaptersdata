@@ -39,17 +39,24 @@ export async function GET(request: NextRequest) {
       case 'report': {
         const monthYear = searchParams.get('monthYear');
         if (monthYear) {
-          // Get specific month's report - would need to add this method
-          const result = await monthlyAnalysisService.getLatestReport();
+          const result = await monthlyAnalysisService.getReportByMonth(monthYear);
           return NextResponse.json({
             success: true,
-            data: result.report ? result : { report: null, message: 'No report available' },
+            data: result.report ? result : { report: null, message: `No report available for ${monthYear}` },
           });
         }
         const result = await monthlyAnalysisService.getLatestReport();
         return NextResponse.json({
           success: true,
           data: result.report ? result : { report: null, message: 'No report available yet' },
+        });
+      }
+
+      case 'list': {
+        const reports = await monthlyAnalysisService.getAvailableReports();
+        return NextResponse.json({
+          success: true,
+          data: reports,
         });
       }
 
