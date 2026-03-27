@@ -9,8 +9,9 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { SalesChart, TransactionChart } from '@/components/charts/SalesChart';
 import { CategoryPieChart } from '@/components/charts/PieChart';
-import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat, useFilteredBudtenderData, useFilteredCustomerData } from '@/store/app-store';
+import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat, useFilteredCustomerData } from '@/store/app-store';
 import { calculateSalesSummary, calculateCustomerSummary } from '@/lib/services/data-processor';
+import { needsMarginConversion, normalizeMarginValue } from '@/lib/utils/margin';
 import { STORES, getIndividualStoreIds, getStoreColor } from '@/lib/config';
 import { format } from 'date-fns';
 
@@ -22,7 +23,13 @@ export const DashboardPage = memo(function DashboardPage() {
   // Use normalized brand data - consolidates aliases under canonical brand names
   const brandData = useNormalizedBrandDataCompat();
   const productData = useFilteredProductData();
-  const budtenderData = useFilteredBudtenderData();
+  const { budtenderData: allBudtenderData, selectedStore } = useAppStore();
+  // Dashboard shows all budtenders (not filtered by permanent assignment)
+  // Only filter by store selection
+  const budtenderData = useMemo(() => {
+    if (selectedStore === 'combined') return allBudtenderData;
+    return allBudtenderData.filter(b => b.store_id === selectedStore);
+  }, [allBudtenderData, selectedStore]);
   const customerData = useFilteredCustomerData();
 
   const summary = useMemo(() => calculateSalesSummary(salesData), [salesData]);
@@ -45,13 +52,19 @@ export const DashboardPage = memo(function DashboardPage() {
     }
 
     // Calculate averages and find top performers
-    const employees = Object.entries(byEmployee).map(([name, stats]) => ({
-      name,
-      sales: stats.sales,
-      units: stats.units,
-      avgMargin: stats.margin / stats.count,
-      revenuePerUnit: stats.units > 0 ? stats.sales / stats.units : 0,
-    }));
+    const rawMargins = Object.values(byEmployee).map(s => s.count > 0 ? s.margin / s.count : 0);
+    const shouldConvertMargins = needsMarginConversion(rawMargins);
+
+    const employees = Object.entries(byEmployee).map(([name, stats]) => {
+      const rawAvgMargin = stats.count > 0 ? stats.margin / stats.count : 0;
+      return {
+        name,
+        sales: stats.sales,
+        units: stats.units,
+        avgMargin: normalizeMarginValue(rawAvgMargin, shouldConvertMargins),
+        revenuePerUnit: stats.units > 0 ? stats.sales / stats.units : 0,
+      };
+    });
 
     const topBySales = [...employees].sort((a, b) => b.sales - a.sales).slice(0, 5);
     const totalSales = employees.reduce((sum, e) => sum + e.sales, 0);

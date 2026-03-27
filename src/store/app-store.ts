@@ -70,6 +70,8 @@ import {
   toCompatibleBrandRecords,
   NormalizedBrandRecord,
 } from '@/lib/services/data-processor';
+import { EXAMPLE_COMPLETED_INVESTIGATIONS, EXAMPLE_LEARNING_REPORT } from '@/lib/demo-data/example-insights';
+import { DEMO_INVOICE_DATA } from '@/lib/demo-data/example-invoices';
 import {
   isCacheValid,
   loadFromCache,
@@ -259,11 +261,11 @@ const initialState = {
   customerData: [] as CustomerRecord[],
   budtenderData: [] as BudtenderRecord[],
   brandMappings: {} as BrandMappingData,
-  invoiceData: [] as InvoiceLineItem[],
+  invoiceData: DEMO_INVOICE_DATA as InvoiceLineItem[],
   researchData: [] as ResearchDocument[],
   seoData: [] as SEOSummary[],
   qrCodesData: [] as QRCode[],
-  aiRecommendations: [] as AIRecommendation[],
+  aiRecommendations: [...EXAMPLE_COMPLETED_INVESTIGATIONS, EXAMPLE_LEARNING_REPORT] as AIRecommendation[],
   permanentEmployees: {} as Record<string, StoreId>,
   isLoading: false,
   loadingOverlay: {
@@ -799,8 +801,9 @@ export const useAppStore = create<AppState>()(
                     retryCount = 0; // Reset retry count on success
 
                     // Update store with partial data as it loads
+                    // Only overwrite if API returned actual data (preserves demo data)
                     set((state) => ({
-                      invoiceData: allInvoices,
+                      invoiceData: allInvoices.length ? allInvoices : state.invoiceData,
                       dataStatus: {
                         ...state.dataStatus,
                         invoices: {
@@ -877,7 +880,8 @@ export const useAppStore = create<AppState>()(
                       researchData: research || [],
                       seoData: seo || [],
                       qrCodesData: qrCodes || [],
-                      aiRecommendations: aiRecommendations || [],
+                      // Preserve demo data when API returns empty
+                      aiRecommendations: aiRecommendations?.length ? aiRecommendations : state.aiRecommendations,
                       dataStatus: {
                         ...state.dataStatus,
                         research: {
@@ -897,7 +901,7 @@ export const useAppStore = create<AppState>()(
                         },
                         aiRecommendations: {
                           loaded: true,
-                          count: aiRecommendations?.length || 0,
+                          count: aiRecommendations?.length || state.aiRecommendations.length,
                           lastUpdated: new Date().toISOString(),
                         },
                       },

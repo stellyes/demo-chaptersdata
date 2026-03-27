@@ -24,6 +24,7 @@ import { format } from 'date-fns';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadAsMarkdown, openPrintWindow } from '@/lib/export-utils';
+import { EXAMPLE_AVAILABLE_INSIGHTS, type DemoInsight } from '@/lib/demo-data/example-insights';
 
 // Custom components for ReactMarkdown
 const markdownComponents: Components = {
@@ -112,7 +113,22 @@ export function InsightInvestigationTab() {
       const result = await response.json();
 
       if (result.success) {
-        setInsights(result.data);
+        // Merge demo insights into the list so they always appear
+        const demoAsBusinessInsights: BusinessInsight[] = EXAMPLE_AVAILABLE_INSIGHTS
+          .filter(d => selectedCategory === 'all' || d.category === selectedCategory)
+          .map(d => ({
+            id: d.id,
+            category: d.category,
+            subcategory: null,
+            insight: d.insight,
+            confidence: d.confidence,
+            source: d.source,
+            sourceData: null,
+            dataRange: null,
+            createdAt: new Date().toISOString(),
+            validatedAt: null,
+          }));
+        setInsights([...demoAsBusinessInsights, ...result.data]);
       } else {
         throw new Error(result.error || 'Failed to load insights');
       }
@@ -123,8 +139,22 @@ export function InsightInvestigationTab() {
         title: 'Failed to Load Insights',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
-      // Set empty array on error so UI doesn't break
-      setInsights([]);
+      // Set demo insights even on error so the demo always has content
+      const demoAsBusinessInsights: BusinessInsight[] = EXAMPLE_AVAILABLE_INSIGHTS
+        .filter(d => selectedCategory === 'all' || d.category === selectedCategory)
+        .map(d => ({
+          id: d.id,
+          category: d.category,
+          subcategory: null,
+          insight: d.insight,
+          confidence: d.confidence,
+          source: d.source,
+          sourceData: null,
+          dataRange: null,
+          createdAt: new Date().toISOString(),
+          validatedAt: null,
+        }));
+      setInsights(demoAsBusinessInsights);
     } finally {
       setLoading(false);
       hideLoadingOverlay();
@@ -142,6 +172,30 @@ export function InsightInvestigationTab() {
       title: 'Investigation Started',
       message: `Analyzing: ${selectedInsight.insight.slice(0, 50)}...`,
     });
+
+    // Handle demo insights with simulated response
+    if (selectedInsight.id.startsWith('demo-')) {
+      const demoInsight = EXAMPLE_AVAILABLE_INSIGHTS.find(d => d.id === selectedInsight.id);
+      if (demoInsight) {
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        const result = demoInsight.prewrittenResponse;
+        setInvestigationResult(result);
+        addAiRecommendation({
+          id: `investigation-${Date.now()}`,
+          type: 'investigation',
+          date: new Date().toISOString(),
+          analysis: result,
+          summary: selectedInsight.insight.slice(0, 200),
+        });
+        addNotification({
+          type: 'success',
+          title: 'Investigation Complete',
+          message: 'Deep analysis is ready to view and has been saved.',
+        });
+        setInvestigating(false);
+        return;
+      }
+    }
 
     try {
       const response = await fetch('/api/ai/insights/investigate', {

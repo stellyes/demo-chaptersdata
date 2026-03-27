@@ -39,11 +39,11 @@ export const CategoryPieChart = memo(function CategoryPieChart({ data, showLegen
   return (
     <div style={{ width: '100%', height: chartHeight }}>
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 25, right: 30, bottom: legendHeight + 15, left: 30 }}>
+        <PieChart margin={{ top: 10, right: 30, bottom: legendHeight + 5, left: 30 }}>
           <Pie
             data={data}
             cx="50%"
-            cy="42%"
+            cy="48%"
             innerRadius={55}
             outerRadius={90}
             paddingAngle={2}

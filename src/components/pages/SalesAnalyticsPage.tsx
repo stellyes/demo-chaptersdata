@@ -16,6 +16,7 @@ import { TrendingUp, TrendingDown, Users, DollarSign, ShoppingCart, Percent, Cal
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { calculateCustomerSummary } from '@/lib/services/data-processor';
 import { STORES, getIndividualStoreIds, getStoreColor } from '@/lib/config';
+import { needsMarginConversion, normalizeMarginValue } from '@/lib/utils/margin';
 
 const storeIds = getIndividualStoreIds();
 
@@ -105,6 +106,25 @@ function SalesTrendsTab() {
       });
   }, [salesData]);
 
+  // Compute Y-axis domain for margin chart: normalize to data range for readability
+  const marginYDomain = useMemo((): [number, number] | undefined => {
+    if (marginChartData.length === 0) return undefined;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const d of marginChartData) {
+      for (const sid of storeIds) {
+        const v = Number(d[sid]);
+        if (v > 0) {
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+    }
+    if (!isFinite(min) || !isFinite(max)) return undefined;
+    const padding = (max - min) * 0.1 || 2;
+    return [Math.max(0, Math.floor(min - padding)), Math.ceil(max + padding)];
+  }, [marginChartData]);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -136,7 +156,7 @@ function SalesTrendsTab() {
           <SectionLabel>Margin Trends</SectionLabel>
           <SectionTitle>Gross Margin % Over Time</SectionTitle>
           {marginChartData.length > 0 ? (
-            <SalesChart data={marginChartData} metric="margin" />
+            <SalesChart data={marginChartData} metric="margin" yDomain={marginYDomain} />
           ) : (
             <div className="h-[300px] flex items-center justify-center text-[var(--muted)]">
               No margin data available.
@@ -810,7 +830,9 @@ function CustomerAnalyticsTab() {
                 <div className="min-w-0">
                   <p className="text-xs text-[var(--muted)] truncate">At Risk</p>
                   <p className="text-lg md:text-xl font-semibold font-serif">
-                    {customerSummary.recencyBreakdown['Cold'] + customerSummary.recencyBreakdown['Lost']}
+                    {['Cold', 'Lost', 'Dormant', 'At Risk', 'At-Risk', 'Lapsing'].reduce(
+                      (sum, key) => sum + (customerSummary.recencyBreakdown[key] || 0), 0
+                    )}
                   </p>
                 </div>
               </div>
@@ -905,13 +927,17 @@ function CustomerAnalyticsTab() {
       {activeSubTab === 'recency' && (
         <Card>
           <SectionLabel>At-Risk Customers</SectionLabel>
-          <SectionTitle>Cold & Lost Customers (All Values)</SectionTitle>
+          <SectionTitle>At-Risk & Inactive Customers</SectionTitle>
           <p className="text-sm text-[var(--muted)] mb-4">
-            Showing all Cold and Lost customers sorted by lifetime value. These customers haven't visited recently.
+            Showing all at-risk, lapsing, and inactive customers sorted by lifetime value. These customers haven&apos;t visited recently.
           </p>
           <DataTable
             data={customerData
-              .filter((c) => c.recency_segment === 'Cold' || c.recency_segment === 'Lost')
+              .filter((c) => {
+                const seg = c.recency_segment;
+                return seg === 'Cold' || seg === 'Lost' || seg === 'Dormant' ||
+                       seg === 'At Risk' || seg === 'At-Risk' || seg === 'Lapsing';
+              })
               .sort((a, b) => b.lifetime_net_sales - a.lifetime_net_sales)}
             columns={[
               { key: 'name', label: 'Name', sortable: true },
@@ -1034,13 +1060,21 @@ function BudtenderAnalyticsTab() {
       byEmployee[key].dayCount++;
     }
 
-    return Object.values(byEmployee)
-      .map(e => ({
-        ...e,
-        avgMargin: e.dayCount > 0 ? e.marginSum / e.dayCount : 0,
-        revenuePerUnit: e.totalUnits > 0 ? e.totalSales / e.totalUnits : 0,
-      }))
-      .sort((a, b) => b.totalSales - a.totalSales);
+    const employees = Object.values(byEmployee).map(e => ({
+      ...e,
+      avgMargin: e.dayCount > 0 ? e.marginSum / e.dayCount : 0,
+      revenuePerUnit: e.totalUnits > 0 ? e.totalSales / e.totalUnits : 0,
+    }));
+
+    // Detect if margins are in 0-1 range and convert to 0-100
+    const shouldConvert = needsMarginConversion(employees.map(e => e.avgMargin));
+    if (shouldConvert) {
+      for (const e of employees) {
+        e.avgMargin = e.avgMargin * 100;
+      }
+    }
+
+    return employees.sort((a, b) => b.totalSales - a.totalSales);
   }, [filteredBudtenders]);
 
   // Top performers
@@ -1277,10 +1311,17 @@ function BudtenderAnalyticsTab() {
           <SectionLabel>Raw Data</SectionLabel>
           <SectionTitle>Daily Budtender Records</SectionTitle>
           <DataTable
-            data={filteredBudtenders.map(b => ({
-              ...b,
-              revenue_per_unit: b.units_sold > 0 ? b.net_sales / b.units_sold : 0,
-            }))}
+            data={(() => {
+              const rows = filteredBudtenders.map(b => ({
+                ...b,
+                revenue_per_unit: b.units_sold > 0 ? b.net_sales / b.units_sold : 0,
+              }));
+              const shouldConvertRaw = needsMarginConversion(rows.map(r => r.gross_margin_pct));
+              if (shouldConvertRaw) {
+                return rows.map(r => ({ ...r, gross_margin_pct: r.gross_margin_pct * 100 }));
+              }
+              return rows;
+            })()}
             columns={[
               { key: 'date', label: 'Date', sortable: true },
               { key: 'employee_name', label: 'Employee', sortable: true },

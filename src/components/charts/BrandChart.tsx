@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { CHART_COLORS, BRAND_THRESHOLDS } from '@/lib/config';
 import { BrandRecord } from '@/types';
+import { needsMarginConversion } from '@/lib/utils/margin';
 
 interface TopBrandsChartProps {
   data: BrandRecord[];
@@ -24,12 +25,14 @@ interface TopBrandsChartProps {
 }
 
 export const TopBrandsChart = memo(function TopBrandsChart({ data, limit = 20 }: TopBrandsChartProps) {
+  const shouldConvertBar = needsMarginConversion(data.map((b) => b.gross_margin_pct));
+  const toMarginBar = (v: number) => (shouldConvertBar ? v * 100 : v);
+
   const chartData = data.slice(0, limit).map((b) => ({
-    // Truncate to 12 chars for mobile-friendly display
     name: b.brand.length > 12 ? b.brand.slice(0, 12) + '…' : b.brand,
     fullName: b.brand,
     revenue: b.net_sales,
-    margin: b.gross_margin_pct,
+    margin: toMarginBar(b.gross_margin_pct),
   }));
 
   // Calculate dynamic height based on number of items
@@ -91,33 +94,35 @@ interface MarginScatterProps {
 }
 
 export const MarginScatterChart = memo(function MarginScatterChart({ data }: MarginScatterProps) {
+  // Detect if margins are in 0-1 range and need conversion to 0-100
+  const shouldConvert = needsMarginConversion(data.map((b) => b.gross_margin_pct));
+  const toMargin = (v: number) => (shouldConvert ? v * 100 : v);
+
   // Prepare data with normalized size values
   // Filter out: zero/negative sales, 100% margins (malformed data), and empty brand names
   const filteredData = data
     .slice(0, 100)
-    .filter((b) => b.net_sales > 0 && b.gross_margin_pct < 100 && b.brand && b.brand.trim() !== '');
+    .filter((b) => b.net_sales > 0 && toMargin(b.gross_margin_pct) < 100 && b.brand && b.brand.trim() !== '');
 
   // Calculate min/max for normalization
   const minSales = Math.min(...filteredData.map((b) => b.net_sales));
   const maxSales = Math.max(...filteredData.map((b) => b.net_sales));
-  const minMargin = Math.min(...filteredData.map((b) => b.gross_margin_pct));
-  const maxMargin = Math.max(...filteredData.map((b) => b.gross_margin_pct));
+  const minMargin = Math.min(...filteredData.map((b) => toMargin(b.gross_margin_pct)));
+  const maxMargin = Math.max(...filteredData.map((b) => toMargin(b.gross_margin_pct)));
 
   // Normalize size using square root scale for better visual differentiation
-  // This prevents large values from dominating and makes differences more visible
   const normalizeSize = (value: number) => {
     const sqrtMin = Math.sqrt(minSales);
     const sqrtMax = Math.sqrt(maxSales);
     const sqrtValue = Math.sqrt(value);
-    // Normalize to 0-1 range, then scale to desired size range
     const normalized = (sqrtValue - sqrtMin) / (sqrtMax - sqrtMin || 1);
-    return 50 + normalized * 200; // Smaller range for mobile: 50 to 250 pixels
+    return 50 + normalized * 200;
   };
 
   const chartData = filteredData.map((b) => ({
     name: b.brand,
     x: b.net_sales,
-    y: b.gross_margin_pct,
+    y: toMargin(b.gross_margin_pct),
     z: normalizeSize(b.net_sales),
     originalSales: b.net_sales,
   }));

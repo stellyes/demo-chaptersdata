@@ -25,6 +25,7 @@ import { format } from 'date-fns';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadAsMarkdown, openPrintWindow } from '@/lib/export-utils';
+import { EXAMPLE_AVAILABLE_BUYER_INSIGHTS, type DemoInsight } from '@/lib/demo-data/example-insights';
 
 // Custom components for ReactMarkdown
 const markdownComponents: Components = {
@@ -119,7 +120,17 @@ export function BuyerInsightsTab() {
       const result = await response.json();
 
       if (result.success) {
-        setBuyerInsights(result.data.insights);
+        // Merge demo buyer insights so they always appear
+        const demoAsBuyerInsights: BuyerInsight[] = EXAMPLE_AVAILABLE_BUYER_INSIGHTS.map(d => ({
+          id: d.id,
+          category: d.category as BuyerInsight['category'],
+          title: d.insight.slice(0, 60) + (d.insight.length > 60 ? '...' : ''),
+          insight: d.insight,
+          impact: d.confidence as BuyerInsight['impact'],
+          data: {},
+          createdAt: new Date().toISOString(),
+        }));
+        setBuyerInsights([...demoAsBuyerInsights, ...result.data.insights]);
         setSummary(result.data.summary);
       } else {
         throw new Error(result.error || 'Failed to load buyer insights');
@@ -131,7 +142,17 @@ export function BuyerInsightsTab() {
         title: 'Failed to Load Buyer Insights',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
-      setBuyerInsights([]);
+      // Set demo insights even on error so the demo always has content
+      const demoAsBuyerInsights: BuyerInsight[] = EXAMPLE_AVAILABLE_BUYER_INSIGHTS.map(d => ({
+        id: d.id,
+        category: d.category as BuyerInsight['category'],
+        title: d.insight.slice(0, 60) + (d.insight.length > 60 ? '...' : ''),
+        insight: d.insight,
+        impact: d.confidence as BuyerInsight['impact'],
+        data: {},
+        createdAt: new Date().toISOString(),
+      }));
+      setBuyerInsights(demoAsBuyerInsights);
     }
   };
 
@@ -191,6 +212,30 @@ export function BuyerInsightsTab() {
       title: 'Investigation Started',
       message: `Analyzing purchasing insight...`,
     });
+
+    // Handle demo insights with simulated response
+    if (selectedInsight.id.startsWith('demo-')) {
+      const demoInsight = EXAMPLE_AVAILABLE_BUYER_INSIGHTS.find(d => d.id === selectedInsight.id);
+      if (demoInsight) {
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        const result = demoInsight.prewrittenResponse;
+        setInvestigationResult(result);
+        addAiRecommendation({
+          id: `buyer-investigation-${Date.now()}`,
+          type: 'buyer-investigation',
+          date: new Date().toISOString(),
+          analysis: result,
+          summary: insightText.slice(0, 200),
+        });
+        addNotification({
+          type: 'success',
+          title: 'Investigation Complete',
+          message: 'Procurement analysis is ready to view and has been saved.',
+        });
+        setInvestigating(false);
+        return;
+      }
+    }
 
     try {
       const response = await fetch('/api/ai/buyer-insights/investigate', {

@@ -10,7 +10,7 @@ import { FileUpload } from '@/components/ui/FileUpload';
 import { DataTable } from '@/components/ui/DataTable';
 import { useAppStore } from '@/store/app-store';
 import { parseCSV, cleanSalesData, cleanBrandData, cleanProductData, cleanCustomerData } from '@/lib/services/data-processor';
-import { STORES, SEO_SITES, RESEARCH_CATEGORIES, getDefaultStoreId } from '@/lib/config';
+import { STORES, SEO_SITES, getDefaultStoreId } from '@/lib/config';
 import { StoreId } from '@/types';
 import {
   Check,
@@ -32,9 +32,11 @@ import {
   Save,
   CheckCircle,
   TrendingUp,
+  Info,
 } from 'lucide-react';
 import { DataHealthTab } from '@/components/data-health/DataHealthTab';
 import { QRPortalTab } from '@/components/pages/QRCodePage';
+import { EXAMPLE_SEO_AUDITS } from '@/lib/demo-data/example-seo';
 
 // ============================================
 // DATA STATUS COMPONENT
@@ -223,6 +225,13 @@ function SalesDataTab() {
 
   return (
     <div className="space-y-6">
+      <div className="mb-6 p-4 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg flex gap-3">
+        <Info className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-[var(--muted)]">
+          Chapters gives you options — if you prefer to upload your data manually, you absolutely can. That said, we also provide automated data export and processing solutions that handle this seamlessly, saving you valuable time.
+        </p>
+      </div>
+
       {/* Upload Settings */}
       <Card>
         <SectionLabel>Upload Settings</SectionLabel>
@@ -400,6 +409,13 @@ function InvoiceDataTab() {
 
   return (
     <div className="space-y-6">
+      <div className="mb-6 p-4 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg flex gap-3">
+        <Info className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-[var(--muted)]">
+          Chapters gives you options — if you prefer to upload your data manually, you absolutely can. That said, we also provide automated data export and processing solutions that handle this seamlessly, saving you valuable time.
+        </p>
+      </div>
+
       <Card>
         <SectionLabel>PDF Upload</SectionLabel>
         <SectionTitle>Upload Treez Invoices</SectionTitle>
@@ -591,6 +607,13 @@ function CustomerDataTab() {
 
   return (
     <div className="space-y-6">
+      <div className="mb-6 p-4 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg flex gap-3">
+        <Info className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-[var(--muted)]">
+          Chapters gives you options — if you prefer to upload your data manually, you absolutely can. That said, we also provide automated data export and processing solutions that handle this seamlessly, saving you valuable time.
+        </p>
+      </div>
+
       <Card>
         <SectionLabel>Customer Export</SectionLabel>
         <SectionTitle>Upload Customer Data</SectionTitle>
@@ -748,6 +771,13 @@ function BudtenderPerformanceTab() {
 
   return (
     <div className="space-y-6">
+      <div className="mb-6 p-4 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg flex gap-3">
+        <Info className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-[var(--muted)]">
+          Chapters gives you options — if you prefer to upload your data manually, you absolutely can. That said, we also provide automated data export and processing solutions that handle this seamlessly, saving you valuable time.
+        </p>
+      </div>
+
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <Card className="p-3 md:p-4">
@@ -1049,10 +1079,12 @@ function DefineContextTab() {
       <Card>
         <SectionLabel>Business Context</SectionLabel>
         <SectionTitle>Define Your Business Profile</SectionTitle>
-        <p className="text-sm text-[var(--muted)] mb-6">
-          Provide context about your business to improve AI recommendations and analysis.
-          This information helps Claude understand your specific situation.
-        </p>
+        <div className="mb-6 p-4 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg flex gap-3">
+          <Info className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-[var(--muted)]">
+            Your business context helps our AI deliver more relevant insights. If your business evolves and you need custom context defined beyond what&apos;s available here, reach out to your Chapters representative — we&apos;ll get it configured for you.
+          </p>
+        </div>
 
         <div className="space-y-4">
           <div>
@@ -1223,8 +1255,7 @@ function BrandMappingTab() {
         <SectionLabel>Brand Normalization</SectionLabel>
         <SectionTitle>Brand → Alias Mappings</SectionTitle>
         <p className="text-sm text-[var(--muted)] mb-6">
-          View the canonical brand names and their associated aliases. Each alias maps to a product type.
-          This consolidates variations like &quot;STIIIZY&quot;, &quot;Stiiizy&quot;, and &quot;STIIZY&quot; into one brand.
+          Brand mapping consolidates the many naming variations that appear in your sales data under a single canonical name. For example, a brand like &quot;Pacific Bloom&quot; might appear as &quot;PACIFIC BLOOM&quot;, &quot;Pacific Bloom Co&quot;, or &quot;PB Farms&quot; across different reports. Mapping these aliases ensures your analytics reflect accurate totals. Each alias also maps to a product type (Flower, Vape, Edible, etc.) for category analytics.
         </p>
 
         {/* Upload Section */}
@@ -1369,87 +1400,6 @@ function BrandMappingTab() {
 }
 
 // ============================================
-// INDUSTRY RESEARCH TAB
-// ============================================
-function IndustryResearchTab() {
-  const [documents, setDocuments] = useState<
-    { id: string; filename: string; category: string; uploadedAt: string }[]
-  >([]);
-  const [category, setCategory] = useState(RESEARCH_CATEGORIES[0]);
-
-  const handleUpload = async (file: File) => {
-    setDocuments((prev) => [
-      {
-        id: `doc_${Date.now()}`,
-        filename: file.name,
-        category,
-        uploadedAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <SectionLabel>Manual Research</SectionLabel>
-        <SectionTitle>Upload Industry Documents</SectionTitle>
-        <p className="text-sm text-[var(--muted)] mb-4">
-          Upload HTML files (saved webpages) for AI-powered analysis. Claude will extract
-          key findings relevant to your cannabis retail business.
-        </p>
-        <div className="mb-4">
-          <label className="text-sm font-medium text-[var(--muted)] block mb-2">Category</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full max-w-xs px-3 py-2 border border-[var(--border)] rounded text-sm"
-          >
-            {RESEARCH_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-        <FileUpload
-          onUpload={handleUpload}
-          accept={{ 'text/html': ['.html', '.htm'] }}
-          title="Drop HTML document here"
-          description="Saved webpage for AI analysis"
-        />
-      </Card>
-
-      {documents.length > 0 && (
-        <Card>
-          <SectionLabel>Research Library</SectionLabel>
-          <SectionTitle>Uploaded Documents</SectionTitle>
-          <div className="space-y-2">
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between p-3 bg-[var(--paper)] rounded"
-              >
-                <div className="flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-[var(--accent)]" />
-                  <div>
-                    <p className="text-sm font-medium">{doc.filename}</p>
-                    <p className="text-xs text-[var(--muted)]">{doc.category}</p>
-                  </div>
-                </div>
-                <span className="text-xs text-[var(--muted)]">
-                  {new Date(doc.uploadedAt).toLocaleDateString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-// ============================================
 // SEO ANALYSIS TAB
 // ============================================
 interface SeoAudit {
@@ -1485,7 +1435,7 @@ interface SeoAudit {
 
 function SEOAnalysisTab() {
   const [selectedSite, setSelectedSite] = useState(SEO_SITES[0]);
-  const [audits, setAudits] = useState<SeoAudit[]>([]);
+  const [audits, setAudits] = useState<SeoAudit[]>(EXAMPLE_SEO_AUDITS as SeoAudit[]);
   const [selectedAudit, setSelectedAudit] = useState<SeoAudit | null>(null);
   const [loading, setLoading] = useState(false);
   const [crawling, setCrawling] = useState(false);
@@ -1507,11 +1457,13 @@ function SEOAnalysisTab() {
     try {
       const response = await fetch('/api/seo/audits?limit=50');
       const result = await response.json();
-      if (result.success) {
+      if (result.success && result.data?.length > 0) {
         setAudits(result.data);
       }
+      // If API returns empty, keep demo data
     } catch (error) {
       console.error('Failed to load audits:', error);
+      // Keep demo data on error
     }
   };
 
@@ -1913,11 +1865,6 @@ export const DataCenterPage = memo(function DataCenterPage() {
       id: 'brand-mapping',
       label: 'Brand Mapping',
       render: () => <BrandMappingTab />,
-    },
-    {
-      id: 'research',
-      label: 'Industry Research',
-      render: () => <IndustryResearchTab />,
     },
     {
       id: 'seo',

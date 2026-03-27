@@ -11,6 +11,7 @@ import { QrCode, Link, Download, Loader2, Copy, Check, Trash2, Monitor, Smartpho
 import QRCodeLib from 'qrcode';
 import { useAppStore } from '@/store/app-store';
 import { QRCode } from '@/types';
+import { EXAMPLE_QR_CODES, EXAMPLE_QR_ANALYTICS } from '@/lib/demo-data/example-qr';
 
 // ---- Analytics types ----
 interface AnalyticsData {
@@ -34,9 +35,30 @@ interface AnalyticsData {
 }
 
 // ---- Analytics sub-component ----
+// Transform example analytics into the AnalyticsData shape
+const DEMO_ANALYTICS: AnalyticsData = {
+  totalClicks: EXAMPLE_QR_ANALYTICS.totalScans,
+  period: { days: 30, since: new Date(Date.now() - 30 * 86400000).toISOString() },
+  dailyClicks: EXAMPLE_QR_ANALYTICS.dailyScans.map(d => ({ date: d.date, clicks: d.scans })),
+  topCodes: EXAMPLE_QR_ANALYTICS.topPerforming.map(t => ({ shortCode: t.shortCode, name: t.name, clicks: t.scans })),
+  devices: Object.fromEntries(EXAMPLE_QR_ANALYTICS.deviceBreakdown.map(d => [d.device.toLowerCase(), d.count])),
+  browsers: Object.fromEntries(EXAMPLE_QR_ANALYTICS.browserBreakdown.map(b => [b.browser, b.count])),
+  operatingSystems: Object.fromEntries(EXAMPLE_QR_ANALYTICS.osBreakdown.map(o => [o.os, o.count])),
+  topReferrers: EXAMPLE_QR_ANALYTICS.topReferrers.map(r => ({ source: r.referrer, clicks: r.count })),
+  recentClicks: EXAMPLE_QR_ANALYTICS.recentClicks.map(c => ({
+    shortCode: '',
+    name: c.qrName,
+    clickedAt: c.timestamp,
+    device: c.device,
+    browser: c.browser,
+    os: '',
+    referrer: null,
+  })),
+};
+
 function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: number }) {
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(DEMO_ANALYTICS);
+  const [loading, setLoading] = useState(false);
   const [days, setDays] = useState(30);
 
   const fetchAnalytics = useCallback(async () => {
@@ -44,11 +66,13 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
     try {
       const res = await fetch(`/api/qr/analytics?days=${days}`);
       const result = await res.json();
-      if (result.success) {
+      if (result.success && result.data) {
         setAnalytics(result.data);
       }
+      // If API returns empty, keep demo data
     } catch (err) {
       console.error('Failed to load analytics:', err);
+      // Keep demo data on error
     } finally {
       setLoading(false);
     }
@@ -329,6 +353,13 @@ export function QRPortalTab() {
     color: '#1e391f',
     bgColor: '#ffffff',
   });
+
+  // Seed demo QR codes if store is empty
+  useEffect(() => {
+    if (qrCodesData.length === 0) {
+      setQrCodesData(EXAMPLE_QR_CODES as QRCode[]);
+    }
+  }, []);
 
   // Use store data with proper typing for DataTable
   const qrCodes = qrCodesData.map(qr => ({

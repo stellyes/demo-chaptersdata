@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { EXAMPLE_HEALTH_REPORT } from '@/lib/demo-data/example-health';
 
 // Health check types
 interface HealthCheckGap {
@@ -69,7 +70,7 @@ export function DataHealthTab() {
   const { customerData, invoiceData, addNotification, currentOrganization } = useAppStore();
 
   // Health check state
-  const [healthCheckData, setHealthCheckData] = useState<HealthCheckReport | null>(null);
+  const [healthCheckData, setHealthCheckData] = useState<HealthCheckReport | null>(EXAMPLE_HEALTH_REPORT as HealthCheckReport);
   const [healthCheckLoading, setHealthCheckLoading] = useState(false);
   const [healthCheckError, setHealthCheckError] = useState<string | null>(null);
 
@@ -85,13 +86,11 @@ export function DataHealthTab() {
       if (result.success && result.data.report) {
         setHealthCheckData(result.data.report);
         setHealthCheckError(null);
-      } else if (result.success && !result.data.report) {
-        setHealthCheckData(null);
-        setHealthCheckError(null);
       }
+      // If API returns empty, keep demo data
     } catch (error) {
       console.error('Failed to fetch health check:', error);
-      setHealthCheckError('Failed to load health check data');
+      // Keep demo data on error
     }
   };
 
@@ -136,7 +135,7 @@ export function DataHealthTab() {
           message: `Score: ${score}/100${criticalGaps > 0 ? ` - ${criticalGaps} critical issues found` : ''}`,
         });
       } else {
-        setHealthCheckError(result.error || 'Health check failed');
+        // Keep demo data on failure, just show error
         addNotification({
           type: 'error',
           title: 'Health Check Failed',
@@ -144,7 +143,7 @@ export function DataHealthTab() {
         });
       }
     } catch (error) {
-      setHealthCheckError(error instanceof Error ? error.message : 'Health check failed');
+      // Keep demo data on error
       addNotification({
         type: 'error',
         title: 'Health Check Failed',

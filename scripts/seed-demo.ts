@@ -153,6 +153,7 @@ const PRODUCT_TYPES = [
   'Tincture',
   'Topical',
   'Accessory',
+  'Beverage',
 ];
 
 // Product type weights (share of sales) and margin profiles
@@ -168,6 +169,7 @@ const PRODUCT_PROFILES: Record<
   Tincture: { shareWeight: 0.05, marginRange: [0.55, 0.68], avgCostRange: [8, 22] },
   Topical: { shareWeight: 0.03, marginRange: [0.58, 0.72], avgCostRange: [6, 18] },
   Accessory: { shareWeight: 0.03, marginRange: [0.6, 0.75], avgCostRange: [3, 12] },
+  Beverage: { shareWeight: 0.02, marginRange: [0.48, 0.62], avgCostRange: [4, 10] },
 };
 
 const EMPLOYEE_NAMES = [

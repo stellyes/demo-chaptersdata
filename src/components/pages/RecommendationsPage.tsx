@@ -8,7 +8,7 @@ import { SectionTitle } from '@/components/ui/SectionTitle';
 import { Tabs } from '@/components/ui/Tabs';
 import { useFilteredSalesData, useNormalizedBrandDataCompat, useAppStore } from '@/store/app-store';
 import { calculateSalesSummary, calculateBrandSummary } from '@/lib/services/data-processor';
-import { Sparkles, TrendingUp, ShoppingBag, Users, RefreshCw, Loader2, FileText, Calendar, ChevronDown, MessageSquare, Check, Database, Brain, Download, Lightbulb, ShoppingCart } from 'lucide-react';
+import { Sparkles, TrendingUp, ShoppingBag, Users, RefreshCw, Loader2, FileText, Calendar, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Check, Database, Brain, Download, Lightbulb, ShoppingCart, Filter } from 'lucide-react';
 import { downloadAsMarkdown, openPrintWindow } from '@/lib/export-utils';
 import { LearningProgressTab } from '@/components/learning/LearningProgressTab';
 import { InsightInvestigationTab } from '@/components/insights/InsightInvestigationTab';
@@ -106,6 +106,11 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
   });
   const [loading, setLoading] = useState(false);
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+
+  // Past Reports pagination and filter state
+  const [reportPage, setReportPage] = useState(0);
+  const reportsPerPage = 10;
+  const [reportTypeFilter, setReportTypeFilter] = useState('all');
 
   // Custom query state
   const [customPrompt, setCustomPrompt] = useState('');
@@ -773,20 +778,68 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
     {
       id: 'history',
       label: 'Past Reports',
-      render: () => (
+      render: () => {
+        const REPORT_TYPE_OPTIONS = [
+          { value: 'all', label: 'All' },
+          { value: 'sales', label: 'Sales' },
+          { value: 'brands', label: 'Brands' },
+          { value: 'categories', label: 'Categories' },
+          { value: 'investigation', label: 'Investigation' },
+          { value: 'buyer-investigation', label: 'Buyer Investigation' },
+          { value: 'custom', label: 'Custom' },
+          { value: 'insights', label: 'Insights/Learning' },
+        ];
+
+        const filteredReports = aiRecommendations
+          .filter(r => reportTypeFilter === 'all' || r.type === reportTypeFilter)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        const totalPages = Math.max(1, Math.ceil(filteredReports.length / reportsPerPage));
+        const safePage = Math.min(reportPage, totalPages - 1);
+        const paginatedReports = filteredReports.slice(
+          safePage * reportsPerPage,
+          (safePage + 1) * reportsPerPage
+        );
+
+        return (
         <div className="space-y-6">
           <Card>
-            <SectionLabel>Analysis History</SectionLabel>
-            <SectionTitle>Past AI Recommendations</SectionTitle>
-            {aiRecommendations.length === 0 ? (
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+              <div>
+                <SectionLabel>Analysis History</SectionLabel>
+                <SectionTitle>Past AI Recommendations</SectionTitle>
+              </div>
+              {/* Type Filter */}
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-[var(--muted)]" />
+                <select
+                  value={reportTypeFilter}
+                  onChange={(e) => {
+                    setReportTypeFilter(e.target.value);
+                    setReportPage(0);
+                  }}
+                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--white)] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
+                >
+                  {REPORT_TYPE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-[var(--muted)]">
+                  {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+
+            {filteredReports.length === 0 ? (
               <p className="text-[var(--muted)] py-8 text-center">
-                No past recommendations found. Run an analysis above to generate recommendations.
+                {reportTypeFilter === 'all'
+                  ? 'No past recommendations found. Run an analysis above to generate recommendations.'
+                  : `No ${REPORT_TYPE_OPTIONS.find(o => o.value === reportTypeFilter)?.label || reportTypeFilter} reports found.`}
               </p>
             ) : (
-              <div className="space-y-4 mt-4">
-                {aiRecommendations
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((report) => {
+              <>
+                <div className="space-y-4">
+                  {paginatedReports.map((report) => {
                     const isExpanded = expandedReportId === report.id;
                     return (
                       <div
@@ -874,7 +927,33 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
                       </div>
                     );
                   })}
-              </div>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--border)]">
+                    <button
+                      onClick={() => setReportPage(Math.max(0, safePage - 1))}
+                      disabled={safePage === 0}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-[var(--ink)] bg-[var(--paper)] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--border)] transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Previous
+                    </button>
+                    <span className="text-sm text-[var(--muted)]">
+                      Page {safePage + 1} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setReportPage(Math.min(totalPages - 1, safePage + 1))}
+                      disabled={safePage >= totalPages - 1}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-[var(--ink)] bg-[var(--paper)] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--border)] transition-colors"
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </Card>
 
@@ -912,7 +991,8 @@ export const RecommendationsPage = memo(function RecommendationsPage() {
             </Card>
           )}
         </div>
-      ),
+        );
+      },
     },
     {
       id: 'learning',

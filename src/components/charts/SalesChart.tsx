@@ -19,11 +19,12 @@ interface SalesChartProps {
   data: Array<Record<string, string | number | undefined>>;
   metric?: 'revenue' | 'transactions' | 'margin';
   showLegend?: boolean;
+  yDomain?: [number, number];
 }
 
 const storeIds = getIndividualStoreIds();
 
-export const SalesChart = memo(function SalesChart({ data, metric = 'revenue', showLegend = true }: SalesChartProps) {
+export const SalesChart = memo(function SalesChart({ data, metric = 'revenue', showLegend = true, yDomain }: SalesChartProps) {
   const formatYAxis = (value: number) => {
     if (metric === 'revenue') return `$${(value / 1000).toFixed(0)}k`;
     if (metric === 'margin') return `${value.toFixed(0)}%`;
@@ -43,7 +44,7 @@ export const SalesChart = memo(function SalesChart({ data, metric = 'revenue', s
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" vertical={false} />
         <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} />
-        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} tickFormatter={formatYAxis} />
+        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} tickFormatter={formatYAxis} domain={yDomain || ['auto', 'auto']} />
         <Tooltip
           contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e0ddd8', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
           formatter={(value) => [formatYAxis(Number(value)), '']}
