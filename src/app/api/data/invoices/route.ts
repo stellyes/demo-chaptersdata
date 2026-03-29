@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { gzipSync } from 'zlib';
 import { getGzipResponseHeaders, shouldUseGzip } from '@/lib/cors';
+import { getActiveStorefrontIds } from '@/lib/utils/org-scope';
 
 // Cache for invoice data
 interface InvoiceCacheEntry {
@@ -48,8 +49,12 @@ async function loadInvoiceData(): Promise<InvoiceLineItem[]> {
   console.log('Loading invoice data from Aurora PostgreSQL...');
   const startTime = Date.now();
 
-  // Load invoice line items with invoice and brand relations
+  // Load invoice line items filtered by org storefronts
+  const storefrontIds = await getActiveStorefrontIds();
   const lineItems = await prisma.invoiceLineItem.findMany({
+    where: {
+      invoice: { storefrontId: { in: storefrontIds } },
+    },
     include: {
       invoice: {
         include: {

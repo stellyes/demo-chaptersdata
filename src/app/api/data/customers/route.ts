@@ -8,6 +8,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { getActiveStorefrontIds } from '@/lib/utils/org-scope';
 import { gzipSync } from 'zlib';
 import { getGzipResponseHeaders, shouldUseGzip } from '@/lib/cors';
 
@@ -65,8 +66,14 @@ function transformCustomer(c: {
 }
 
 // Build Prisma where clause from query parameters
-function buildWhereClause(startDate?: string, endDate?: string, segment?: string): Prisma.CustomerWhereInput {
-  const where: Prisma.CustomerWhereInput = {};
+async function buildWhereClause(startDate?: string, endDate?: string, segment?: string): Promise<Prisma.CustomerWhereInput> {
+  const storefrontIds = await getActiveStorefrontIds();
+  const storeNameMap: Record<string, string> = { greenleaf: 'Greenleaf Market', emerald: 'Emerald Collective' };
+  const storeNames = storefrontIds.map(id => storeNameMap[id] || id);
+
+  const where: Prisma.CustomerWhereInput = {
+    storeName: { in: storeNames },
+  };
 
   if (startDate && endDate) {
     where.lastVisitDate = {
@@ -166,7 +173,7 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
 
     // Build where clause with all filters pushed to the database
-    const where = buildWhereClause(startDate, endDate, segment);
+    const where = await buildWhereClause(startDate, endDate, segment);
 
     // Run count and paginated query in parallel
     // Both are lightweight: COUNT uses index, findMany uses LIMIT/OFFSET

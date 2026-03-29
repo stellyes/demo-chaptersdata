@@ -25,7 +25,7 @@ import { format } from 'date-fns';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadAsMarkdown, openPrintWindow } from '@/lib/export-utils';
-import { EXAMPLE_AVAILABLE_BUYER_INSIGHTS, type DemoInsight } from '@/lib/demo-data/example-insights';
+import { EXAMPLE_AVAILABLE_BUYER_INSIGHTS, EXAMPLE_LEARNED_BUYER_INSIGHTS, type DemoInsight, type LearnedBuyerInsight } from '@/lib/demo-data/example-insights';
 
 // Custom components for ReactMarkdown
 const markdownComponents: Components = {
@@ -93,6 +93,15 @@ export function BuyerInsightsTab() {
       .filter(r => r.type === 'buyer-investigation')
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [aiRecommendations]);
+
+  // Lookup map from insight ID to LearnedBuyerInsight for breadcrumb access
+  const learnedInsightMap = useMemo(() => {
+    const map: Record<string, LearnedBuyerInsight> = {};
+    for (const item of EXAMPLE_LEARNED_BUYER_INSIGHTS) {
+      map[item.id] = item;
+    }
+    return map;
+  }, []);
 
   useEffect(() => {
     loadAllInsights();
@@ -176,14 +185,35 @@ export function BuyerInsightsTab() {
 
       const result = await response.json();
 
+      // Convert demo learned insights to KnowledgeBaseInsight shape
+      const demoAsKnowledgeInsights: KnowledgeBaseInsight[] = EXAMPLE_LEARNED_BUYER_INSIGHTS.map(d => ({
+        id: d.id,
+        category: d.category,
+        subcategory: 'progressive_learning',
+        insight: d.insight,
+        confidence: d.confidence,
+        source: 'Progressive Learning - Phase 4',
+        createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+      }));
+
       if (result.success) {
-        setKnowledgeInsights(result.data);
+        setKnowledgeInsights([...demoAsKnowledgeInsights, ...result.data]);
       } else {
         throw new Error(result.error || 'Failed to load knowledge insights');
       }
     } catch (error) {
       console.error('Failed to load knowledge base insights:', error);
-      setKnowledgeInsights([]);
+      // Set demo learned insights even on error so the demo always has content
+      const demoAsKnowledgeInsights: KnowledgeBaseInsight[] = EXAMPLE_LEARNED_BUYER_INSIGHTS.map(d => ({
+        id: d.id,
+        category: d.category,
+        subcategory: 'progressive_learning',
+        insight: d.insight,
+        confidence: d.confidence,
+        source: 'Progressive Learning - Phase 4',
+        createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+      }));
+      setKnowledgeInsights(demoAsKnowledgeInsights);
     }
   };
 
@@ -215,7 +245,8 @@ export function BuyerInsightsTab() {
 
     // Handle demo insights with simulated response
     if (selectedInsight.id.startsWith('demo-')) {
-      const demoInsight = EXAMPLE_AVAILABLE_BUYER_INSIGHTS.find(d => d.id === selectedInsight.id);
+      const demoInsight = EXAMPLE_AVAILABLE_BUYER_INSIGHTS.find(d => d.id === selectedInsight.id)
+        || EXAMPLE_LEARNED_BUYER_INSIGHTS.find(d => d.id === selectedInsight.id);
       if (demoInsight) {
         await new Promise(resolve => setTimeout(resolve, 2500));
         const result = demoInsight.prewrittenResponse;
@@ -227,6 +258,18 @@ export function BuyerInsightsTab() {
           analysis: result,
           summary: insightText.slice(0, 200),
         });
+        // Fire-and-forget POST to save investigation to knowledge base
+        fetch('/api/knowledge-base', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category,
+            subcategory: 'buyer_investigation',
+            insight: `Investigation of: ${insightText}\n\nKey finding: ${result.slice(0, 200)}`,
+            confidence: 'high',
+            source: 'buyer-investigation-manual',
+          }),
+        }).catch(() => {}); // Fire and forget for demo
         addNotification({
           type: 'success',
           title: 'Investigation Complete',
@@ -284,6 +327,18 @@ export function BuyerInsightsTab() {
                 analysis: accumulated,
                 summary: insightText.slice(0, 200),
               });
+              // Fire-and-forget POST to save investigation to knowledge base
+              fetch('/api/knowledge-base', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  category,
+                  subcategory: 'buyer_investigation',
+                  insight: `Investigation of: ${insightText}\n\nKey finding: ${accumulated.slice(0, 200)}`,
+                  confidence: 'high',
+                  source: 'buyer-investigation-manual',
+                }),
+              }).catch(() => {}); // Fire and forget for demo
               addNotification({
                 type: 'success',
                 title: 'Investigation Complete',
@@ -736,6 +791,29 @@ export function BuyerInsightsTab() {
                     className="w-full h-24 p-3 border border-[var(--border)] rounded-lg text-sm text-[var(--ink)] bg-[var(--white)] resize-none focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
+
+                {/* Show breadcrumbs for learned insights */}
+                {selectedInsight && learnedInsightMap[selectedInsight.id]?.breadcrumbs && (
+                  <div className="mb-4 p-4 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg">
+                    <p className="text-xs font-medium text-[var(--accent)] uppercase tracking-wide mb-3">
+                      How this was discovered
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <span className="text-xs text-[var(--muted)] w-28 flex-shrink-0">Data Source:</span>
+                        <span className="text-xs text-[var(--ink)]">{learnedInsightMap[selectedInsight.id].breadcrumbs.dataSource}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-xs text-[var(--muted)] w-28 flex-shrink-0">Indicator:</span>
+                        <span className="text-xs text-[var(--ink)]">{learnedInsightMap[selectedInsight.id].breadcrumbs.leadingIndicator}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-xs text-[var(--muted)] w-28 flex-shrink-0">Next Step:</span>
+                        <span className="text-xs font-medium text-[var(--accent)]">{learnedInsightMap[selectedInsight.id].breadcrumbs.suggestedNext}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Investigate Button */}
                 <button

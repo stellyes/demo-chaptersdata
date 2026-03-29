@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createHash } from 'crypto';
+import { getActiveStorefrontIds } from '@/lib/utils/org-scope';
 
 // In-memory cache for data
 interface CacheEntry {
@@ -154,6 +155,11 @@ async function loadAllDataFromAurora(): Promise<AllDataResponse> {
   console.log('Loading data from Aurora PostgreSQL...');
   const startTime = Date.now();
 
+  // Get storefront IDs for the current organization
+  const storefrontIds = await getActiveStorefrontIds();
+  const storeFilter = { storeId: { in: storefrontIds } };
+  console.log(`Filtering by storefronts: ${storefrontIds.join(', ')}`);
+
   // Load all data in parallel for maximum speed
   const [
     salesRecords,
@@ -165,19 +171,28 @@ async function loadAllDataFromAurora(): Promise<AllDataResponse> {
     invoiceLineItems,
   ] = await Promise.all([
     prisma.salesRecord.findMany({
+      where: storeFilter,
       orderBy: { date: 'asc' },
     }),
     prisma.brandRecord.findMany({
+      where: storeFilter,
       orderBy: { netSales: 'desc' },
       include: { brand: true },
     }),
     prisma.productRecord.findMany({
+      where: storeFilter,
       orderBy: { netSales: 'desc' },
     }),
     prisma.customer.findMany({
+      where: { storeName: { in: storefrontIds.map(id => {
+        // Map storefront IDs to store names for customer filtering
+        const nameMap: Record<string, string> = { greenleaf: 'Greenleaf Market', emerald: 'Emerald Collective' };
+        return nameMap[id] || id;
+      }) } },
       orderBy: { lifetimeNetSales: 'desc' },
     }),
     prisma.budtenderRecord.findMany({
+      where: storeFilter,
       orderBy: [{ date: 'desc' }, { netSales: 'desc' }],
     }),
     prisma.canonicalBrand.findMany({

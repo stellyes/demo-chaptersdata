@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseCSV, cleanSalesData } from '@/lib/services/data-processor';
 import { StoreId, SalesRecord } from '@/types';
+import { getActiveStorefrontIds } from '@/lib/utils/org-scope';
 
 // Helper to normalize margin percentage
 // If value is <= 1 and >= -1, it's stored as a decimal (e.g., 0.55 for 55%) and needs to be multiplied by 100
@@ -21,7 +22,9 @@ function normalizeMarginPct(value: number): number {
 // GET - Load all sales data from Aurora
 export async function GET() {
   try {
+    const storefrontIds = await getActiveStorefrontIds();
     const salesRecords = await prisma.salesRecord.findMany({
+      where: { storeId: { in: storefrontIds } },
       orderBy: { date: 'asc' },
     });
 

@@ -72,6 +72,7 @@ import {
 } from '@/lib/services/data-processor';
 import { EXAMPLE_COMPLETED_INVESTIGATIONS, EXAMPLE_LEARNING_REPORT } from '@/lib/demo-data/example-insights';
 import { DEMO_INVOICE_DATA } from '@/lib/demo-data/example-invoices';
+import { DEMO_BRAND_MAPPINGS } from '@/lib/demo-data/example-brand-aliases';
 import {
   isCacheValid,
   loadFromCache,
@@ -260,7 +261,7 @@ const initialState = {
   productData: [] as ProductRecord[],
   customerData: [] as CustomerRecord[],
   budtenderData: [] as BudtenderRecord[],
-  brandMappings: {} as BrandMappingData,
+  brandMappings: DEMO_BRAND_MAPPINGS as BrandMappingData,
   invoiceData: DEMO_INVOICE_DATA as InvoiceLineItem[],
   researchData: [] as ResearchDocument[],
   seoData: [] as SEOSummary[],
@@ -636,7 +637,7 @@ export const useAppStore = create<AppState>()(
               brandData: brands || [],
               productData: products || [],
               budtenderData: budtenders || [],
-              brandMappings: brandMappings || {},
+              brandMappings: { ...DEMO_BRAND_MAPPINGS, ...(brandMappings || {}) },
               dataHash,
               dataStatus: {
                 ...state.dataStatus,

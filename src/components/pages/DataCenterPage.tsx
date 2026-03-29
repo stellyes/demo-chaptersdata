@@ -33,6 +33,9 @@ import {
   CheckCircle,
   TrendingUp,
   Info,
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { DataHealthTab } from '@/components/data-health/DataHealthTab';
 import { QRPortalTab } from '@/components/pages/QRCodePage';
@@ -1443,6 +1446,8 @@ function SEOAnalysisTab() {
   const [customUrl, setCustomUrl] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [seoDetailTab, setSeoDetailTab] = useState<'overview' | 'pages' | 'issues'>('overview');
+  const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load audits on mount
@@ -1460,10 +1465,8 @@ function SEOAnalysisTab() {
       if (result.success && result.data?.length > 0) {
         setAudits(result.data);
       }
-      // If API returns empty, keep demo data
     } catch (error) {
       console.error('Failed to load audits:', error);
-      // Keep demo data on error
     }
   };
 
@@ -1479,7 +1482,6 @@ function SEOAnalysisTab() {
       if (result.success) {
         setSelectedAudit(result.data);
         loadAudits();
-        // Start polling for updates if audit is in progress
         if (result.data.status === 'crawling') {
           startPolling(result.data.id);
         }
@@ -1535,12 +1537,22 @@ function SEOAnalysisTab() {
   });
 
   const loadAuditDetails = async (auditId: string) => {
+    // For demo audits, just select them directly
+    const demoAudit = audits.find(a => a.id === auditId);
+    if (demoAudit && demoAudit.summary) {
+      setSelectedAudit(demoAudit);
+      setSeoDetailTab('overview');
+      setExpandedPages(new Set());
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch(`/api/seo/audits/${auditId}`);
       const result = await response.json();
       if (result.success) {
         setSelectedAudit(result.data);
+        setSeoDetailTab('overview');
+        setExpandedPages(new Set());
       }
     } catch (error) {
       console.error('Failed to load audit:', error);
@@ -1565,6 +1577,335 @@ function SEOAnalysisTab() {
     }
   };
 
+  const getPriorityDotColor = (priority: string) => {
+    switch (priority) {
+      case 'critical': return '#dc2626';
+      case 'high': return '#ea580c';
+      case 'medium': return '#ca8a04';
+      case 'low': return '#2563eb';
+      default: return '#6b7280';
+    }
+  };
+
+  const getPriorityBorderColor = (priority: string) => {
+    switch (priority) {
+      case 'critical': return 'border-l-red-600';
+      case 'high': return 'border-l-orange-500';
+      case 'medium': return 'border-l-yellow-500';
+      case 'low': return 'border-l-blue-500';
+      default: return 'border-l-gray-400';
+    }
+  };
+
+  // Compute issues by category from pages data
+  const issuesByCategory = useMemo(() => {
+    if (!selectedAudit?.pages) return {};
+    const counts: Record<string, number> = {};
+    for (const page of selectedAudit.pages) {
+      for (const issue of page.issues) {
+        counts[issue.category] = (counts[issue.category] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [selectedAudit]);
+
+  // Collect all issues with their page URL for the Issues tab
+  type SeoIssue = { id: string; code: string; category: string; priority: string; title: string; description: string; recommendation: string };
+  type IssueWithPage = { issue: SeoIssue; pageUrl: string };
+  const allIssuesGrouped = useMemo(() => {
+    if (!selectedAudit?.pages) return { critical: [] as IssueWithPage[], high: [] as IssueWithPage[], medium: [] as IssueWithPage[], low: [] as IssueWithPage[] };
+    const groups: Record<string, IssueWithPage[]> = {
+      critical: [],
+      high: [],
+      medium: [],
+      low: [],
+    };
+    for (const page of selectedAudit.pages) {
+      for (const issue of page.issues) {
+        const key = issue.priority;
+        if (groups[key]) {
+          groups[key].push({ issue, pageUrl: page.url });
+        }
+      }
+    }
+    return groups;
+  }, [selectedAudit]);
+
+  // --- Sub-components ---
+
+  function SEOScoreCircle({ score }: { score: number }) {
+    const color = score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : 'var(--error)';
+    const circumference = 2 * Math.PI * 40;
+    const dashOffset = circumference * (1 - score / 100);
+    return (
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="var(--border)" strokeWidth="8" />
+        <circle cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="8"
+          strokeDasharray={circumference} strokeDashoffset={dashOffset}
+          strokeLinecap="round" transform="rotate(-90 50 50)" />
+        <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+          fontSize="24" fontWeight="bold" fill={color}>{score}</text>
+      </svg>
+    );
+  }
+
+  function IssueBar({ label, count, maxCount, color }: { label: string; count: number; maxCount: number; color: string }) {
+    const width = maxCount > 0 ? (count / maxCount) * 100 : 0;
+    return (
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-xs text-[var(--muted)] w-20 text-right">{label}</span>
+        <div className="flex-1 h-5 bg-[var(--border)]/30 rounded overflow-hidden">
+          <div className="h-full rounded" style={{ width: `${width}%`, backgroundColor: color }} />
+        </div>
+        <span className="text-xs font-medium w-6 text-right">{count}</span>
+      </div>
+    );
+  }
+
+  // --- Render ---
+
+  // When an audit is selected with summary, show the detail view
+  if (selectedAudit && selectedAudit.summary) {
+    const summary = selectedAudit.summary;
+    const totalIssues = (summary.criticalIssues || 0) + (summary.highIssues || 0) + (summary.mediumIssues || 0) + (summary.lowIssues || 0);
+    const maxPriorityCount = Math.max(summary.criticalIssues || 0, summary.highIssues || 0, summary.mediumIssues || 0, summary.lowIssues || 0, 1);
+    const categoryEntries = Object.entries(issuesByCategory);
+    const maxCategoryCount = Math.max(...categoryEntries.map(([, c]) => c), 1);
+
+    const categoryColors: Record<string, string> = {
+      SEO: '#6366f1',
+      Performance: '#f59e0b',
+      Accessibility: '#8b5cf6',
+      Content: '#10b981',
+      Security: '#ef4444',
+      Mobile: '#3b82f6',
+      Links: '#ec4899',
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Back button + header */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              setSelectedAudit(null);
+              setSeoDetailTab('overview');
+              setExpandedPages(new Set());
+            }}
+            className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Audits
+          </button>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-semibold text-[var(--ink)] truncate">
+              {selectedAudit.domain.replace(/^https?:\/\//, '')}
+            </h3>
+          </div>
+          <span className={`px-2.5 py-1 text-xs font-medium rounded ${
+            selectedAudit.status === 'completed' ? 'bg-green-100 text-green-800' :
+            selectedAudit.status === 'crawling' ? 'bg-blue-100 text-blue-800' :
+            'bg-red-100 text-red-800'
+          }`}>
+            {selectedAudit.status}
+          </span>
+        </div>
+
+        {/* Dates */}
+        <div className="flex gap-4 text-xs text-[var(--muted)]">
+          <span>Started: {new Date(selectedAudit.createdAt).toLocaleString()}</span>
+          {selectedAudit.completedAt && (
+            <span>Completed: {new Date(selectedAudit.completedAt).toLocaleString()}</span>
+          )}
+        </div>
+
+        {/* Top stats row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="p-4 flex items-center gap-4">
+            <SEOScoreCircle score={summary.healthScore} />
+            <div>
+              <p className="text-xs text-[var(--muted)]">Health Score</p>
+              <p className={`text-2xl font-bold ${getScoreColor(summary.healthScore)}`}>{summary.healthScore}%</p>
+            </div>
+          </Card>
+          <Card className="p-4 text-center">
+            <p className="text-3xl font-bold font-serif text-[var(--ink)]">{summary.totalPages}</p>
+            <p className="text-xs text-[var(--muted)] mt-1">Pages Crawled</p>
+          </Card>
+          <Card className="p-4 text-center">
+            <p className="text-3xl font-bold font-serif text-[var(--ink)]">{totalIssues}</p>
+            <p className="text-xs text-[var(--muted)] mt-1">Total Issues</p>
+          </Card>
+          <Card className="p-4 text-center">
+            <p className="text-3xl font-bold font-serif text-red-600">{summary.criticalIssues || 0}</p>
+            <p className="text-xs text-[var(--muted)] mt-1">Critical Issues</p>
+          </Card>
+        </div>
+
+        {/* Tab bar */}
+        <div className="flex border-b border-[var(--border)]">
+          {(['overview', 'pages', 'issues'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setSeoDetailTab(tab)}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                seoDetailTab === tab
+                  ? 'border-[var(--accent)] text-[var(--accent)]'
+                  : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Overview Tab */}
+        {seoDetailTab === 'overview' && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <SectionLabel>Distribution</SectionLabel>
+              <SectionTitle>Issues by Priority</SectionTitle>
+              <div className="mt-4">
+                <IssueBar label="Critical" count={summary.criticalIssues || 0} maxCount={maxPriorityCount} color="#dc2626" />
+                <IssueBar label="High" count={summary.highIssues || 0} maxCount={maxPriorityCount} color="#ea580c" />
+                <IssueBar label="Medium" count={summary.mediumIssues || 0} maxCount={maxPriorityCount} color="#ca8a04" />
+                <IssueBar label="Low" count={summary.lowIssues || 0} maxCount={maxPriorityCount} color="#2563eb" />
+              </div>
+            </Card>
+            <Card>
+              <SectionLabel>Categories</SectionLabel>
+              <SectionTitle>Issues by Category</SectionTitle>
+              <div className="mt-4">
+                {categoryEntries.map(([cat, count]) => (
+                  <IssueBar
+                    key={cat}
+                    label={cat}
+                    count={count}
+                    maxCount={maxCategoryCount}
+                    color={categoryColors[cat] || '#6b7280'}
+                  />
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Pages Tab */}
+        {seoDetailTab === 'pages' && selectedAudit.pages && (
+          <div className="space-y-2">
+            {selectedAudit.pages.map((page) => {
+              const isExpanded = expandedPages.has(page.url);
+              const pathOnly = page.url.replace(/^https?:\/\/[^/]+/, '') || '/';
+              return (
+                <div key={page.url} className="border border-[var(--border)] rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setExpandedPages(prev => {
+                        const next = new Set(prev);
+                        if (next.has(page.url)) {
+                          next.delete(page.url);
+                        } else {
+                          next.add(page.url);
+                        }
+                        return next;
+                      });
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--border)]/10 transition-colors"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4 text-[var(--muted)] shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-[var(--muted)] shrink-0" />
+                    )}
+                    <span className="text-sm font-medium text-[var(--ink)] truncate flex-1">{pathOnly}</span>
+                    <span className={`px-2 py-0.5 text-xs rounded ${
+                      page.statusCode === 200 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {page.statusCode}
+                    </span>
+                    {page.issues.length > 0 ? (
+                      <span className="px-2 py-0.5 text-xs rounded bg-[var(--border)]/50 text-[var(--ink)]">
+                        {page.issues.length} issue{page.issues.length !== 1 ? 's' : ''}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-xs rounded bg-green-100 text-green-800">
+                        No issues
+                      </span>
+                    )}
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-1 border-t border-[var(--border)]">
+                      <p className="text-xs text-[var(--muted)] mb-3">{page.title || 'No title'}</p>
+                      {page.issues.length > 0 ? (
+                        <div className="space-y-2">
+                          {page.issues.map((issue) => (
+                            <div key={issue.id} className="flex items-start gap-3 p-2.5 bg-[var(--paper)] rounded border border-[var(--border)]/50">
+                              <span className={`px-2 py-0.5 text-xs rounded shrink-0 ${getPriorityColor(issue.priority)}`}>
+                                {issue.priority}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-[var(--ink)]">{issue.title}</p>
+                                <p className="text-xs text-[var(--muted)] mt-0.5">{issue.description}</p>
+                                <p className="text-xs text-[var(--accent)] mt-1">{issue.recommendation}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-[var(--success)]">No issues detected on this page.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Issues Tab */}
+        {seoDetailTab === 'issues' && (
+          <div className="space-y-6">
+            {(['critical', 'high', 'medium', 'low'] as const).map((priority) => {
+              const items = allIssuesGrouped[priority];
+              if (items.length === 0) return null;
+              return (
+                <div key={priority}>
+                  <div className={`flex items-center gap-2 mb-3 pl-3 border-l-4 ${getPriorityBorderColor(priority)}`}>
+                    <span className="text-sm font-semibold text-[var(--ink)] capitalize">{priority}</span>
+                    <span className="text-xs text-[var(--muted)]">({items.length})</span>
+                  </div>
+                  <div className="space-y-3">
+                    {items.map(({ issue, pageUrl }) => (
+                      <Card key={issue.id} className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div
+                            className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                            style={{ backgroundColor: getPriorityDotColor(priority) }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[var(--ink)]">{issue.title}</p>
+                            <p className="text-xs text-[var(--muted)] mt-1">{issue.description}</p>
+                            <p className="text-xs text-[var(--muted)] mt-1.5">
+                              Page: <span className="text-[var(--ink)]">{pageUrl.replace(/^https?:\/\/[^/]+/, '') || '/'}</span>
+                            </p>
+                            <div className="mt-2 p-2 bg-[var(--accent)]/5 rounded text-xs text-[var(--accent)]">
+                              {issue.recommendation}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Default view: card grid + new audit form
   return (
     <div className="space-y-6">
       {/* New Audit Section */}
@@ -1684,7 +2025,7 @@ function SEOAnalysisTab() {
           {filteredAudits.map((audit) => (
             <Card
               key={audit.id}
-              className={`cursor-pointer transition-all hover:border-[var(--accent)] ${selectedAudit?.id === audit.id ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : ''}`}
+              className="cursor-pointer transition-all hover:border-[var(--accent)]"
               onClick={() => loadAuditDetails(audit.id)}
             >
               {/* Progress bar for active audits */}
@@ -1746,78 +2087,6 @@ function SEOAnalysisTab() {
             </Card>
           ))}
         </div>
-      )}
-
-      {/* Selected Audit Results */}
-      {selectedAudit && selectedAudit.summary && (
-        <>
-          {/* Score Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
-            <Card className="p-4 text-center">
-              <p className={`text-3xl font-bold font-serif ${getScoreColor(selectedAudit.summary.healthScore)}`}>
-                {selectedAudit.summary.healthScore}
-              </p>
-              <p className="text-xs text-[var(--muted)]">Health Score</p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-semibold font-serif">{selectedAudit.summary.totalPages}</p>
-              <p className="text-xs text-[var(--muted)]">Pages</p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-semibold font-serif text-red-600">{selectedAudit.summary.criticalIssues}</p>
-              <p className="text-xs text-[var(--muted)]">Critical</p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-semibold font-serif text-orange-600">{selectedAudit.summary.highIssues}</p>
-              <p className="text-xs text-[var(--muted)]">High</p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-semibold font-serif text-yellow-600">{selectedAudit.summary.mediumIssues + selectedAudit.summary.lowIssues}</p>
-              <p className="text-xs text-[var(--muted)]">Medium/Low</p>
-            </Card>
-          </div>
-
-          {/* Page Issues */}
-          {selectedAudit.pages && selectedAudit.pages.length > 0 && (
-            <Card>
-              <SectionLabel>Page Analysis</SectionLabel>
-              <SectionTitle>Issues by Page</SectionTitle>
-              <div className="mt-4 space-y-4 max-h-[500px] overflow-y-auto">
-                {selectedAudit.pages.map((page) => (
-                  <div key={page.url} className="border border-[var(--border)] rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="font-medium text-[var(--ink)] break-all">{page.url}</p>
-                        <p className="text-sm text-[var(--muted)]">{page.title || 'No title'}</p>
-                      </div>
-                      <span className={`px-2 py-1 text-xs rounded ${page.statusCode === 200 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                        {page.statusCode}
-                      </span>
-                    </div>
-                    {page.issues.length > 0 ? (
-                      <div className="space-y-2">
-                        {page.issues.map((issue) => (
-                          <div key={issue.id} className="flex items-start gap-3 p-2 bg-[var(--paper)] rounded">
-                            <span className={`px-2 py-0.5 text-xs rounded ${getPriorityColor(issue.priority)}`}>
-                              {issue.priority}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-[var(--ink)]">{issue.title}</p>
-                              <p className="text-xs text-[var(--muted)]">{issue.description}</p>
-                              <p className="text-xs text-[var(--accent)] mt-1">→ {issue.recommendation}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-[var(--success)]">No issues found</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-        </>
       )}
 
       {loading && (
