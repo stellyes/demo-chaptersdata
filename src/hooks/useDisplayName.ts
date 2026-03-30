@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { fetchUserAttributes } from 'aws-amplify/auth';
+import { isAmplifyConfigured } from '@/lib/amplify-config';
 
 const DISPLAY_NAME_KEY = 'chapters_display_name';
 const PROFILE_KEY = 'chapters_profile';
@@ -22,6 +24,9 @@ export function useDisplayName(userId: string | undefined) {
     const fetchDisplayName = async () => {
       let storedName: string | null = null;
 
+      // Reject values that look like internal IDs rather than real names
+      const isValidName = (name: string) => name.trim().length > 0 && name !== userId;
+
       // First, try to fetch from API/server
       try {
         timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -32,7 +37,7 @@ export function useDisplayName(userId: string | undefined) {
         if (response.ok) {
           const data = await response.json();
           const profile = data.profile;
-          if (profile?.displayName && typeof profile.displayName === 'string') {
+          if (profile?.displayName && typeof profile.displayName === 'string' && isValidName(profile.displayName)) {
             storedName = profile.displayName as string;
             // Cache locally
             localStorage.setItem(`${DISPLAY_NAME_KEY}_${userId}`, storedName as string);
@@ -50,7 +55,10 @@ export function useDisplayName(userId: string | undefined) {
 
       // Fallback to localStorage if API didn't have it
       if (!storedName) {
-        storedName = localStorage.getItem(`${DISPLAY_NAME_KEY}_${userId}`);
+        const cached = localStorage.getItem(`${DISPLAY_NAME_KEY}_${userId}`);
+        if (cached && isValidName(cached)) {
+          storedName = cached;
+        }
       }
 
       // Also check profile storage if not found
@@ -59,7 +67,7 @@ export function useDisplayName(userId: string | undefined) {
         if (profileData) {
           try {
             const parsed = JSON.parse(profileData);
-            if (parsed.displayName && typeof parsed.displayName === 'string') {
+            if (parsed.displayName && typeof parsed.displayName === 'string' && isValidName(parsed.displayName)) {
               storedName = parsed.displayName as string;
               // Sync to display name storage
               localStorage.setItem(`${DISPLAY_NAME_KEY}_${userId}`, storedName as string);
@@ -67,6 +75,23 @@ export function useDisplayName(userId: string | undefined) {
           } catch {
             // Invalid JSON, ignore
           }
+        }
+      }
+
+      // Cognito fallback — prefer explicit name attributes, fall back to full email
+      if (!storedName && isAmplifyConfigured()) {
+        try {
+          const attributes = await fetchUserAttributes();
+          const cognitoName = attributes.name ||
+                             attributes.preferred_username ||
+                             attributes.given_name ||
+                             attributes.email; // full email, not split
+          if (cognitoName && isValidName(cognitoName)) {
+            storedName = cognitoName;
+            localStorage.setItem(`${DISPLAY_NAME_KEY}_${userId}`, storedName);
+          }
+        } catch {
+          // Failed to fetch user attributes, continue without
         }
       }
 

@@ -283,7 +283,9 @@ export function useAuth() {
   }, [destroySessionToken]);
 
   // Force logout (called when session is invalidated externally)
-  const forceLogout = useCallback(() => {
+  // Clears local state immediately, then clears Cognito tokens to prevent
+  // the login page from re-detecting the stale session and looping.
+  const forceLogout = useCallback(async () => {
     clearLocalSessionToken();
     clearSessionCookie();
     setAuthState({
@@ -294,6 +296,13 @@ export function useAuth() {
       error: null,
       needsNewPassword: false,
     });
+    if (isAmplifyConfigured()) {
+      try {
+        await signOut({ global: false });
+      } catch {
+        // Ignore sign out errors — local session is already cleared
+      }
+    }
   }, []);
 
   return {

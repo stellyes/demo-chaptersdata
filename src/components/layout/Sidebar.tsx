@@ -185,11 +185,11 @@ export function Sidebar() {
         <div className="pt-3 sm:pt-4 border-t border-[var(--border)]">
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[var(--accent-light)] flex items-center justify-center text-white font-semibold text-xs sm:text-sm shrink-0">
-              {(displayName || user?.username)?.charAt(0).toUpperCase() || 'U'}
+              {(displayName || user?.email || user?.username)?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-[var(--ink)] m-0 truncate">
-                {displayName || user?.username || 'Guest'}
+                {displayName || user?.email || 'User'}
               </p>
               <p className="text-xs text-[var(--muted)] m-0 capitalize">{user?.role || 'User'}</p>
             </div>
