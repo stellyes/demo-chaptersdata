@@ -840,6 +840,36 @@ export const useAppStore = create<AppState>()(
               }
 
               console.log(`Loaded ${allInvoices.length} invoices in ${page - 1} pages`);
+
+              if (allInvoices.length > 0) {
+                // Fire a notification so the user can see invoices loaded
+                get().addNotification({
+                  type: 'info',
+                  title: 'Invoice Data Ready',
+                  message: `${allInvoices.length.toLocaleString()} invoice line items loaded.`,
+                  actionLabel: 'View Analytics',
+                  actionPage: 'sales',
+                  actionTab: 'invoices',
+                });
+              } else {
+                // API returned no rows — reflect whatever is already in the store
+                // (e.g. pre-seeded DEMO_INVOICE_DATA) so the Data Status panel isn't misleading
+                set((state) => {
+                  if (state.invoiceData.length > 0) {
+                    return {
+                      dataStatus: {
+                        ...state.dataStatus,
+                        invoices: {
+                          loaded: true,
+                          count: state.invoiceData.length,
+                          lastUpdated: new Date().toISOString(),
+                        },
+                      },
+                    };
+                  }
+                  return {};
+                });
+              }
             };
 
             loadInvoicePages().catch(err => {
