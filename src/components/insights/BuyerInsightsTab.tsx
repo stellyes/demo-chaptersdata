@@ -94,6 +94,11 @@ export function BuyerInsightsTab() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [aiRecommendations]);
 
+  // Set of insight IDs already investigated — used to hide them from the pending list
+  const investigatedBuyerInsightIds = useMemo(() => {
+    return new Set(pastBuyerInvestigations.map(p => p.insightId).filter(Boolean) as string[]);
+  }, [pastBuyerInvestigations]);
+
   // Lookup map from insight ID to LearnedBuyerInsight for breadcrumb access
   const learnedInsightMap = useMemo(() => {
     const map: Record<string, LearnedBuyerInsight> = {};
@@ -257,6 +262,7 @@ export function BuyerInsightsTab() {
           date: new Date().toISOString(),
           analysis: result,
           summary: insightText.slice(0, 200),
+          insightId: selectedInsight.id,
         });
         // Fire-and-forget POST to save investigation to knowledge base
         fetch('/api/knowledge-base', {
@@ -326,6 +332,7 @@ export function BuyerInsightsTab() {
                 date: new Date().toISOString(),
                 analysis: accumulated,
                 summary: insightText.slice(0, 200),
+                insightId: selectedInsight.id,
               });
               // Fire-and-forget POST to save investigation to knowledge base
               fetch('/api/knowledge-base', {
@@ -420,18 +427,20 @@ export function BuyerInsightsTab() {
     setShowExportMenu(false);
   };
 
-  // Filter insights based on category
-  const filteredBuyerInsights = selectedCategory === 'all'
+  // Filter insights based on category, then exclude already-investigated ones
+  const filteredBuyerInsights = (selectedCategory === 'all'
     ? buyerInsights
-    : buyerInsights.filter(i => i.category === selectedCategory);
+    : buyerInsights.filter(i => i.category === selectedCategory)
+  ).filter(i => !investigatedBuyerInsightIds.has(i.id));
 
-  const filteredKnowledgeInsights = selectedCategory === 'all'
+  const filteredKnowledgeInsights = (selectedCategory === 'all'
     ? knowledgeInsights
     : knowledgeInsights.filter(i =>
         i.category === selectedCategory ||
         i.category === 'purchasing' ||
         i.category === 'vendors'
-      );
+      )
+  ).filter(i => !investigatedBuyerInsightIds.has(i.id));
 
   if (loading) {
     return (

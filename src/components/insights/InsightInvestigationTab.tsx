@@ -86,6 +86,11 @@ export function InsightInvestigationTab() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [aiRecommendations]);
 
+  // Set of insight IDs that have already been investigated — used to hide them from pending list
+  const investigatedInsightIds = useMemo(() => {
+    return new Set(pastInvestigations.map(p => p.insightId).filter(Boolean) as string[]);
+  }, [pastInvestigations]);
+
   useEffect(() => {
     loadInsights();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,6 +191,7 @@ export function InsightInvestigationTab() {
           date: new Date().toISOString(),
           analysis: result,
           summary: selectedInsight.insight.slice(0, 200),
+          insightId: selectedInsight.id,
         });
         addNotification({
           type: 'success',
@@ -243,6 +249,7 @@ export function InsightInvestigationTab() {
                 date: new Date().toISOString(),
                 analysis: accumulated,
                 summary: selectedInsight.insight.slice(0, 200),
+                insightId: selectedInsight.id,
               });
               addNotification({
                 type: 'success',
@@ -431,17 +438,17 @@ export function InsightInvestigationTab() {
             <SectionLabel>Available Insights</SectionLabel>
             <SectionTitle>Select an Insight to Investigate</SectionTitle>
 
-            {insights.length === 0 ? (
+            {insights.filter(i => !investigatedInsightIds.has(i.id)).length === 0 ? (
               <div className="text-center py-8">
                 <Lightbulb className="w-12 h-12 text-[var(--muted)] mx-auto mb-3" />
-                <p className="text-[var(--muted)]">No insights found.</p>
+                <p className="text-[var(--muted)]">No pending insights.</p>
                 <p className="text-sm text-[var(--muted)] mt-1">
-                  Run the Progressive Learning System to generate insights.
+                  All insights have been investigated. Check the Past Investigations section below.
                 </p>
               </div>
             ) : (
               <div className="mt-4 space-y-2 max-h-[400px] overflow-y-auto">
-                {insights.map((insight) => (
+                {insights.filter(i => !investigatedInsightIds.has(i.id)).map((insight) => (
                   <button
                     key={insight.id}
                     onClick={() => {

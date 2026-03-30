@@ -88,6 +88,7 @@ export interface AIRecommendation {
   date: string;
   analysis: string;
   summary?: string;
+  insightId?: string; // original insight ID — used to remove it from the pending list
 }
 
 // Notification type for the notification center
