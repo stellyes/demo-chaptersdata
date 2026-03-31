@@ -47,7 +47,7 @@ export function useProfile(userId: string | undefined) {
     const loadProfile = async () => {
       // First, try to load from API/server
       try {
-        timeoutId = setTimeout(() => controller.abort(), 3000);
+        timeoutId = setTimeout(() => controller.abort(), 8000);
         const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
           signal: controller.signal,
         });
@@ -76,11 +76,10 @@ export function useProfile(userId: string | undefined) {
           }
         }
       } catch (error) {
-        // Ignore abort errors - they're expected on unmount or timeout
-        if (error instanceof Error && error.name === 'AbortError') {
-          return;
+        // On timeout (AbortError) or any other fetch error, fall through to localStorage
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          console.error('Failed to fetch profile from API:', error);
         }
-        console.error('Failed to fetch profile from API:', error);
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
       }

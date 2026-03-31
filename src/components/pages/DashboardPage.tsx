@@ -13,8 +13,6 @@ import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalize
 import { calculateSalesSummary, calculateCustomerSummary } from '@/lib/services/data-processor';
 import { needsMarginConversion, normalizeMarginValue } from '@/lib/utils/margin';
 import { STORES, getIndividualStoreIds, getStoreColor } from '@/lib/config';
-import { format } from 'date-fns';
-
 const storeIds = getIndividualStoreIds();
 
 export const DashboardPage = memo(function DashboardPage() {
@@ -93,7 +91,7 @@ export const DashboardPage = memo(function DashboardPage() {
     }
     return Object.values(byDate)
       .sort((a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime())
-      .map((d) => ({ ...d, date: format(new Date(d.date as string), 'MMM d') }));
+      .map((d) => ({ ...d, date: d.date as string }));
   }, [salesData]);
 
   // Prepare transaction count chart data
@@ -111,7 +109,7 @@ export const DashboardPage = memo(function DashboardPage() {
     }
     return Object.values(byDate)
       .sort((a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime())
-      .map((d) => ({ ...d, date: format(new Date(d.date as string), 'MMM d') }));
+      .map((d) => ({ ...d, date: d.date as string }));
   }, [salesData]);
 
   // Prepare top brands data for pie chart (full brand names)

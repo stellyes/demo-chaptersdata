@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { format, parseISO, isValid } from 'date-fns';
 import {
   LineChart,
   Line,
@@ -24,6 +25,24 @@ interface SalesChartProps {
 
 const storeIds = getIndividualStoreIds();
 
+// Format an ISO date string for display on the chart axis
+function formatDateTick(value: string): string {
+  try {
+    const parsed = parseISO(value);
+    if (isValid(parsed)) return format(parsed, 'MMM d');
+  } catch { /* ignore */ }
+  return value; // fall back to raw value if not parseable
+}
+
+// Format an ISO date string for the tooltip label (include year)
+function formatDateLabel(value: string): string {
+  try {
+    const parsed = parseISO(value);
+    if (isValid(parsed)) return format(parsed, 'MMM d, yyyy');
+  } catch { /* ignore */ }
+  return value;
+}
+
 export const SalesChart = memo(function SalesChart({ data, metric = 'revenue', showLegend = true, yDomain }: SalesChartProps) {
   const formatYAxis = (value: number) => {
     if (metric === 'revenue') return `$${(value / 1000).toFixed(0)}k`;
@@ -43,11 +62,12 @@ export const SalesChart = memo(function SalesChart({ data, metric = 'revenue', s
           ))}
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" vertical={false} />
-        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} />
+        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} tickFormatter={formatDateTick} />
         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} tickFormatter={formatYAxis} domain={yDomain || ['auto', 'auto']} />
         <Tooltip
           contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e0ddd8', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
           formatter={(value) => [formatYAxis(Number(value)), '']}
+          labelFormatter={formatDateLabel}
         />
         {showLegend && <Legend />}
         {storeIds.map((id) => (
@@ -76,11 +96,12 @@ export const TransactionChart = memo(function TransactionChart({ data, showLegen
           ))}
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#e0ddd8" vertical={false} />
-        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} />
+        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} tickFormatter={formatDateTick} />
         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b6b6b', fontSize: 12 }} tickFormatter={(v) => v.toLocaleString()} />
         <Tooltip
           contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e0ddd8', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
           formatter={(value) => [Number(value).toLocaleString(), 'Transactions']}
+          labelFormatter={formatDateLabel}
         />
         {showLegend && <Legend />}
         {storeIds.map((id) => (

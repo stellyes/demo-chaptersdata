@@ -46,7 +46,7 @@ function SalesTrendsTab() {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d) => ({
         ...d,
-        date: format(new Date(d.date), 'MMM d'),
+        date: d.date,
       }));
   }, [salesData]);
 
@@ -70,7 +70,7 @@ function SalesTrendsTab() {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d) => ({
         ...d,
-        date: format(new Date(d.date), 'MMM d'),
+        date: d.date,
       }));
   }, [salesData]);
 
@@ -97,7 +97,7 @@ function SalesTrendsTab() {
     return Object.values(byDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d) => {
-        const result: Record<string, any> = { date: format(new Date(d.date), 'MMM d') };
+        const result: Record<string, any> = { date: d.date };
         for (const sid of storeIds) {
           const cnt = counts[d.date]?.[sid] || 0;
           result[sid] = cnt > 0 ? d[sid] / cnt : 0;
