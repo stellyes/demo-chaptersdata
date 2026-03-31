@@ -11,6 +11,7 @@ import {
   Sun,
   Store,
   X,
+  BarChart3,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useAppStore, PageType } from '@/store/app-store';
@@ -93,6 +94,7 @@ export function Sidebar() {
     { icon: LayoutDashboard, label: 'Dashboard', page: 'dashboard' },
     { icon: TrendingUp, label: 'Sales Analytics', page: 'sales' },
     { icon: Sparkles, label: 'Recommendations', page: 'recommendations' },
+    { icon: BarChart3, label: 'Marketing Analytics', page: 'marketing' },
     { icon: Database, label: 'Data Center', page: 'data-center' },
   ];
 

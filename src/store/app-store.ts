@@ -109,6 +109,7 @@ export interface AppNotification {
 export type PageType =
   | 'dashboard'
   | 'sales'
+  | 'marketing'
   | 'recommendations'
   | 'data-center'
   | 'research'

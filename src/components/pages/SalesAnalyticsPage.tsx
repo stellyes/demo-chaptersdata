@@ -731,7 +731,7 @@ function RawDataTab() {
 // ============================================
 // CUSTOMER ANALYTICS TAB
 // ============================================
-function CustomerAnalyticsTab() {
+export function CustomerAnalyticsTab() {
   const { customerData } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'segments' | 'ltv' | 'recency' | 'search'>('overview');
@@ -1804,11 +1804,6 @@ export const SalesAnalyticsPage = memo(function SalesAnalyticsPage() {
       id: 'raw',
       label: 'Raw Data',
       render: () => <RawDataTab />,
-    },
-    {
-      id: 'customers',
-      label: 'Customer Analytics',
-      render: () => <CustomerAnalyticsTab />,
     },
     {
       id: 'budtenders',

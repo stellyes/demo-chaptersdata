@@ -1105,6 +1105,61 @@ model ActionItem {
   @@map("action_items")
 }
 
+// ============================================
+// EVENT GEOFENCING & MARKETING ANALYTICS
+// ============================================
+
+model EventVenue {
+  id          String         @id @default(uuid())
+  name        String
+  latitude    Float
+  longitude   Float
+  category    String         // cultural, festival, theater, convention, sports, music
+  color       String         @default("#999999")
+  radius      Int            @default(300) // geofence radius in meters
+  city        String         @default("San Francisco")
+  address     String?
+  source      String?        // where venue was discovered
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  events      EventListing[]
+
+  @@index([city])
+  @@index([category])
+  @@map("event_venues")
+}
+
+model EventListing {
+  id                  String     @id @default(uuid())
+  venueId             String     @map("venue_id")
+  name                String
+  date                String     // flexible date format (e.g. "Mar 7-8, 2026", "Throughout Feb 2026")
+  time                String?
+  description         String?
+  expectedAttendance  String?    @map("expected_attendance")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  venue               EventVenue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@index([venueId])
+  @@index([date])
+  @@map("event_listings")
+}
+
+model EventDiscoverySweep {
+  id           String    @id @default(uuid())
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  status       String    @default("running") // running, completed, failed
+  venuesFound  Int       @default(0) @map("venues_found")
+  eventsFound  Int       @default(0) @map("events_found")
+  searchQueries Json?    @map("search_queries") // JSON array of queries used
+  sources       Json?    // JSON array of sources checked
+  errors        Json?    // JSON array of any errors
+
+  @@index([status])
+  @@map("event_discovery_sweeps")
+}
+
 model FeedbackCycle {
   id               String   @id @default(uuid())
   cycleDate        DateTime @unique @map("cycle_date") @db.Date

@@ -38,7 +38,6 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { DataHealthTab } from '@/components/data-health/DataHealthTab';
-import { QRPortalTab } from '@/components/pages/QRCodePage';
 import { EXAMPLE_SEO_AUDITS } from '@/lib/demo-data/example-seo';
 
 // ============================================
@@ -1436,7 +1435,7 @@ interface SeoAudit {
   }>;
 }
 
-function SEOAnalysisTab() {
+export function SEOAnalysisTab() {
   const [selectedSite, setSelectedSite] = useState(SEO_SITES[0]);
   const [audits, setAudits] = useState<SeoAudit[]>(EXAMPLE_SEO_AUDITS as SeoAudit[]);
   const [selectedAudit, setSelectedAudit] = useState<SeoAudit | null>(null);
@@ -2136,19 +2135,9 @@ export const DataCenterPage = memo(function DataCenterPage() {
       render: () => <BrandMappingTab />,
     },
     {
-      id: 'seo',
-      label: 'SEO Analysis',
-      render: () => <SEOAnalysisTab />,
-    },
-    {
       id: 'health',
       label: 'Data Health',
       render: () => <DataHealthTab />,
-    },
-    {
-      id: 'qr-portal',
-      label: 'QR Portal',
-      render: () => <QRPortalTab />,
     },
   ];
 

@@ -8,6 +8,7 @@ import { DashboardPage } from '@/components/pages/DashboardPage';
 import { SalesAnalyticsPage } from '@/components/pages/SalesAnalyticsPage';
 import { RecommendationsPage } from '@/components/pages/RecommendationsPage';
 import { DataCenterPage } from '@/components/pages/DataCenterPage';
+import { MarketingAnalyticsPage } from '@/components/pages/MarketingAnalyticsPage';
 import { SettingsPage } from '@/components/pages/SettingsPage';
 import { LoginPage } from '@/components/pages/LoginPage';
 import { LoadingToast } from '@/components/ui/LoadingToast';
@@ -84,6 +85,8 @@ export default function AppClient() {
         return <SalesAnalyticsPage />;
       case 'recommendations':
         return <RecommendationsPage />;
+      case 'marketing':
+        return <MarketingAnalyticsPage />;
       case 'data-center':
         return <DataCenterPage />;
       case 'settings':
