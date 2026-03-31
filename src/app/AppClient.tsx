@@ -13,6 +13,7 @@ import { SettingsPage } from '@/components/pages/SettingsPage';
 import { LoginPage } from '@/components/pages/LoginPage';
 import { LoadingToast } from '@/components/ui/LoadingToast';
 import { NotificationCenter } from '@/components/ui/NotificationCenter';
+import { GuestEmailCapture } from '@/components/ui/GuestEmailCapture';
 import { Menu, Bell } from 'lucide-react';
 
 export default function AppClient() {
@@ -149,6 +150,9 @@ export default function AppClient() {
 
       {/* Loading Toast - shows after 500ms if data is still loading */}
       <LoadingToast isVisible={isDataLoading} delayMs={500} />
+
+      {/* Soft email capture — appears after 30s, non-blocking */}
+      <GuestEmailCapture />
     </div>
   );
 }

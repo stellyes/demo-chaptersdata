@@ -1,16 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Lock, Loader2, Mail, Check, X } from 'lucide-react';
+import { Lock, Loader2, Check, X } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/app-store';
 
 export function LoginPage() {
-  const { signIn, confirmNewPassword, isLoading, error, needsNewPassword, isAuthenticated, user, checkAuth } = useAuth();
+  const { confirmNewPassword, isLoading, error, needsNewPassword, isAuthenticated, user, checkAuth } = useAuth();
   const { setUser, setCurrentOrganization } = useAppStore();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState('');
@@ -34,10 +32,9 @@ export function LoginPage() {
     }
   }, [isLoading]);
 
-  // When authentication succeeds, update the app store
+  // When Cognito authentication succeeds, update the app store
   useEffect(() => {
     if (isAuthenticated && user) {
-      // Convert Cognito user to app user format
       const appUser = {
         username: user.username,
         role: user.isGlobalAdmin ? 'admin' as const : 'analyst' as const,
@@ -47,29 +44,31 @@ export function LoginPage() {
         isGlobalAdmin: user.isGlobalAdmin,
       };
       setUser(appUser);
-
-      // Set the first organization as current (or null for global admins)
       if (user.organizations && user.organizations.length > 0) {
         setCurrentOrganization(user.organizations[0]);
       }
     }
   }, [isAuthenticated, user, setUser, setCurrentOrganization]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLocalError('');
-
-    try {
-      await signIn(email, password);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Login failed. Please try again.';
-      // If user is already signed in, just refresh auth state to load them
-      if (errorMessage.includes('already a signed in user')) {
-        await checkAuth();
-        return;
+  // Capture UTM parameter and store for session attribution
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const utm = params.get('utm');
+      if (utm) {
+        sessionStorage.setItem('chapters_utm', utm);
       }
-      setLocalError(errorMessage);
     }
+  }, []);
+
+  const handleGuestAccess = () => {
+    setUser({
+      username: 'guest',
+      role: 'analyst',
+      userId: 'guest',
+      organizations: [],
+      isGlobalAdmin: false,
+    });
   };
 
   const handleNewPassword = async (e: React.FormEvent) => {
@@ -80,7 +79,6 @@ export function LoginPage() {
       setLocalError('Please meet all password requirements');
       return;
     }
-
     if (!passwordsMatch) {
       setLocalError('Passwords do not match');
       return;
@@ -103,7 +101,6 @@ export function LoginPage() {
 
   const displayError = localError || error;
 
-  // Password requirement indicator component
   const PasswordCheck = ({ met, label }: { met: boolean; label: string }) => (
     <div className={`flex items-center gap-2 text-xs ${met ? 'text-[var(--success)]' : 'text-[var(--muted)]'}`}>
       {met ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
@@ -130,7 +127,7 @@ export function LoginPage() {
     );
   }
 
-  // New password form
+  // New password form (Cognito first-login flow — admin path only)
   if (needsNewPassword) {
     return (
       <div className="min-h-screen bg-[var(--paper)] flex items-center justify-center p-4">
@@ -161,9 +158,7 @@ export function LoginPage() {
 
             <form onSubmit={handleNewPassword} className="space-y-4">
               <div>
-                <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-                  New Password
-                </label>
+                <label className="text-sm font-medium text-[var(--muted)] block mb-2">New Password</label>
                 <div className="relative">
                   <Lock className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
@@ -179,9 +174,7 @@ export function LoginPage() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-                  Confirm Password
-                </label>
+                <label className="text-sm font-medium text-[var(--muted)] block mb-2">Confirm Password</label>
                 <div className="relative">
                   <Lock className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
@@ -201,7 +194,6 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Password Requirements */}
               <div className="p-3 bg-[var(--cream)] rounded space-y-1.5">
                 <p className="text-xs font-medium text-[var(--muted)] mb-2">Password requirements:</p>
                 <PasswordCheck met={passwordChecks.length} label="At least 8 characters" />
@@ -237,7 +229,7 @@ export function LoginPage() {
     );
   }
 
-  // Login form
+  // Guest access landing
   return (
     <div className="min-h-screen bg-[var(--paper)] flex items-center justify-center p-4">
       <div className="noise-overlay"></div>
@@ -257,73 +249,20 @@ export function LoginPage() {
           <p className="text-[0.65rem] text-[var(--muted)] leading-none mt-1">Data & Marketing Consulting, LLC</p>
         </div>
 
-        <div className="bg-[var(--white)] rounded-lg p-8 shadow-[0_4px_30px_rgba(0,0,0,0.06)]">
-          <h2 className="font-serif text-2xl font-medium text-[var(--ink)] mb-6 text-center">
+        <div className="bg-[var(--white)] rounded-lg p-8 shadow-[0_4px_30px_rgba(0,0,0,0.06)] text-center">
+          <h2 className="font-serif text-2xl font-medium text-[var(--ink)] mb-3">
             Retail Intelligence
           </h2>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-                Email
-              </label>
-              <div className="relative">
-                <Mail className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  className="w-full pl-10 pr-4 py-3 border border-[var(--border)] rounded text-sm"
-                  autoFocus
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-[var(--muted)] block mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="w-full pl-10 pr-4 py-3 border border-[var(--border)] rounded text-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            {displayError && (
-              <div className="p-3 bg-[var(--error)]/10 border border-[var(--error)]/20 rounded text-sm text-[var(--error)]">
-                {displayError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--ink)] text-[var(--paper)] rounded font-medium disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign In'
-              )}
-            </button>
-          </form>
+          <p className="text-sm text-[var(--muted)] mb-8 leading-relaxed">
+            This dashboard runs on synthetic data. Your version trains on your actual store data.
+          </p>
+          <button
+            onClick={handleGuestAccess}
+            className="w-full px-4 py-3 bg-[var(--ink)] text-[var(--paper)] rounded font-medium hover:opacity-90 transition-opacity"
+          >
+            View the Demo Dashboard
+          </button>
         </div>
-
-        <p className="text-center text-xs text-[var(--muted)] mt-6">
-          Need help? Contact <a href="mailto:support@chaptersdata.com" className="text-[var(--accent)] hover:underline">support@chaptersdata.com</a>
-        </p>
       </div>
     </div>
   );
