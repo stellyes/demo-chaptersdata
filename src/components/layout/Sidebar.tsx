@@ -19,6 +19,7 @@ import { StoreId } from '@/types';
 import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useDisplayName } from '@/hooks/useDisplayName';
+import { cacheWipe } from '@/lib/services/analytics-cache';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -64,6 +65,8 @@ export function Sidebar() {
 
   const handleLogout = async () => {
     await signOut();
+    // Wipe all analytics cache so the next user doesn't see stale data
+    cacheWipe().catch(() => {});
     setUser(null);
     setCurrentOrganization(null);
   };

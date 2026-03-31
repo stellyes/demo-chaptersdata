@@ -121,6 +121,27 @@ export interface InvoiceLineItem {
   invoice_date?: string;
 }
 
+// Pre-aggregated customer analytics (from /api/data/customer-summary)
+// Replaces expensive client-side computation over 830k raw records.
+export interface TopCustomer {
+  customerId: string;
+  name: string;
+  lifetimeNetSales: number;
+  lifetimeVisits: number;
+  lastVisitDate: string;
+  customerSegment: string;
+}
+
+export interface CustomerSummary {
+  totalCustomers: number;
+  segmentBreakdown: Record<string, number>;
+  recencyBreakdown: Record<string, number>;
+  avgLifetimeValue: number;
+  totalRevenue: number;
+  avgVisits: number;
+  topCustomers: TopCustomer[];
+}
+
 // Research document types
 export interface ResearchDocument {
   id: string;

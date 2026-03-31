@@ -14,6 +14,7 @@ import {
   generateSessionId,
   SessionBroadcastChannel,
 } from '@/lib/session-sync';
+import { cacheWipe } from '@/lib/services/analytics-cache';
 
 export interface UserOrganization {
   orgId: string;
@@ -288,6 +289,7 @@ export function useAuth() {
   const forceLogout = useCallback(async () => {
     clearLocalSessionToken();
     clearSessionCookie();
+    cacheWipe().catch(() => {});
     setAuthState({
       isAuthenticated: false,
       isLoading: false,

@@ -9,14 +9,14 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SectionTitle } from '@/components/ui/SectionTitle';
 import { SalesChart, TransactionChart } from '@/components/charts/SalesChart';
 import { CategoryPieChart } from '@/components/charts/PieChart';
-import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat, useFilteredCustomerData } from '@/store/app-store';
-import { calculateSalesSummary, calculateCustomerSummary } from '@/lib/services/data-processor';
+import { useAppStore, useFilteredSalesData, useFilteredProductData, useNormalizedBrandDataCompat } from '@/store/app-store';
+import { calculateSalesSummary } from '@/lib/services/data-processor';
 import { needsMarginConversion, normalizeMarginValue } from '@/lib/utils/margin';
 import { STORES, getIndividualStoreIds, getStoreColor } from '@/lib/config';
 const storeIds = getIndividualStoreIds();
 
 export const DashboardPage = memo(function DashboardPage() {
-  const { dataStatus } = useAppStore();
+  const { dataStatus, customerSummary } = useAppStore();
   const salesData = useFilteredSalesData();
   // Use normalized brand data - consolidates aliases under canonical brand names
   const brandData = useNormalizedBrandDataCompat();
@@ -28,10 +28,8 @@ export const DashboardPage = memo(function DashboardPage() {
     if (selectedStore === 'combined') return allBudtenderData;
     return allBudtenderData.filter(b => b.store_id === selectedStore);
   }, [allBudtenderData, selectedStore]);
-  const customerData = useFilteredCustomerData();
 
   const summary = useMemo(() => calculateSalesSummary(salesData), [salesData]);
-  const customerSummary = useMemo(() => calculateCustomerSummary(customerData), [customerData]);
 
   // Budtender performance summary
   const budtenderSummary = useMemo(() => {
@@ -381,7 +379,7 @@ export const DashboardPage = memo(function DashboardPage() {
               <SectionTitle>Active Customers</SectionTitle>
             </div>
           </div>
-          {customerSummary.totalCustomers > 0 ? (
+          {customerSummary && customerSummary.totalCustomers > 0 ? (
             <div className="space-y-4">
               {/* Customer Segment Distribution */}
               <div>

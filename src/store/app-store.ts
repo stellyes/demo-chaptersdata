@@ -64,7 +64,9 @@ import {
   ResearchDocument,
   SEOSummary,
   QRCode,
+  CustomerSummary,
 } from '@/types';
+import { cacheGet, cacheSet, cacheWipe, makeCacheKey } from '@/lib/services/analytics-cache';
 import {
   normalizeBrandData,
   toCompatibleBrandRecords,
@@ -243,6 +245,11 @@ interface AppState {
   // Reset all state
   reset: () => void;
 
+  // Pre-aggregated customer summary (replaces computing from 830k raw records)
+  customerSummary: CustomerSummary | null;
+  setCustomerSummary: (summary: CustomerSummary | null) => void;
+  loadCustomerSummary: () => Promise<void>;
+
   // Data loading
   dataHash: string | null;
   setDataHash: (hash: string | null) => void;
@@ -268,6 +275,7 @@ const initialState = {
   seoData: [] as SEOSummary[],
   qrCodesData: [] as QRCode[],
   aiRecommendations: [...EXAMPLE_COMPLETED_INVESTIGATIONS, EXAMPLE_LEARNING_REPORT] as AIRecommendation[],
+  customerSummary: null as CustomerSummary | null,
   permanentEmployees: {} as Record<string, StoreId>,
   isLoading: false,
   loadingOverlay: {
@@ -609,9 +617,46 @@ export const useAppStore = create<AppState>()(
 
       setDataHash: (dataHash) => set({ dataHash }),
 
+      setCustomerSummary: (customerSummary) => set({ customerSummary }),
+
+      loadCustomerSummary: async () => {
+        const { dateRange, selectedStore } = get();
+        const startDate = dateRange?.start;
+        const endDate   = dateRange?.end;
+        const storeId   = selectedStore !== 'combined' ? selectedStore : undefined;
+        const key = makeCacheKey(startDate, endDate, storeId);
+
+        // Check analytics cache first
+        const cached = await cacheGet<CustomerSummary>('customerSummary', key);
+        if (cached) {
+          set({ customerSummary: cached });
+          return;
+        }
+
+        // Fetch pre-aggregated summary from server
+        try {
+          const params = new URLSearchParams();
+          if (startDate) params.set('startDate', startDate);
+          if (endDate)   params.set('endDate', endDate);
+          if (storeId)   params.set('storeId', storeId);
+
+          const res = await fetch(`/api/data/customer-summary?${params.toString()}`);
+          const result = await res.json();
+
+          if (result.success && result.data) {
+            set({ customerSummary: result.data });
+            // Save to analytics cache
+            cacheSet<CustomerSummary>('customerSummary', key, result.data).catch(() => {});
+          }
+        } catch (err) {
+          console.error('[loadCustomerSummary] Failed:', err);
+        }
+      },
+
       loadData: async () => {
         // Get current date range for server-side filtering
         const { dateRange } = get();
+        const mainCacheKey = makeCacheKey(dateRange?.start, dateRange?.end);
 
         set({ isLoading: true });
         try {
@@ -621,12 +666,53 @@ export const useAppStore = create<AppState>()(
             params.set('endDate', dateRange.end);
           }
 
+          // ── Analytics cache check ───────────────────────────────────────
+          // Check IndexedDB before hitting the API. On a cache hit we skip
+          // the full Aurora load and restore state in under 100 ms.
+          type MainBundle = {
+            sales: SalesRecord[]; brands: BrandRecord[]; products: ProductRecord[];
+            budtenders: BudtenderRecord[]; brandMappings: BrandMappingData;
+            dataHash: string; loadedAt: string;
+          };
+          const cachedBundle = await cacheGet<MainBundle>('main', mainCacheKey);
+          if (cachedBundle) {
+            const { sales, brands, products, budtenders, brandMappings, dataHash, loadedAt } = cachedBundle;
+            const mappingsCount = brandMappings ? Object.keys(brandMappings).length : 0;
+            set((state) => ({
+              salesData: sales || [],
+              brandData: brands || [],
+              productData: products || [],
+              budtenderData: budtenders || [],
+              brandMappings: { ...DEMO_BRAND_MAPPINGS, ...(brandMappings || {}) },
+              dataHash,
+              dataStatus: {
+                ...state.dataStatus,
+                sales:     { loaded: (sales?.length || 0) > 0,     count: sales?.length || 0,     lastUpdated: loadedAt },
+                brands:    { loaded: (brands?.length || 0) > 0,    count: brands?.length || 0,    lastUpdated: loadedAt },
+                products:  { loaded: (products?.length || 0) > 0,  count: products?.length || 0,  lastUpdated: loadedAt },
+                budtenders:{ loaded: (budtenders?.length || 0) > 0, count: budtenders?.length || 0, lastUpdated: loadedAt },
+                mappings:  { loaded: mappingsCount > 0,             count: mappingsCount,           lastUpdated: loadedAt },
+              },
+              isLoading: true, // background loads still pending
+            }));
+            // Fire background loads that aren't part of the main bundle
+            useAppStore.getState().loadBudtenderAssignments();
+            useAppStore.getState().loadCustomerSummary().catch(() => {});
+            // Customer pages, invoices, and research still load normally
+            // (invoices and research are handled further down in the original path)
+          }
+          // ───────────────────────────────────────────────────────────────
+
           // Load main data with date filtering (excludes customers and invoices)
           const response = await fetch(`/api/data/load?${params.toString()}`);
           const result = await response.json();
 
           if (result.success && result.data) {
             const { sales, brands, products, budtenders, brandMappings, dataHash, loadedAt } = result.data;
+
+            // Save fresh bundle to analytics cache for next session
+            cacheSet<MainBundle>('main', mainCacheKey, { sales, brands, products, budtenders, brandMappings, dataHash, loadedAt })
+              .catch(() => {});
 
             const mappingsCount = brandMappings ? Object.keys(brandMappings).length : 0;
 
@@ -654,6 +740,9 @@ export const useAppStore = create<AppState>()(
 
             // Load budtender assignments (overrides localStorage - Aurora is source of truth)
             await useAppStore.getState().loadBudtenderAssignments();
+
+            // Load pre-aggregated customer summary (small payload, no raw records)
+            useAppStore.getState().loadCustomerSummary().catch(() => {});
 
             // Load customer data with smart caching
             // 1. Check IndexedDB cache first
@@ -761,14 +850,8 @@ export const useAppStore = create<AppState>()(
 
               console.log(`Loaded ${allCustomers.length} customers in ${page - 1} pages from server`);
 
-              // Save to IndexedDB cache for next time
-              if (startDate && endDate && allCustomers.length > 0) {
-                try {
-                  await saveToCache(allCustomers, startDate, endDate);
-                } catch (cacheErr) {
-                  console.warn('Failed to save to cache:', cacheErr);
-                }
-              }
+              // Raw customer records are intentionally not cached client-side.
+              // Use customerSummary (pre-aggregated) for dashboards/charts instead.
             };
 
             loadCustomerPages().catch(err => {
@@ -777,6 +860,27 @@ export const useAppStore = create<AppState>()(
 
             // Load invoice data in pages (similar to customers - can be large dataset)
             const loadInvoicePages = async () => {
+              // Check analytics cache first (invoices aren't date-filtered — use 'all' key)
+              const cachedInvoices = await cacheGet<InvoiceLineItem[]>('invoices', 'all');
+              if (cachedInvoices && cachedInvoices.length > 0) {
+                set((state) => ({
+                  invoiceData: cachedInvoices,
+                  dataStatus: {
+                    ...state.dataStatus,
+                    invoices: { loaded: true, count: cachedInvoices.length, lastUpdated: new Date().toISOString() },
+                  },
+                }));
+                get().addNotification({
+                  type: 'info',
+                  title: 'Invoice Data Ready',
+                  message: `${cachedInvoices.length.toLocaleString()} invoice line items loaded from cache.`,
+                  actionLabel: 'View Analytics',
+                  actionPage: 'sales',
+                  actionTab: 'invoices',
+                });
+                return;
+              }
+
               // Use smaller page size on iOS to avoid memory pressure
               const isIOS = isIOSDevice();
               const pageSize = isIOS ? 2500 : 5000;
@@ -842,6 +946,8 @@ export const useAppStore = create<AppState>()(
               console.log(`Loaded ${allInvoices.length} invoices in ${page - 1} pages`);
 
               if (allInvoices.length > 0) {
+                // Save to analytics cache for next session
+                cacheSet<InvoiceLineItem[]>('invoices', 'all', allInvoices).catch(() => {});
                 // Fire a notification so the user can see invoices loaded
                 get().addNotification({
                   type: 'info',
@@ -969,6 +1075,9 @@ export const useAppStore = create<AppState>()(
         const { dateRange } = get();
         const startDate = dateRange?.start || '';
         const endDate = dateRange?.end || '';
+
+        // Refresh customer summary whenever the date range changes
+        useAppStore.getState().loadCustomerSummary().catch(() => {});
 
         console.log(`Reloading customers for date range: ${startDate} to ${endDate}`);
 
