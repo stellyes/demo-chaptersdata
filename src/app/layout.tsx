@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { DarkModeProvider } from "@/components/providers/DarkModeProvider";
-import { AuthProvider } from "@/components/auth/AuthProvider";
 import { LoadingOverlayProvider } from "@/components/providers/LoadingOverlayProvider";
 
 const dmSans = DM_Sans({
@@ -52,11 +51,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${dmSans.variable} ${cormorant.variable} antialiased`}>
-        <AuthProvider>
-          <DarkModeProvider>
-            <LoadingOverlayProvider>{children}</LoadingOverlayProvider>
-          </DarkModeProvider>
-        </AuthProvider>
+        <DarkModeProvider>
+          <LoadingOverlayProvider>{children}</LoadingOverlayProvider>
+        </DarkModeProvider>
       </body>
     </html>
   );

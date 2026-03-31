@@ -18,7 +18,6 @@ import { useAppStore, PageType } from '@/store/app-store';
 import { STORES } from '@/lib/config';
 import { StoreId } from '@/types';
 import { useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { useDisplayName } from '@/hooks/useDisplayName';
 import { cacheWipe } from '@/lib/services/analytics-cache';
 
@@ -61,12 +60,9 @@ export function Sidebar() {
     setCurrentOrganization,
   } = useAppStore();
 
-  const { signOut } = useAuth();
   const { displayName } = useDisplayName(user?.userId);
 
-  const handleLogout = async () => {
-    await signOut();
-    // Wipe all analytics cache so the next user doesn't see stale data
+  const handleLogout = () => {
     cacheWipe().catch(() => {});
     setUser(null);
     setCurrentOrganization(null);

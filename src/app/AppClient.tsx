@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppStore, useAutoLoadData, useReloadCustomersOnDateChange } from '@/store/app-store';
-import { useAuth } from '@/hooks/useAuth';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { DashboardPage } from '@/components/pages/DashboardPage';
 import { SalesAnalyticsPage } from '@/components/pages/SalesAnalyticsPage';
@@ -17,10 +16,8 @@ import { GuestEmailCapture } from '@/components/ui/GuestEmailCapture';
 import { Menu, Bell } from 'lucide-react';
 
 export default function AppClient() {
-  const { user, currentPage, isLoading, dataStatus, toggleSidebar, notifications, dismissedNotificationIds, currentOrganization, setCurrentOrganization, setUser } = useAppStore();
-  const { user: authUser, isAuthenticated } = useAuth();
+  const { user, currentPage, isLoading, dataStatus, toggleSidebar, notifications, dismissedNotificationIds, currentOrganization } = useAppStore();
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
-  const hasRefreshedOrgs = useRef(false);
 
   // Count unread notifications for mobile badge
   const unreadCount = useMemo(() => {
@@ -30,52 +27,13 @@ export default function AppClient() {
   // Show loading toast when main data is loading OR when background data is still loading
   const isDataLoading = isLoading || (dataStatus.sales.loaded && !dataStatus.research.loaded);
 
-  // Auto-load data from S3 when user is logged in
+  // Auto-load data from Aurora when user is present
   useAutoLoadData();
 
-  // Reload customer data when date range changes (server-side filtering for 830k+ customers)
+  // Reload customer data when date range changes
   useReloadCustomersOnDateChange();
 
-  // Sync fresh organization data from useAuth to the store
-  // This ensures localStorage user gets updated with current org data
-  useEffect(() => {
-    if (isAuthenticated && authUser && user && !hasRefreshedOrgs.current) {
-      const authOrgs = authUser.organizations || [];
-      const storeOrgs = user.organizations || [];
-
-      // If auth has organizations but store doesn't, update the store
-      if (authOrgs.length > 0 && storeOrgs.length === 0) {
-        hasRefreshedOrgs.current = true;
-        setUser({
-          ...user,
-          organizations: authOrgs,
-        });
-        // Also set current organization if not set
-        if (!currentOrganization) {
-          setCurrentOrganization(authOrgs[0]);
-        }
-      }
-    }
-  }, [isAuthenticated, authUser, user, currentOrganization, setUser, setCurrentOrganization]);
-
-  // Sync email from auth to store (always update if different from auth)
-  useEffect(() => {
-    if (isAuthenticated && authUser?.email && user && user.email !== authUser.email) {
-      setUser({
-        ...user,
-        email: authUser.email,
-      });
-    }
-  }, [isAuthenticated, authUser, user, setUser]);
-
-  // Ensure currentOrganization is set from user's organizations if not already set
-  useEffect(() => {
-    if (user && !currentOrganization && user.organizations && user.organizations.length > 0) {
-      setCurrentOrganization(user.organizations[0]);
-    }
-  }, [user, currentOrganization, setCurrentOrganization]);
-
-  // Show login if not authenticated
+  // Show guest landing if no user in store
   if (!user) {
     return <LoginPage />;
   }
