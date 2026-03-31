@@ -229,8 +229,8 @@ export function EventGeofencingTab() {
     <div className="space-y-6">
       {/* Data source indicator */}
       <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-        <span className={`w-2 h-2 rounded-full ${dataSource === 'mcp-database' ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'}`} />
-        {dataSource === 'mcp-database' ? 'Live event data from weekly discovery' : 'Demo event data — run event discovery sweep for live data'}
+        <span className={`w-2 h-2 rounded-full ${dataSource === 'aurora' ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'}`} />
+        {dataSource === 'aurora' ? 'Live event data from Aurora PostgreSQL' : 'Demo event data — run event discovery sweep for live data'}
       </div>
 
       {/* Stats */}
