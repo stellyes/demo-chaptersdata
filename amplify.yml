@@ -30,6 +30,8 @@ frontend:
         - echo "LEARNING_API_KEY=$LEARNING_API_KEY" >> .env.production
         # Voyage AI (for semantic vector search over business insights)
         - echo "VOYAGE_API_KEY=$VOYAGE_API_KEY" >> .env.production
+        # SES (for demo lead capture emails — defaults to us-east-1)
+        - echo "SES_REGION=$SES_REGION" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
