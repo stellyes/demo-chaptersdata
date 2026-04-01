@@ -9,6 +9,7 @@ import { RecommendationsPage } from '@/components/pages/RecommendationsPage';
 import { DataCenterPage } from '@/components/pages/DataCenterPage';
 import { MarketingAnalyticsPage } from '@/components/pages/MarketingAnalyticsPage';
 import { SettingsPage } from '@/components/pages/SettingsPage';
+import { CompliancePage } from '@/components/pages/CompliancePage';
 import { LoginPage } from '@/components/pages/LoginPage';
 import { LoadingToast } from '@/components/ui/LoadingToast';
 import { NotificationCenter } from '@/components/ui/NotificationCenter';
@@ -48,6 +49,8 @@ export default function AppClient() {
         return <MarketingAnalyticsPage />;
       case 'data-center':
         return <DataCenterPage />;
+      case 'compliance':
+        return <CompliancePage />;
       case 'settings':
         return <SettingsPage />;
       default:

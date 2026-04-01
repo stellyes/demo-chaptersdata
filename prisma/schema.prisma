@@ -1173,3 +1173,98 @@ model FeedbackCycle {
   @@index([cycleDate])
   @@map("feedback_cycles")
 }
+
+// ============================================
+// COMPLIANCE AI - RISK DETECTION
+// ============================================
+
+model ComplianceRule {
+  id                String    @id @default(uuid())
+  ruleId            String    @unique @map("rule_id") // e.g. "CA-THC-EDIBLE-001"
+  jurisdiction      String
+  complianceArea    String    @map("compliance_area") // testing, packaging, labeling, etc.
+  productTypes      String[]  @map("product_types")
+  ruleType          String    @map("rule_type") // threshold | restriction | requirement | prohibition
+  condition         Json // {field, operator, value, unit, per}
+  enforcedBy        String?   @map("enforced_by")
+  penalty           String?
+  citations         String[]
+  sourceDocumentIds Int[]     @map("source_document_ids")
+  effectiveDate     DateTime? @map("effective_date")
+  expirationDate    DateTime? @map("expiration_date")
+  severity          String    @default("medium") // critical | high | medium | low
+  isActive          Boolean   @default(true) @map("is_active")
+  version           Int       @default(1)
+  lastVerified      DateTime  @default(now()) @map("last_verified")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([jurisdiction])
+  @@index([complianceArea])
+  @@index([isActive])
+  @@map("compliance_rules")
+}
+
+model ComplianceScan {
+  id             String            @id @default(uuid())
+  storefrontId   String?           @map("storefront_id")
+  scanType       String            @map("scan_type") // daily | weekly | on_demand
+  status         String            @default("running") // running | completed | failed
+  startedAt      DateTime          @default(now()) @map("started_at")
+  completedAt    DateTime?         @map("completed_at")
+  recordsScanned Int               @default(0) @map("records_scanned")
+  risksFound     Int               @default(0) @map("risks_found")
+  criticalRisks  Int               @default(0) @map("critical_risks")
+  highRisks      Int               @default(0) @map("high_risks")
+  scanMetadata   Json?             @map("scan_metadata")
+  s3ResultsPath  String?           @map("s3_results_path")
+  alerts         ComplianceAlert[]
+
+  @@index([storefrontId])
+  @@index([startedAt])
+  @@map("compliance_scans")
+}
+
+model ComplianceAlert {
+  id              String         @id @default(uuid())
+  scanId          String         @map("scan_id")
+  storefrontId    String?        @map("storefront_id")
+  ruleId          String?        @map("rule_id")
+  riskLevel       String         @map("risk_level") // critical | high | medium | low
+  riskScore       Float          @map("risk_score")
+  detectionMethod String         @map("detection_method") // rules_engine | ml_model | hybrid
+  violation       String
+  salesLineItemId String?        @map("sales_line_item_id")
+  productName     String?        @map("product_name")
+  productType     String?        @map("product_type")
+  field           String?
+  actualValue     String?        @map("actual_value")
+  limitValue      String?        @map("limit_value")
+  recommendation  String?
+  isResolved      Boolean        @default(false) @map("is_resolved")
+  resolvedAt      DateTime?      @map("resolved_at")
+  resolvedBy      String?        @map("resolved_by")
+  resolvedNote    String?        @map("resolved_note")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  scan            ComplianceScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([storefrontId])
+  @@index([riskLevel])
+  @@index([isResolved])
+  @@index([createdAt])
+  @@map("compliance_alerts")
+}
+
+model ComplianceRuleVersion {
+  id               String   @id @default(uuid())
+  snapshotDate     DateTime @map("snapshot_date")
+  s3Path           String   @map("s3_path")
+  totalRules       Int      @map("total_rules")
+  jurisdictions    String[]
+  sourceCorpusSize Int      @map("source_corpus_size")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([snapshotDate])
+  @@map("compliance_rule_versions")
+}

@@ -1252,6 +1252,7 @@ export class DailyLearningService {
     const productData = await loadAndTrack('products', () => this.loadProductData(), {});
     const researchData = await loadAndTrack('research', () => this.loadResearchData(), {});
     const dataFlagData = await loadAndTrack('data_flags', () => this.loadDataFlagSummary(), {});
+    const complianceData = await loadAndTrack('compliance_alerts', () => this.loadComplianceAlertSummary(), {});
     const correlationSummary = await loadAndTrack('correlations',
       () => dataCorrelationsService.getCorrelationSummaryForAI(), '');
     const monthlyAggregates = await loadAndTrack('monthly_aggregates',
@@ -1280,7 +1281,8 @@ export class DailyLearningService {
       researchData,
       dataFlagData,
       correlationSummary,
-      monthlyAggregates
+      monthlyAggregates,
+      complianceData
     );
     const claudeElapsed = Date.now() - claudeStart;
     console.log(`[Phase1] Claude analysis complete in ${claudeElapsed}ms`);
@@ -1306,7 +1308,8 @@ export class DailyLearningService {
     researchData: unknown,
     dataFlagData: unknown,
     correlationSummary: string,
-    monthlyAggregates: unknown = {}
+    monthlyAggregates: unknown = {},
+    complianceData: unknown = {}
   ): Promise<DataReviewResult> {
     console.log(`[Phase1:Analysis] Building Claude prompt...`);
     const prompt = `Analyze business data for San Francisco cannabis dispensaries.
@@ -1323,6 +1326,7 @@ MARKET RESEARCH: ${JSON.stringify(researchData, null, 2)}
 QR CODE ENGAGEMENT: ${JSON.stringify(qrData, null, 2)}
 WEBSITE SEO DATA: ${JSON.stringify(seoData, null, 2)}
 DATA QUALITY FLAGS (unresolved issues): ${JSON.stringify(dataFlagData, null, 2)}
+COMPLIANCE ALERTS (recent AI-detected compliance risks): ${JSON.stringify(complianceData, null, 2)}
 
 ## SEASONAL CONTEXT (12-Month Monthly Aggregates)
 Use this data to identify seasonal patterns, year-over-year trends, and monthly cycles:
@@ -1345,6 +1349,7 @@ ${correlationSummary}
 9. Look for patterns in dates with regulatory events vs sales performance
 10. Analyze the long-tail of brands (beyond top 10) for emerging opportunities
 11. Compare current performance against monthly aggregates to identify seasonal patterns and year-over-year changes
+12. Review compliance alerts: identify recurring violation patterns, products/categories with highest risk, and whether resolved alerts suggest systemic issues or one-off incidents
 
 Return JSON:
 {
@@ -3421,6 +3426,124 @@ Return ONLY valid JSON, no markdown or explanation.`;
         createdAt: f.createdAt.toISOString().split('T')[0],
       })),
     };
+  }
+
+  /**
+   * Load compliance alert summary for Phase 1 analysis.
+   * Provides the AI with recent compliance scan results so it can
+   * identify patterns, recurring violations, and regulatory risk areas.
+   */
+  private async loadComplianceAlertSummary(): Promise<Record<string, unknown>> {
+    console.log(`[DataLoader:compliance] Querying compliance alerts...`);
+    const queryStart = Date.now();
+
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const [
+        unresolvedByRisk,
+        unresolvedByMethod,
+        recentAlerts,
+        recentScans,
+        resolvedCount,
+      ] = await Promise.all([
+        // Unresolved alerts grouped by risk level
+        prisma.complianceAlert.groupBy({
+          by: ['riskLevel'],
+          where: { isResolved: false },
+          _count: true,
+        }),
+        // Unresolved alerts grouped by detection method
+        prisma.complianceAlert.groupBy({
+          by: ['detectionMethod'],
+          where: { isResolved: false },
+          _count: true,
+        }),
+        // Recent unresolved alerts with details
+        prisma.complianceAlert.findMany({
+          where: {
+            isResolved: false,
+            createdAt: { gte: sevenDaysAgo },
+          },
+          orderBy: { riskScore: 'desc' },
+          take: 30,
+          select: {
+            riskLevel: true,
+            riskScore: true,
+            detectionMethod: true,
+            violation: true,
+            productType: true,
+            field: true,
+            actualValue: true,
+            limitValue: true,
+            recommendation: true,
+            createdAt: true,
+          },
+        }),
+        // Recent scan history
+        prisma.complianceScan.findMany({
+          where: { startedAt: { gte: sevenDaysAgo } },
+          orderBy: { startedAt: 'desc' },
+          take: 5,
+          select: {
+            scanType: true,
+            status: true,
+            startedAt: true,
+            recordsScanned: true,
+            risksFound: true,
+            criticalRisks: true,
+            highRisks: true,
+          },
+        }),
+        // Count of recently resolved (feedback signal)
+        prisma.complianceAlert.count({
+          where: {
+            isResolved: true,
+            resolvedAt: { gte: sevenDaysAgo },
+          },
+        }),
+      ]);
+
+      console.log(`[DataLoader:compliance] Queries completed in ${Date.now() - queryStart}ms`);
+
+      const totalUnresolved = unresolvedByRisk.reduce((sum, g) => sum + g._count, 0);
+      if (totalUnresolved === 0 && recentScans.length === 0) {
+        return { dataAvailable: false, totalUnresolved: 0 };
+      }
+
+      return {
+        dataAvailable: true,
+        totalUnresolved,
+        resolvedLast7Days: resolvedCount,
+        byRiskLevel: Object.fromEntries(unresolvedByRisk.map(g => [g.riskLevel, g._count])),
+        byDetectionMethod: Object.fromEntries(unresolvedByMethod.map(g => [g.detectionMethod, g._count])),
+        recentScans: recentScans.map(s => ({
+          type: s.scanType,
+          status: s.status,
+          date: s.startedAt.toISOString().split('T')[0],
+          recordsScanned: s.recordsScanned,
+          risksFound: s.risksFound,
+          criticalRisks: s.criticalRisks,
+          highRisks: s.highRisks,
+        })),
+        topAlerts: recentAlerts.map(a => ({
+          riskLevel: a.riskLevel,
+          riskScore: a.riskScore,
+          method: a.detectionMethod,
+          violation: a.violation.substring(0, 200),
+          productType: a.productType,
+          field: a.field,
+          actualValue: a.actualValue,
+          limitValue: a.limitValue,
+          recommendation: a.recommendation?.substring(0, 150),
+          date: a.createdAt.toISOString().split('T')[0],
+        })),
+      };
+    } catch (err) {
+      console.warn(`[DataLoader:compliance] Failed to load compliance data:`, err);
+      return { dataAvailable: false, error: 'Compliance tables may not exist yet' };
+    }
   }
 
   /**

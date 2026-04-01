@@ -115,6 +115,7 @@ export type PageType =
   | 'research'
   | 'seo'
   | 'invoices'
+  | 'compliance'
   | 'settings';
 
 interface AppState {
