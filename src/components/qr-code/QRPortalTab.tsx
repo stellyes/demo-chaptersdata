@@ -13,7 +13,8 @@ import { QRCode } from '@/types';
 
 // ---- Analytics types ----
 interface AnalyticsData {
-  totalClicks: number;
+  totalClicks: number;    // authoritative: sum of QrCode.totalClicks
+  detailClicks: number;   // QrClick records in the selected period
   period: { days: number; since: string };
   dailyClicks: { date: string; clicks: number }[];
   topCodes: { shortCode: string; name: string; clicks: number }[];
@@ -140,8 +141,12 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
       <Card>
         <SectionLabel>Scan Activity</SectionLabel>
         <SectionTitle>Daily Scans</SectionTitle>
-        {analytics.totalClicks === 0 ? (
-          <p className="text-[var(--muted)] text-center py-8 text-sm">No scans recorded in this period.</p>
+        {analytics.detailClicks === 0 ? (
+          <p className="text-[var(--muted)] text-center py-8 text-sm">
+            {analytics.totalClicks > 0
+              ? 'Detailed scan logs not available for this period.'
+              : 'No scans recorded yet.'}
+          </p>
         ) : (
           <div className="mt-4">
             <div className="flex items-end gap-[2px] h-40">
@@ -199,8 +204,8 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
         <Card>
           <SectionLabel>Devices</SectionLabel>
           <SectionTitle>Scan Devices</SectionTitle>
-          {analytics.totalClicks === 0 ? (
-            <p className="text-[var(--muted)] text-center py-6 text-sm">No data yet.</p>
+          {analytics.detailClicks === 0 ? (
+            <p className="text-[var(--muted)] text-center py-6 text-sm">No device data available.</p>
           ) : (
             <div className="space-y-4 mt-4">
               {Object.entries(analytics.devices)

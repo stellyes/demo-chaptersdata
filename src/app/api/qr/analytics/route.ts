@@ -40,7 +40,29 @@ export async function GET(request: NextRequest) {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    // Fetch all clicks within the time window
+    // --- Authoritative click data: QrCode.totalClicks ---
+    // These counters are incremented on every scan and are always accurate,
+    // even for scans that pre-date the QrClick detail table.
+    const qrCodes = await prisma.qrCode.findMany({
+      where: { deleted: false },
+      select: { shortCode: true, name: true, totalClicks: true },
+      orderBy: { totalClicks: 'desc' },
+    });
+
+    const authoritativeTotal = qrCodes.reduce((sum, qr) => sum + qr.totalClicks, 0);
+
+    const topCodes = qrCodes
+      .filter((qr) => qr.totalClicks > 0)
+      .slice(0, 10)
+      .map((qr) => ({
+        shortCode: qr.shortCode,
+        name: qr.name,
+        clicks: qr.totalClicks,
+      }));
+
+    // --- Detail click records from QrClick table ---
+    // Used for daily chart, device/browser/OS breakdown, referrers, recent scans.
+    // May be sparse if clicks pre-date this table.
     const clicks = await prisma.qrClick.findMany({
       where: { clickedAt: { gte: since } },
       orderBy: { clickedAt: 'desc' },
@@ -53,23 +75,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Fetch QR code names for mapping
-    const qrCodes = await prisma.qrCode.findMany({
-      where: { deleted: false },
-      select: { shortCode: true, name: true, totalClicks: true },
-    });
-    const codeNames: Record<string, string> = {};
-    for (const qr of qrCodes) {
-      codeNames[qr.shortCode] = qr.name;
-    }
-
-    // --- Aggregate: clicks per day ---
+    // --- Aggregate: clicks per day (from QrClick detail) ---
     const clicksByDay: Record<string, number> = {};
     for (const click of clicks) {
       const day = click.clickedAt.toISOString().split('T')[0];
       clicksByDay[day] = (clicksByDay[day] || 0) + 1;
     }
-    // Fill in missing days with 0
     const dailyClicks: { date: string; clicks: number }[] = [];
     const cursor = new Date(since);
     const today = new Date();
@@ -78,20 +89,6 @@ export async function GET(request: NextRequest) {
       dailyClicks.push({ date: key, clicks: clicksByDay[key] || 0 });
       cursor.setDate(cursor.getDate() + 1);
     }
-
-    // --- Aggregate: clicks per QR code ---
-    const clicksByCode: Record<string, number> = {};
-    for (const click of clicks) {
-      clicksByCode[click.shortCode] = (clicksByCode[click.shortCode] || 0) + 1;
-    }
-    const topCodes = Object.entries(clicksByCode)
-      .map(([shortCode, count]) => ({
-        shortCode,
-        name: codeNames[shortCode] || shortCode,
-        clicks: count,
-      }))
-      .sort((a, b) => b.clicks - a.clicks)
-      .slice(0, 10);
 
     // --- Aggregate: device / browser / OS breakdowns ---
     const devices: Record<string, number> = {};
@@ -108,7 +105,6 @@ export async function GET(request: NextRequest) {
     const referrerCounts: Record<string, number> = {};
     for (const click of clicks) {
       let ref = click.referrer?.trim() || 'Direct / Unknown';
-      // Normalize referrer to domain
       try {
         if (ref !== 'Direct / Unknown' && ref.startsWith('http')) {
           ref = new URL(ref).hostname;
@@ -124,6 +120,10 @@ export async function GET(request: NextRequest) {
       .slice(0, 10);
 
     // --- Recent clicks (last 20) ---
+    const codeNames: Record<string, string> = {};
+    for (const qr of qrCodes) {
+      codeNames[qr.shortCode] = qr.name;
+    }
     const recentClicks = clicks.slice(0, 20).map((click) => {
       const parsed = parseUserAgent(click.userAgent || '');
       return {
@@ -140,7 +140,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        totalClicks: clicks.length,
+        // Use authoritative total from QrCode.totalClicks counters
+        totalClicks: authoritativeTotal,
+        detailClicks: clicks.length, // number of QrClick detail records in period
         period: { days, since: since.toISOString() },
         dailyClicks,
         topCodes,
