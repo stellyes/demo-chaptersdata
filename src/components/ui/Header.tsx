@@ -44,6 +44,11 @@ const SEARCHABLE_SECTIONS: SearchableSection[] = [
   { id: 'data-research', label: 'Data Center > Industry Research', page: 'data-center', tabId: 'research', keywords: ['research', 'industry', 'market', 'analysis', 'report'] },
   { id: 'data-seo', label: 'Data Center > SEO Analysis', page: 'data-center', tabId: 'seo', keywords: ['seo', 'search', 'optimization', 'google', 'ranking', 'keywords'] },
   { id: 'data-qr', label: 'Data Center > QR Portal', page: 'data-center', tabId: 'qr', keywords: ['qr', 'code', 'portal', 'scan', 'link', 'url'] },
+
+  // Compliance tabs
+  { id: 'compliance-alerts', label: 'Compliance > Active Alerts', page: 'compliance', tabId: 'alerts', keywords: ['compliance', 'alerts', 'violations', 'risk', 'critical', 'warning'] },
+  { id: 'compliance-scans', label: 'Compliance > Scan History', page: 'compliance', tabId: 'scans', keywords: ['compliance', 'scan', 'scans', 'history', 'pipeline', 'daily'] },
+  { id: 'compliance-rules', label: 'Compliance > Rule Browser', page: 'compliance', tabId: 'rules', keywords: ['compliance', 'rules', 'regulations', 'jurisdiction', 'thc', 'tracking', 'cannabis'] },
 ];
 
 interface HeaderProps {

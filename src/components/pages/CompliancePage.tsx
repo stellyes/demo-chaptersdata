@@ -805,7 +805,7 @@ export const CompliancePage = memo(function CompliancePage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <Header
         title="Compliance Intelligence"
-        subtitle="AI-powered compliance risk scanning across sales data"
+        subtitle="AI-Powered Risk Detection"
       />
       <Tabs tabs={tabs} />
     </div>
