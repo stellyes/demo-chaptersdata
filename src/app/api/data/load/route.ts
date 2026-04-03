@@ -116,22 +116,15 @@ function normalizeMarginPct(value: number): number {
   return value;
 }
 
-// Compute a hash based on record counts for cache invalidation
-async function computeDataHash(): Promise<string> {
-  try {
-    const [salesCount, brandsCount, productsCount, budtendersCount] = await Promise.all([
-      prisma.salesRecord.count(),
-      prisma.brandRecord.count(),
-      prisma.productRecord.count(),
-      prisma.budtenderRecord.count(),
-    ]);
-
-    const hashInput = `sales:${salesCount}|brands:${brandsCount}|products:${productsCount}|budtenders:${budtendersCount}|v2`;
-    return createHash('md5').update(hashInput).digest('hex').slice(0, 12);
-  } catch (error) {
-    console.error('Error computing hash:', error);
-    return Date.now().toString();
-  }
+// Compute a data hash directly from loaded record counts — no extra DB queries.
+function computeDataHashFromCounts(
+  salesCount: number,
+  brandsCount: number,
+  productsCount: number,
+  budtendersCount: number,
+): string {
+  const hashInput = `sales:${salesCount}|brands:${brandsCount}|products:${productsCount}|budtenders:${budtendersCount}|v2`;
+  return createHash('md5').update(hashInput).digest('hex').slice(0, 12);
 }
 
 // Load all data from Aurora PostgreSQL
@@ -147,18 +140,29 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string, store
     },
   } : {};
 
+  // Brand records are snapshot-based (uploadStartDate / uploadEndDate).
+  // Filter to snapshots whose period overlaps the selected date range so we
+  // don't load every historical snapshot when only the current window matters.
+  const brandDateFilter = startDate && endDate ? {
+    uploadStartDate: { lte: new Date(endDate) },
+    uploadEndDate:   { gte: new Date(startDate) },
+  } : {};
+
   // Build store filter (reduces response size by ~50% when filtering)
   const storeFilter = storeId && storeId !== 'combined' ? { storeId } : {};
 
   console.log(`Date filter: ${startDate} to ${endDate}, Store filter: ${storeId || 'all'}`);
 
-  // Load all data in parallel for maximum speed
-  // Apply store filter to reduce response size when a specific store is selected
+  // Load all data in parallel for maximum speed.
+  // Brand records: use select to avoid fetching unused columns and to keep the
+  // canonical-brand JOIN minimal (only the name field, not the full object).
+  // Budtender records: aggregate server-side by employee+store so the client
+  // receives ~60-80 rows instead of 14 000+ daily rows.
   const [
     salesRecords,
     brandRecords,
     productRecords,
-    budtenderRecords,
+    budtenderAgg,
     canonicalBrands,
   ] = await Promise.all([
     prisma.salesRecord.findMany({
@@ -166,17 +170,43 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string, store
       orderBy: { date: 'asc' },
     }),
     prisma.brandRecord.findMany({
-      where: storeFilter,
+      where: { ...brandDateFilter, ...storeFilter },
       orderBy: { netSales: 'desc' },
-      include: { brand: true },
+      select: {
+        storeId: true,
+        storeName: true,
+        originalBrandName: true,
+        pctOfTotalNetSales: true,
+        grossMarginPct: true,
+        avgCostWoExcise: true,
+        netSales: true,
+        uploadStartDate: true,
+        uploadEndDate: true,
+        brand: { select: { canonicalName: true } },
+      },
     }),
     prisma.productRecord.findMany({
       where: storeFilter,
       orderBy: { netSales: 'desc' },
     }),
-    prisma.budtenderRecord.findMany({
+    // Pre-aggregate budtender performance per employee+store at the DB level.
+    // Both DashboardPage and SalesAnalyticsPage immediately reduce raw daily rows
+    // to per-employee totals — moving this work to the DB cuts the payload from
+    // ~14 000 rows to ~60-80 rows and eliminates client-side O(n) aggregation.
+    prisma.budtenderRecord.groupBy({
+      by: ['storeId', 'storeName', 'employeeName'],
       where: { ...dateFilter, ...storeFilter },
-      orderBy: [{ date: 'desc' }, { netSales: 'desc' }],
+      _sum: {
+        netSales: true,
+        unitsSold: true,
+        ticketsCount: true,
+        customersCount: true,
+      },
+      _avg: {
+        grossMarginPct: true,
+        avgOrderValue: true,
+      },
+      orderBy: { _sum: { netSales: 'desc' } },
     }),
     prisma.canonicalBrand.findMany({
       include: { aliases: true },
@@ -237,18 +267,21 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string, store
     upload_end_date: r.uploadEndDate?.toISOString().split('T')[0],
   }));
 
-  // Transform budtender records
-  const budtenders: BudtenderRecord[] = budtenderRecords.map((r) => ({
-    date: r.date.toISOString().split('T')[0],
+  // Transform pre-aggregated budtender records (one row per employee+store).
+  // The `date` field is set to '' since these are period totals, not daily rows.
+  // Frontend aggregation code (byEmployee loops) works identically on 60 rows
+  // as it did on 14 000 — just faster.
+  const budtenders: BudtenderRecord[] = budtenderAgg.map((r) => ({
+    date: '',
     store: r.storeName || r.storeId,
     store_id: r.storeId,
     employee_name: r.employeeName,
-    tickets_count: r.ticketsCount,
-    customers_count: r.customersCount,
-    net_sales: Number(r.netSales),
-    gross_margin_pct: Number(r.grossMarginPct),
-    avg_order_value: Number(r.avgOrderValue),
-    units_sold: r.unitsSold,
+    tickets_count: r._sum.ticketsCount ?? 0,
+    customers_count: r._sum.customersCount ?? 0,
+    net_sales: Number(r._sum.netSales ?? 0),
+    gross_margin_pct: normalizeMarginPct(Number(r._avg.grossMarginPct ?? 0)),
+    avg_order_value: Number(r._avg.avgOrderValue ?? 0),
+    units_sold: r._sum.unitsSold ?? 0,
   }));
 
   // Build brand mappings from canonical brands with aliases
@@ -261,11 +294,17 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string, store
     brandMappings[brand.canonicalName] = { aliases };
   }
 
-  const dataHash = await computeDataHash();
+  // Hash computed from loaded counts — no extra DB round-trips.
+  const dataHash = computeDataHashFromCounts(
+    salesRecords.length,
+    brandRecords.length,
+    productRecords.length,
+    budtenderAgg.length,
+  );
   const loadedAt = new Date().toISOString();
 
   const duration = Date.now() - startTime;
-  console.log(`Aurora data load complete in ${duration}ms: ${sales.length} sales, ${brands.length} brands, ${products.length} products, ${budtenders.length} budtenders`);
+  console.log(`Aurora data load complete in ${duration}ms: ${sales.length} sales, ${brands.length} brands, ${products.length} products, ${budtenders.length} budtender employees`);
 
   return {
     sales,
@@ -286,11 +325,12 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate') || undefined;
     const storeId = searchParams.get('storeId') || undefined; // Optional store filter
 
-    // Include date range and store in cache key for proper cache invalidation
+    // Cache key is based purely on params + TTL — no DB COUNT queries on every
+    // request. The in-memory cache is already invalidated on server restart and
+    // expires after 5 minutes, which is sufficient for the demo environment.
     const dateRangeKey = startDate && endDate ? `${startDate}-${endDate}` : 'all';
     const storeKey = storeId || 'combined';
-    const currentHash = await computeDataHash();
-    const cacheKey = `${currentHash}-${dateRangeKey}-${storeKey}`;
+    const cacheKey = `${dateRangeKey}-${storeKey}`;
 
     const acceptEncoding = request.headers.get('accept-encoding') || '';
     const supportsGzip = acceptEncoding.includes('gzip');
