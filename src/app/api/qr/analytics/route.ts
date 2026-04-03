@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
     // --- Detail click records from QrClick table ---
     // Used for daily chart, device/browser/OS breakdown, referrers, recent scans.
     // May be sparse if clicks pre-date this table.
-    let clicks;
+    let clicks: { shortCode: string; clickedAt: Date; userAgent: string | null; referrer: string | null; ipAddress: string | null }[] = [];
     try {
       clicks = await prisma.qrClick.findMany({
         where: { clickedAt: { gte: since } },
