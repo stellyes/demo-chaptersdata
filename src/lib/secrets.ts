@@ -8,8 +8,8 @@
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { fromContainerMetadata } from '@aws-sdk/credential-providers';
 
-const RDS_SECRET_ARN = 'arn:aws:secretsmanager:us-west-1:716121312511:secret:rds!cluster-f89505b1-a495-4483-b282-15d58e2df95e-vOlOPD';
-const DB_HOST = 'chapters-data-cluster.cluster-crcoymcou3hf.us-west-1.rds.amazonaws.com';
+const RDS_SECRET_ARN = 'arn:aws:secretsmanager:us-west-1:716121312511:secret:rds!cluster-5e140d1f-8003-4622-96ab-f5e20722a8aa-RJnxnQ';
+const DB_HOST = 'chapters-demo-cluster.cluster-crcoymcou3hf.us-west-1.rds.amazonaws.com';
 const DB_PORT = '5432';
 const DB_NAME = 'chapters_data';
 
