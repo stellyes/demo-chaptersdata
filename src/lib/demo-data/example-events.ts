@@ -53,12 +53,12 @@ export const DEMO_EVENT_VENUES: EventVenue[] = [
   },
   {
     id: 3,
-    name: "Levi's Stadium",
-    lat: 37.4033,
-    lng: -121.9695,
+    name: 'Chase Center',
+    lat: 37.7679,
+    lng: -122.3878,
     category: 'sports',
     color: '#95e1d3',
-    events: [{ name: 'Super Bowl LX', date: 'Feb 8, 2026' }],
+    events: [{ name: 'Warriors vs Lakers', date: 'Feb 8, 2026' }],
     radius: 500,
   },
   {

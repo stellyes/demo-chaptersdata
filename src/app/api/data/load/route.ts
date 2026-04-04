@@ -245,7 +245,7 @@ async function loadAllDataFromAurora(startDate?: string, endDate?: string, store
   const brands: BrandRecord[] = brandRecords.map((r) => ({
     brand: r.brand?.canonicalName || r.originalBrandName,
     pct_of_total_net_sales: Number(r.pctOfTotalNetSales),
-    gross_margin_pct: Number(r.grossMarginPct),
+    gross_margin_pct: normalizeMarginPct(Number(r.grossMarginPct)),
     avg_cost_wo_excise: Number(r.avgCostWoExcise),
     net_sales: Number(r.netSales),
     store: r.storeName || r.storeId,
