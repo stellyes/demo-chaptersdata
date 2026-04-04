@@ -34,7 +34,7 @@ export const MarketingAnalyticsPage = memo(function MarketingAnalyticsPage() {
 
   return (
     <div>
-      <Header title="Marketing Intelligence & Analytics" subtitle="Marketing" />
+      <Header title="Marketing Intelligence" subtitle="Marketing" />
       <Tabs tabs={tabs} />
     </div>
   );
