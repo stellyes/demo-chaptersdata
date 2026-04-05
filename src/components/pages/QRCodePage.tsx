@@ -66,10 +66,10 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
     try {
       const res = await fetch(`/api/qr/analytics?days=${days}`);
       const result = await res.json();
-      if (result.success && result.data) {
+      if (result.success && result.data && result.data.totalClicks > 0) {
         setAnalytics(result.data);
       }
-      // If API returns empty, keep demo data
+      // If API returns 0 scans or empty, keep demo data
     } catch (err) {
       console.error('Failed to load analytics:', err);
       // Keep demo data on error

@@ -191,7 +191,7 @@ export const DashboardPage = memo(function DashboardPage() {
       </div>
 
       {/* Sales Chart Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
+      <div className="grid grid-cols-1 min-[900px]:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
         {/* Sales Trend Chart */}
         <Card>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-2">
@@ -232,7 +232,7 @@ export const DashboardPage = memo(function DashboardPage() {
       </div>
 
       {/* Transaction Chart Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
+      <div className="grid grid-cols-1 min-[900px]:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
         {/* Transaction Count Chart */}
         <Card>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-2">
@@ -280,22 +280,22 @@ export const DashboardPage = memo(function DashboardPage() {
             <Card key={sid}>
               <SectionLabel>Store Performance</SectionLabel>
               <SectionTitle>{STORES[sid]?.displayName ?? sid}</SectionTitle>
-              <div className="grid grid-cols-3 gap-2 md:gap-4">
-                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-                  <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Revenue</p>
-                  <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2 sm:p-3 lg:p-4 bg-[var(--paper)] rounded-lg">
+                  <p className="text-[10px] sm:text-xs lg:text-sm text-[var(--muted)] mb-0.5 sm:mb-1">Revenue</p>
+                  <p className="text-sm sm:text-base lg:text-lg font-semibold text-[var(--ink)] font-serif">
                     {formatCurrency(storeData.revenue)}
                   </p>
                 </div>
-                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-                  <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Transactions</p>
-                  <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
+                <div className="p-2 sm:p-3 lg:p-4 bg-[var(--paper)] rounded-lg">
+                  <p className="text-[10px] sm:text-xs lg:text-sm text-[var(--muted)] mb-0.5 sm:mb-1">Transactions</p>
+                  <p className="text-sm sm:text-base lg:text-lg font-semibold text-[var(--ink)] font-serif">
                     {storeData.transactions.toLocaleString()}
                   </p>
                 </div>
-                <div className="p-3 md:p-4 bg-[var(--paper)] rounded-lg">
-                  <p className="text-xs md:text-sm text-[var(--muted)] mb-1">Avg Margin</p>
-                  <p className="text-base md:text-xl font-semibold text-[var(--ink)] font-serif">
+                <div className="p-2 sm:p-3 lg:p-4 bg-[var(--paper)] rounded-lg">
+                  <p className="text-[10px] sm:text-xs lg:text-sm text-[var(--muted)] mb-0.5 sm:mb-1">Avg Margin</p>
+                  <p className="text-sm sm:text-base lg:text-lg font-semibold text-[var(--ink)] font-serif">
                     {storeData.margin.toFixed(1)}%
                   </p>
                 </div>
