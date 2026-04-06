@@ -49,23 +49,39 @@ export const EXAMPLE_QR_CODES = [
   },
 ];
 
-function generateDailyScans(days: number, baseScans: number): Array<{ date: string; scans: number }> {
-  const data = [];
+function generateDailyScans(days: number, totalScans: number): Array<{ date: string; scans: number }> {
+  // Build a weight for each day so the total distribution sums to exactly totalScans.
+  // Weights use a deterministic seed-like formula — no Math.random() so the values
+  // are stable across renders and page loads.
+  const weighted: Array<{ date: string; weight: number }> = [];
+
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dayOfWeek = d.getDay();
-    // Weekend boost
-    const weekendFactor = dayOfWeek === 0 || dayOfWeek === 6 ? 1.6 : 1.0;
-    // Small random variation using a deterministic seed-like pattern
-    const variation = 0.7 + ((i * 7 + 13) % 10) / 15;
-    const scans = Math.round(baseScans * weekendFactor * variation);
-    data.push({
+    const weekendFactor = dayOfWeek === 0 || dayOfWeek === 6 ? 1.55 : 1.0;
+    // Deterministic variation: produces values in roughly [0.55, 1.15]
+    const variation = 0.55 + ((i * 11 + 17) % 19) / 31;
+    weighted.push({
       date: d.toISOString().split('T')[0],
-      scans,
+      weight: weekendFactor * variation,
     });
   }
-  return data;
+
+  // Distribute totalScans proportionally, preserving the exact sum
+  const totalWeight = weighted.reduce((s, d) => s + d.weight, 0);
+  const result: Array<{ date: string; scans: number }> = [];
+  let remaining = totalScans;
+
+  for (let i = 0; i < weighted.length - 1; i++) {
+    const scans = Math.round((weighted[i].weight / totalWeight) * totalScans);
+    result.push({ date: weighted[i].date, scans });
+    remaining -= scans;
+  }
+  // Assign remainder to the last day so the total is exact
+  result.push({ date: weighted[weighted.length - 1].date, scans: Math.max(0, remaining) });
+
+  return result;
 }
 
 export const EXAMPLE_QR_ANALYTICS = {
@@ -73,7 +89,7 @@ export const EXAMPLE_QR_ANALYTICS = {
   avgPerDay: 42,
   activeQrCodes: 4,
   totalQrCodes: 4,
-  dailyScans: generateDailyScans(30, 42),
+  dailyScans: generateDailyScans(30, 3171),
   topPerforming: [
     { name: 'Greenleaf Market Menu', scans: 1847, shortCode: 'gl-menu' },
     { name: 'Emerald Collective Loyalty Signup', scans: 612, shortCode: 'ec-loyalty' },

@@ -169,6 +169,8 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
           <p className="text-[var(--muted)] text-center py-8 text-sm">No scans recorded in this period.</p>
         ) : (
           <div className="mt-4">
+            {/* h-40 = 160px — use pixel heights so bars render correctly
+                inside a flex-row where % height has no parent reference */}
             <div className="flex items-end gap-[2px] h-40">
               {analytics.dailyClicks.map((day) => (
                 <div
@@ -177,8 +179,8 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
                   title={`${day.date}: ${day.clicks} scan${day.clicks !== 1 ? 's' : ''}`}
                 >
                   <div
-                    className="w-full bg-[var(--accent)] rounded-t opacity-80 hover:opacity-100 transition-opacity min-h-[2px]"
-                    style={{ height: `${(day.clicks / maxDaily) * 100}%` }}
+                    className="w-full bg-[var(--accent)] rounded-t opacity-80 hover:opacity-100 transition-opacity"
+                    style={{ height: `${Math.max(2, (day.clicks / maxDaily) * 160)}px` }}
                   />
                 </div>
               ))}
