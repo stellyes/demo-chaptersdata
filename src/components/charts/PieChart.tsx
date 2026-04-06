@@ -26,61 +26,59 @@ const PIE_COLORS = [
 ];
 
 export const CategoryPieChart = memo(function CategoryPieChart({ data, showLegend = true }: CategoryPieChartProps) {
-  // Truncate long names for display
   const truncateName = (name: string, maxLength: number = 15) => {
-    return name.length > maxLength ? name.slice(0, maxLength) + '...' : name;
+    return name.length > maxLength ? name.slice(0, maxLength) + '\u2026' : name;
   };
 
-  // Calculate dynamic height based on legend rows needed
-  const legendRows = showLegend ? Math.ceil(data.length / 4) : 0;
-  const legendHeight = legendRows * 24;
-  const chartHeight = 270 + legendHeight;
-
   return (
-    <div style={{ width: '100%', height: chartHeight }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 8, right: 20, bottom: legendHeight + 4, left: 20 }}>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="46%"
-            innerRadius={48}
-            outerRadius={78}
-            paddingAngle={2}
-            dataKey="value"
-            label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-            labelLine={false}
-          >
-            {data.map((_, index) => (
-              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e0ddd8',
-              borderRadius: '8px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            }}
-            formatter={(value, name) => [`$${Number(value).toLocaleString()}`, name]}
-          />
-          {showLegend && (
-            <Legend
-              layout="horizontal"
-              verticalAlign="bottom"
-              align="center"
-              wrapperStyle={{
-                paddingTop: '8px',
-                fontSize: '11px',
-                lineHeight: '1.6',
+    <div className="w-full flex flex-col">
+      {/* Pie — fixed height, cy=50% centers it in the available area */}
+      <div style={{ height: 210, width: '100%' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart margin={{ top: 8, right: 10, bottom: 8, left: 10 }}>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={44}
+              outerRadius={70}
+              paddingAngle={2}
+              dataKey="value"
+              label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
+              labelLine={false}
+            >
+              {data.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#ffffff',
+                border: '1px solid #e0ddd8',
+                borderRadius: '8px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
               }}
-              formatter={(value) => (
-                <span style={{ color: '#333', fontSize: '11px' }}>{truncateName(String(value))}</span>
-              )}
+              formatter={(value, name) => [`$${Number(value).toLocaleString()}`, name]}
             />
-          )}
-        </PieChart>
-      </ResponsiveContainer>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      {/* Legend — custom HTML, flush beneath the pie, no Recharts positioning quirks */}
+      {showLegend && (
+        <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1 px-1">
+          {data.map((entry, index) => (
+            <div key={entry.name} className="flex items-center gap-1">
+              <div
+                className="w-2 h-2 rounded-[2px] shrink-0"
+                style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+              />
+              <span className="text-[10px] leading-none text-[var(--muted)]">
+                {truncateName(entry.name)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 });

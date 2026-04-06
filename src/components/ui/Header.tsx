@@ -88,7 +88,7 @@ export function Header({ title, subtitle }: HeaderProps) {
   };
 
   return (
-    <header className="flex flex-col lg:flex-row lg:items-start xl:items-center lg:justify-between mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] gap-3 lg:gap-5">
+    <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] gap-3 lg:gap-6">
       <div className="min-w-0">
         <span className="text-xs font-semibold tracking-[0.15em] uppercase text-[var(--accent)] block mb-1 md:mb-2">
           {subtitle}
@@ -97,9 +97,12 @@ export function Header({ title, subtitle }: HeaderProps) {
           {title}
         </h2>
       </div>
-      <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-start sm:items-center lg:items-stretch xl:items-center gap-2 lg:gap-1.5 xl:gap-4 w-full sm:w-auto shrink-0">
-        {/* Search - shown on all screen sizes, full width on mobile */}
-        <div className="relative w-full sm:w-auto order-first sm:order-none">
+      {/* Right panel: [search+datepicker col] + [bell] — side by side at lg */}
+      <div className="flex flex-col sm:flex-row lg:flex-row items-start sm:items-center lg:items-center gap-3 w-full sm:w-auto shrink-0">
+        {/* Search + Datepicker — stacked at lg, row at xl (the anchor) */}
+        <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-stretch sm:items-center lg:items-stretch xl:items-center gap-1.5 xl:gap-3 w-full sm:w-auto">
+        {/* Search */}
+        <div className="relative w-full sm:w-auto">
           <Search className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -160,8 +163,9 @@ export function Header({ title, subtitle }: HeaderProps) {
             className="border-none text-sm text-[var(--ink)] bg-transparent min-w-0 flex-1 sm:flex-none"
           />
         </div>
-        {/* Notifications - hidden on mobile since it's in the mobile header */}
-        <div className="relative hidden lg:block">
+        </div>{/* end search+datepicker inner col */}
+        {/* Bell — to the right of the stacked controls, vertically centered */}
+        <div className="relative hidden lg:flex items-center self-center">
           <button
             onClick={() => setNotificationOpen(!notificationOpen)}
             className="relative p-2.5 bg-[var(--white)] border border-[var(--border)] rounded cursor-pointer hover:bg-[var(--paper)] transition-colors"
@@ -178,7 +182,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             onClose={() => setNotificationOpen(false)}
           />
         </div>
-      </div>
+      </div>{/* end right panel */}
     </header>
   );
 }
