@@ -175,11 +175,24 @@ function AnalyticsTab({ qrCount, activeCount }: { qrCount: number; activeCount: 
               {analytics.dailyClicks.map((day) => (
                 <div
                   key={day.date}
-                  className="flex-1 group relative"
-                  title={`${day.date}: ${day.clicks} scan${day.clicks !== 1 ? 's' : ''}`}
+                  className="flex-1 group/bar relative"
                 >
+                  {/* Hover tooltip — appears above bar, centered */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none opacity-0 group-hover/bar:opacity-100 transition-opacity duration-100">
+                    <div className="bg-[var(--ink)] text-[var(--paper)] rounded px-2 py-1 whitespace-nowrap shadow-lg text-center">
+                      <p className="text-[11px] font-semibold leading-tight">{day.clicks.toLocaleString()} scan{day.clicks !== 1 ? 's' : ''}</p>
+                      <p className="text-[10px] opacity-60 leading-tight mt-0.5">{day.date}</p>
+                    </div>
+                    {/* Arrow */}
+                    <div className="flex justify-center">
+                      <div className="w-2 h-1 overflow-hidden">
+                        <div className="w-2 h-2 bg-[var(--ink)] rotate-45 -translate-y-1/2" />
+                      </div>
+                    </div>
+                  </div>
+                  {/* Bar */}
                   <div
-                    className="w-full bg-[var(--accent)] rounded-t opacity-80 hover:opacity-100 transition-opacity"
+                    className="w-full bg-[var(--accent)] rounded-t opacity-70 group-hover/bar:opacity-100 transition-opacity duration-100"
                     style={{ height: `${Math.max(2, (day.clicks / maxDaily) * 160)}px` }}
                   />
                 </div>
