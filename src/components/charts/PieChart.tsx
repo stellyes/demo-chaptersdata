@@ -33,19 +33,19 @@ export const CategoryPieChart = memo(function CategoryPieChart({ data, showLegen
 
   // Calculate dynamic height based on legend rows needed
   const legendRows = showLegend ? Math.ceil(data.length / 4) : 0;
-  const legendHeight = legendRows * 28;
-  const chartHeight = 320 + legendHeight;
+  const legendHeight = legendRows * 24;
+  const chartHeight = 270 + legendHeight;
 
   return (
     <div style={{ width: '100%', height: chartHeight }}>
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 10, right: 30, bottom: legendHeight + 5, left: 30 }}>
+        <PieChart margin={{ top: 8, right: 20, bottom: legendHeight + 4, left: 20 }}>
           <Pie
             data={data}
             cx="50%"
-            cy="48%"
-            innerRadius={55}
-            outerRadius={90}
+            cy="46%"
+            innerRadius={48}
+            outerRadius={78}
             paddingAngle={2}
             dataKey="value"
             label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}

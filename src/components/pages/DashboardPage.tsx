@@ -190,10 +190,15 @@ export const DashboardPage = memo(function DashboardPage() {
         />
       </div>
 
-      {/* Sales Chart Row */}
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
-        {/* Sales Trend Chart */}
-        <Card>
+      {/* Unified Charts Grid
+           · mobile/tablet (<lg): single column, natural order
+           · lg (1024–1279px): 2-col grid — line charts span full width (order 1,2),
+             pies sit side-by-side beneath them (order 3,4)
+           · xl (1280px+): 2fr/1fr paired rows — each line chart beside its pie */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
+
+        {/* Sales Trend — full-width at lg, 2fr at xl */}
+        <Card className="lg:col-span-2 xl:col-span-1 lg:order-1 xl:order-1">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-2">
             <div>
               <SectionLabel>Daily Performance</SectionLabel>
@@ -217,24 +222,8 @@ export const DashboardPage = memo(function DashboardPage() {
           )}
         </Card>
 
-        {/* Top Brands Distribution */}
-        <Card>
-          <SectionLabel>Revenue Mix</SectionLabel>
-          <SectionTitle>Top Brands</SectionTitle>
-          {topBrandsData.length > 0 ? (
-            <CategoryPieChart data={topBrandsData} showLegend={true} />
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-[var(--muted)]">
-              No brand data available
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Transaction Chart Row */}
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[2fr_1fr] gap-4 md:gap-6 mb-6 md:mb-8">
-        {/* Transaction Count Chart */}
-        <Card>
+        {/* Transaction Count — full-width at lg, 2fr at xl */}
+        <Card className="lg:col-span-2 xl:col-span-1 lg:order-2 xl:order-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-2">
             <div>
               <SectionLabel>Daily Performance</SectionLabel>
@@ -258,18 +247,32 @@ export const DashboardPage = memo(function DashboardPage() {
           )}
         </Card>
 
-        {/* Category Distribution */}
-        <Card>
+        {/* Top Brands — half-width at lg, 1fr at xl */}
+        <Card className="lg:order-3 xl:order-2">
+          <SectionLabel>Revenue Mix</SectionLabel>
+          <SectionTitle>Top Brands</SectionTitle>
+          {topBrandsData.length > 0 ? (
+            <CategoryPieChart data={topBrandsData} showLegend={true} />
+          ) : (
+            <div className="h-[260px] flex items-center justify-center text-[var(--muted)]">
+              No brand data available
+            </div>
+          )}
+        </Card>
+
+        {/* By Category — half-width at lg, 1fr at xl */}
+        <Card className="lg:order-4 xl:order-4">
           <SectionLabel>Revenue Mix</SectionLabel>
           <SectionTitle>By Category</SectionTitle>
           {categoryData.length > 0 ? (
             <CategoryPieChart data={categoryData} showLegend={true} />
           ) : (
-            <div className="h-[300px] flex items-center justify-center text-[var(--muted)]">
+            <div className="h-[260px] flex items-center justify-center text-[var(--muted)]">
               No category data available
             </div>
           )}
         </Card>
+
       </div>
 
       {/* Store Comparison */}

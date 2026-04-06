@@ -88,8 +88,8 @@ export function Header({ title, subtitle }: HeaderProps) {
   };
 
   return (
-    <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] gap-4">
-      <div>
+    <header className="flex flex-col lg:flex-row lg:items-start xl:items-center lg:justify-between mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] gap-3 lg:gap-5">
+      <div className="min-w-0">
         <span className="text-xs font-semibold tracking-[0.15em] uppercase text-[var(--accent)] block mb-1 md:mb-2">
           {subtitle}
         </span>
@@ -97,7 +97,7 @@ export function Header({ title, subtitle }: HeaderProps) {
           {title}
         </h2>
       </div>
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 w-full sm:w-auto">
+      <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-start sm:items-center lg:items-stretch xl:items-center gap-2 lg:gap-1.5 xl:gap-4 w-full sm:w-auto shrink-0">
         {/* Search - shown on all screen sizes, full width on mobile */}
         <div className="relative w-full sm:w-auto order-first sm:order-none">
           <Search className="w-5 h-5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -108,7 +108,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-            className="bg-[var(--white)] border border-[var(--border)] rounded pl-10 pr-4 py-2.5 text-sm text-[var(--ink)] w-full sm:w-48 md:w-64 font-sans"
+            className="bg-[var(--white)] border border-[var(--border)] rounded pl-10 pr-4 py-2.5 text-sm text-[var(--ink)] w-full sm:w-48 md:w-56 lg:w-full xl:w-56 font-sans"
           />
           {/* Search Results Dropdown */}
           {searchFocused && searchResults.length > 0 && (
@@ -132,7 +132,7 @@ export function Header({ title, subtitle }: HeaderProps) {
           )}
         </div>
         {/* Date Range Picker */}
-        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border border-[var(--border)] rounded bg-[var(--white)] w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border border-[var(--border)] rounded bg-[var(--white)] w-full sm:w-auto lg:w-full xl:w-auto">
           <Calendar className="w-4 h-4 text-[var(--muted)]" />
           <input
             type="date"
